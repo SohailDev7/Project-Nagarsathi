@@ -1,5 +1,6 @@
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show CupertinoPageTransitionsBuilder;
+import 'package:material_ui/material_ui.dart';
 
 /// Central green palette for NagarSathi.
 abstract final class AppColors {
@@ -14,15 +15,16 @@ abstract final class AppColors {
 }
 
 ThemeData buildAppTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: AppColors.primary,
-    brightness: Brightness.light,
-  ).copyWith(
-    primary: AppColors.primary,
-    onPrimary: Colors.white,
-    surface: Colors.white,
-    error: AppColors.error,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        brightness: Brightness.light,
+      ).copyWith(
+        primary: AppColors.primary,
+        onPrimary: Colors.white,
+        surface: Colors.white,
+        error: AppColors.error,
+      );
 
   const fieldRadius = BorderRadius.all(Radius.circular(18));
 

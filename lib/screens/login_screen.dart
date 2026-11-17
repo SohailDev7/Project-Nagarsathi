@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
@@ -12,6 +12,7 @@ import '../widgets/ns_text_field.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 import 'sign_up_screen.dart';
+import 'staff_login_screen.dart';
 
 enum _LoginMode { email, phone }
 
@@ -56,15 +57,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openSignUp() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SignUpScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const SignUpScreen()));
   }
 
   void _openForgotPassword() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const ForgotPasswordScreen()),
     );
+  }
+
+  void _openStaffSignIn() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()));
   }
 
   @override
@@ -154,7 +160,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       textInputAction: TextInputAction.next,
                                       validator: Validators.email,
                                       autocorrect: false,
-                                      autofillHints: const [AutofillHints.email],
+                                      autofillHints: const [
+                                        AutofillHints.email,
+                                      ],
                                       inputFormatters: [
                                         FilteringTextInputFormatter.deny(
                                           RegExp(r'\s'),
@@ -250,6 +258,38 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           child: const Text(
                             'Sign up',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Are you a Staff Member?',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _openStaffSignIn,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
+                            minimumSize: const Size(0, 44),
+                          ),
+                          child: const Text(
+                            'Sign in here',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,

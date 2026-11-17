@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
@@ -177,9 +177,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               obscureText: true,
                               textInputAction: TextInputAction.next,
                               validator: Validators.password,
-                              autofillHints: const [
-                                AutofillHints.newPassword,
-                              ],
+                              autofillHints: const [AutofillHints.newPassword],
                             ),
                             const SizedBox(height: 16),
                             NsTextField(

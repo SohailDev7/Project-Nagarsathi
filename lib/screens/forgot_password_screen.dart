@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
@@ -163,9 +163,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       keyboardType: TextInputType.phone,
                       textInputAction: TextInputAction.done,
                       validator: Validators.phone,
-                      autofillHints: const [
-                        AutofillHints.telephoneNumber,
-                      ],
+                      autofillHints: const [AutofillHints.telephoneNumber],
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                           RegExp(r'[0-9+\-\s()]'),

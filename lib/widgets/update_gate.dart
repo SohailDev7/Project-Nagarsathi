@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/app_update.dart';
 import '../services/shorebird_service.dart';
@@ -98,9 +98,8 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
 
     final context = widget.navigatorKey.currentContext;
     if (context == null) return;
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

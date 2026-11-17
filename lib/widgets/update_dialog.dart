@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/app_update.dart';
 import '../services/update_service.dart';
@@ -19,11 +19,7 @@ Future<void> showUpdateDialog({
 }
 
 class UpdateDialog extends StatefulWidget {
-  const UpdateDialog({
-    super.key,
-    required this.update,
-    required this.service,
-  });
+  const UpdateDialog({super.key, required this.update, required this.service});
 
   final AppUpdate update;
   final UpdateService service;
@@ -179,9 +175,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    update.isPriority
-                        ? 'Important update'
-                        : 'Update available',
+                    update.isPriority ? 'Important update' : 'Update available',
                     style: const TextStyle(
                       fontSize: 24,
                       height: 1.15,
@@ -384,11 +378,7 @@ class _Badge extends StatelessWidget {
 }
 
 class _InfoBox extends StatelessWidget {
-  const _InfoBox({
-    required this.icon,
-    required this.text,
-    required this.color,
-  });
+  const _InfoBox({required this.icon, required this.text, required this.color});
 
   final IconData icon;
   final String text;
