@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
@@ -188,222 +188,133 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            NsPrimaryButton(
-                              label: _step == _lastStep
-                                  ? 'Create account'
-                                  : 'Continue',
-                              isLoading: _isLoading,
-                              onPressed: _next,
+                            NsTextField(
+                              controller: _nameController,
+                              label: 'Full name',
+                              hint: 'Your full name',
+                              icon: Icons.person_outline_rounded,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              validator: Validators.name,
+                              autofillHints: const [AutofillHints.name],
                             ),
-                            if (_step == _phoneStep) ...[
-                              const SizedBox(height: 2),
-                              TextButton(
-                                onPressed: _skipPhone,
-                                child: const Text('Skip for now'),
+                            const SizedBox(height: 16),
+                            NsTextField(
+                              controller: _emailController,
+                              label: 'Email address',
+                              hint: 'you@example.com',
+                              icon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              validator: Validators.email,
+                              autocorrect: false,
+                              autofillHints: const [AutofillHints.email],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            NsTextField(
+                              controller: _phoneController,
+                              label: 'Phone number (optional)',
+                              hint: '+977 98XXXXXXXX',
+                              icon: Icons.phone_iphone_rounded,
+                              keyboardType: TextInputType.phone,
+                              textInputAction: TextInputAction.next,
+                              validator: Validators.optionalPhone,
+                              autofillHints: const [
+                                AutofillHints.telephoneNumber,
+                              ],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9+\-\s()]'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            NsTextField(
+                              controller: _passwordController,
+                              label: 'Password',
+                              hint: 'Create a password',
+                              icon: Icons.lock_outline_rounded,
+                              obscureText: true,
+                              textInputAction: TextInputAction.next,
+                              validator: Validators.password,
+                              autofillHints: const [AutofillHints.newPassword],
+                            ),
+                            const SizedBox(height: 16),
+                            NsTextField(
+                              controller: _confirmController,
+                              label: 'Confirm password',
+                              hint: 'Re-enter your password',
+                              icon: Icons.lock_outline_rounded,
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              validator: Validators.confirmPassword(
+                                _passwordController,
                               ),
-                            ],
-                            if (_step == 0) ...[
-                              const SizedBox(height: 10),
-                              _SignInPrompt(
-                                onPressed: () => Navigator.of(context).pop(),
-                              ),
-                            ],
+                              onFieldSubmitted: (_) => _createAccount(),
+                            ),
+                            const SizedBox(height: 20),
+                            _TermsRow(
+                              accepted: _acceptedTerms,
+                              onToggle: () {
+                                setState(() {
+                                  _acceptedTerms = !_acceptedTerms;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            NsPrimaryButton(
+                              label: 'Create account',
+                              isLoading: _isLoading,
+                              onPressed: _createAccount,
+                              icon: Icons.arrow_forward_rounded,
+                            ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Already have an account?',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _goToLogin,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'Sign in',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildStep() {
-    switch (_step) {
-      case 0:
-        return _StepBody(
-          key: const ValueKey('step-name'),
-          title: 'Create your account',
-          subtitle: "Let's start with your name.",
-          children: [
-            Form(
-              key: _formKeys[0],
-              child: NsTextField(
-                controller: _nameController,
-                label: 'Full name',
-                hint: 'Sita Sharma',
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.next,
-                validator: Validators.name,
-                autofillHints: const [AutofillHints.name],
-                autofocus: true,
-                onFieldSubmitted: (_) => _next(),
-              ),
-            ),
-          ],
-        );
-      case 1:
-        return _StepBody(
-          key: const ValueKey('step-email'),
-          title: 'Your email',
-          subtitle: 'Used for sign-in and city updates.',
-          children: [
-            Form(
-              key: _formKeys[1],
-              child: NsTextField(
-                controller: _emailController,
-                label: 'Email',
-                hint: 'you@example.com',
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                validator: Validators.email,
-                autocorrect: false,
-                autofillHints: const [AutofillHints.email],
-                inputFormatters: [
-                  FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                ],
-                onFieldSubmitted: (_) => _next(),
-              ),
-            ),
-          ],
-        );
-      case 2:
-        return _StepBody(
-          key: const ValueKey('step-phone'),
-          title: 'Phone number',
-          subtitle: 'Optional. Helps with urgent notices.',
-          children: [
-            Form(
-              key: _formKeys[2],
-              child: NsTextField(
-                controller: _phoneController,
-                label: 'Phone (optional)',
-                hint: '+977 98XXXXXXXX',
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
-                validator: Validators.optionalPhone,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s()]')),
-                ],
-                onFieldSubmitted: (_) => _next(),
-              ),
-            ),
-          ],
-        );
-      default:
-        return _StepBody(
-          key: const ValueKey('step-password'),
-          title: 'Secure your account',
-          subtitle: 'Use at least 8 characters.',
-          children: [
-            Form(
-              key: _formKeys[_lastStep],
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  NsTextField(
-                    controller: _passwordController,
-                    label: 'Password',
-                    hint: 'Create a password',
-                    obscureText: true,
-                    textInputAction: TextInputAction.next,
-                    validator: Validators.password,
-                    autofillHints: const [AutofillHints.newPassword],
-                  ),
-                  const SizedBox(height: 16),
-                  NsTextField(
-                    controller: _confirmController,
-                    label: 'Confirm password',
-                    hint: 'Re-enter your password',
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    validator: Validators.confirmPassword(_passwordController),
-                    onFieldSubmitted: (_) => _createAccount(),
-                  ),
-                  const SizedBox(height: 20),
-                  _TermsRow(
-                    accepted: _acceptedTerms,
-                    onChanged: (value) {
-                      setState(() => _acceptedTerms = value);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-    }
-  }
-}
-
-class _StepBody extends StatelessWidget {
-  const _StepBody({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.children,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 26,
-            height: 1.2,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-            letterSpacing: -0.7,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          style: const TextStyle(
-            fontSize: 14.5,
-            height: 1.5,
-            fontWeight: FontWeight.w400,
-            color: AppColors.muted,
-          ),
-        ),
-        const SizedBox(height: 30),
-        ...children,
-      ],
-    );
-  }
-}
-
-/// Skyline illustration for the wizard, collapsed while the keyboard is open
-/// so it never steals room from the form.
-class _WizardArt extends StatelessWidget {
-  const _WizardArt();
-
-  @override
-  Widget build(BuildContext context) {
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      alignment: Alignment.topCenter,
-      child: keyboardOpen
-          ? const SizedBox(width: double.infinity)
-          : const Padding(
-              padding: EdgeInsets.only(top: 4, bottom: 6),
-              child: NsCityArt(height: 138),
-            ),
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Fades its child into place on first build.
 class NsEntrance extends StatelessWidget {

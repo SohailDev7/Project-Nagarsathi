@@ -5,9 +5,14 @@ updates (GitHub releases for APKs, Shorebird for Dart-only patches).
 
 ## Requirements
 
-- Flutter (stable channel)
+- Flutter 3.47.0 or newer (stable channel)
 - Dart SDK `^3.13.4`
 - Android device/emulator (in-app APK installs are Android-only)
+- JDK 17 or newer for Android builds (Android Studio's bundled JDK 25 is supported)
+
+Android builds are verified with Flutter 3.50.0 using Gradle 9.3.1, Android Gradle
+Plugin 9.1.1 and Kotlin 2.4.10. These versions meet Flutter 3.50's minimum Android
+build requirements.
 
 ## Getting started
 
@@ -36,9 +41,16 @@ properly (Android Studio SDK Manager), that block can be removed.
 - Forgot-password flow with email/phone recovery
 - Sign-up wizard in four steps: name → email → optional phone → password and terms
 - Minimal green theme: flat surfaces, hairline borders, one accent colour, no gradients or shadows
+- Sign-up form with name, email, optional phone, password confirmation and terms
+- Staff sign-in link below citizen sign-up, opening a separate work-email/password
+  portal and staff workspace; staff sign-out returns to the staff login screen
+- Green, iOS-inspired theme with reusable inputs, buttons and segmented control
 
-The flow is UI-only: sign in and sign up currently navigate to a placeholder home
-screen. Wire the submit handlers in `lib/screens/` to your backend or auth service.
+Both citizen and staff flows are UI-only: they validate form input and simulate
+sign-in. Citizen sign-in/sign-up opens the citizen home, while staff sign-in opens
+the staff workspace. No credentials or staff roles are verified by a server yet.
+Wire the submit handlers in `lib/screens/` to your authentication service and
+verify staff roles on the server before granting staff access.
 
 ## Updates
 
@@ -170,5 +182,6 @@ lib/theme/                    Green palette and app theme
 lib/utils/                    Form validators
 lib/widgets/                  Shared inputs, buttons, update dialog and gate
 test/smoke_test.dart          Auth flow smoke test
+test/staff_auth_test.dart     Staff navigation, validation and sign-out tests
 test/update_version_test.dart Release tag parsing tests
 ```

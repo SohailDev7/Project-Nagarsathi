@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/app_update.dart';
 import '../services/update_service.dart';
@@ -39,11 +39,7 @@ Future<void> showUpdateDialog({
 }
 
 class UpdateDialog extends StatefulWidget {
-  const UpdateDialog({
-    super.key,
-    required this.update,
-    required this.service,
-  });
+  const UpdateDialog({super.key, required this.update, required this.service});
 
   final AppUpdate update;
   final UpdateService service;
@@ -195,441 +191,222 @@ class _UpdateDialogState extends State<UpdateDialog>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_update.isPriority,
-      // The sheet is built as a full-screen route rather than a Dialog, so it
-      // needs its own Material ancestor; without one Flutter falls back to the
-      // yellow double-underline debug text style.
-      child: Material(
-        type: MaterialType.transparency,
-        child: Stack(
-          children: [
-            // Everything outside the card: no taps dismiss it, but a deliberate
-            // three-second hold does — accidental touches can't cancel anything.
-            if (_canHoldToCancel)
-              Positioned.fill(
-                child: Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (_) => _startHold(),
-                  onPointerUp: (_) => _endHold(),
-                  onPointerCancel: (_) => _endHold(),
-                  child: const SizedBox.expand(),
-                ),
+      canPop: !update.isPriority,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.ink.withValues(alpha: 0.18),
+                blurRadius: 40,
+                offset: const Offset(0, 20),
               ),
-            Positioned.fill(
-              child: SafeArea(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 24,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: _card(),
+            ],
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(
+                          Icons.system_update_rounded,
+                          color: AppColors.primary,
+                          size: 26,
+                        ),
+                      ),
+                      const Spacer(),
+                      _Badge(
+                        label: update.isPriority
+                            ? 'Required'
+                            : 'v${update.version.display}',
+                        urgent: update.isPriority,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    update.isPriority ? 'Important update' : 'Update available',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                      letterSpacing: -0.7,
                     ),
                   ),
-                ),
-              ),
-            ),
-            if (_canHoldToCancel)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: SafeArea(child: _holdIndicator()),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _card() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (_) {},
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _header(),
-              const SizedBox(height: 20),
-              Text(
-                _update.isPriority ? 'Update required' : 'Update available',
-                style: const TextStyle(
-                  fontSize: 25,
-                  height: 1.15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _update.isPriority
-                    ? 'NagarSathi ${_update.version.display} must be installed '
-                          'to keep using the app.'
-                    : 'NagarSathi ${_update.version.display} is ready. Download '
-                          'is $_sizeLabel.',
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  height: 1.5,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.muted,
-                ),
-              ),
-              const SizedBox(height: 18),
-              _whatsNew(),
-              const SizedBox(height: 14),
-              if (_downloading)
-                _downloadingBlock()
-              else if (_installerOpened)
-                _installerBlock()
-              else
-                ..._idleBlock(),
-              if (_canHoldToCancel) ...[
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.touch_app_outlined,
-                      size: 14,
+                  const SizedBox(height: 8),
+                  Text(
+                    update.isPriority
+                        ? 'NagarSathi ${update.version.display} includes '
+                              'changes required to keep using the app.'
+                        : 'NagarSathi ${update.version.display} is ready to '
+                              'install. ${update.sizeLabel.isEmpty ? '' : '${update.sizeLabel} • '}APK build.',
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      height: 1.5,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.muted,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Hold outside for 3s to cancel',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.muted.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _header() {
-    return Row(
-      children: [
-        const NsLogo(size: 44),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'NagarSathi',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Version ${_update.version.display}',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-        ),
-        _Badge(
-          label: _update.isPriority ? 'Required' : 'New',
-          urgent: _update.isPriority,
-        ),
-      ],
-    );
-  }
-
-  Widget _whatsNew() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_outlined,
-                size: 14,
-                color: AppColors.primary,
-              ),
-              SizedBox(width: 7),
-              Text(
-                "What's new",
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _notes,
-            maxLines: 6,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.55,
-              fontWeight: FontWeight.w400,
-              color: AppColors.ink.withValues(alpha: 0.78),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _downloadingBlock() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'Downloading',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ink,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '${(_progress * 100).round()}%',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: _progress == 0 ? null : _progress,
-            minHeight: 8,
-            backgroundColor: const Color(0xFFE7F0EA),
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(height: 14),
-        const _NoticeRow(
-          icon: Icons.phone_iphone_rounded,
-          title: 'Keep NagarSathi open',
-          detail: 'The download stops if you switch apps or lock the screen.',
-        ),
-      ],
-    );
-  }
-
-  Widget _installerBlock() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
-          ),
-          child: const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.check_circle_rounded,
-                size: 18,
-                color: AppColors.primary,
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'The Android installer is open. Follow the prompts to finish '
-                  'updating.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primaryDark,
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        NsPrimaryButton(
-          label: 'Open installer',
-          onPressed: _openInstaller,
-          icon: Icons.open_in_new_rounded,
-        ),
-        if (_update.isPriority) ...[
-          const SizedBox(height: 12),
-          const Text(
-            'This update is required to keep using NagarSathi.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.muted,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  List<Widget> _idleBlock() {
-    return [
-      if (_error != null) ...[
-        _ErrorBox(message: _error!),
-        const SizedBox(height: 14),
-      ],
-      const _NoticeRow(
-        icon: Icons.wifi_rounded,
-        title: 'Use Wi-Fi if you can',
-        detail: 'A mobile-data download of this update may cost you.',
-      ),
-      const SizedBox(height: 8),
-      const _NoticeRow(
-        icon: Icons.phone_iphone_rounded,
-        title: 'Keep NagarSathi open',
-        detail: "Don't switch apps until the installer appears.",
-      ),
-      const SizedBox(height: 18),
-      if (_update.isPriority) ...[
-        NsPrimaryButton(
-          label: _error == null ? 'Update now' : 'Try again',
-          onPressed: _updateNow,
-          icon: Icons.download_rounded,
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'This update is required to keep using NagarSathi.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.muted,
-          ),
-        ),
-      ] else
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 54,
-                child: OutlinedButton(
-                  onPressed: _later,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.ink,
-                    backgroundColor: Colors.white,
-                    side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  child: const Text('Later'),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: NsPrimaryButton(
-                label: _error == null ? 'Update' : 'Retry',
-                onPressed: _updateNow,
-              ),
-            ),
-          ],
-        ),
-      if (_error != null) ...[
-        const SizedBox(height: 4),
-        Center(
-          child: TextButton(
-            onPressed: _openReleasePage,
-            child: const Text('Download from GitHub'),
-          ),
-        ),
-      ],
-    ];
-  }
-
-  Widget _holdIndicator() {
-    return AnimatedBuilder(
-      animation: _hold,
-      builder: (context, child) {
-        final value = _hold.value;
-        if (value == 0) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 26),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      value: value,
-                      strokeWidth: 2.4,
-                      backgroundColor: AppColors.border,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    value >= 1 ? 'Cancelling…' : 'Keep holding to cancel',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 18),
+                  const Text(
+                    "What's new",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.ink,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _notes,
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.5,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (_downloading) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _progress == 0 ? null : _progress,
+                        minHeight: 8,
+                        backgroundColor: const Color(0xFFE7F0EA),
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Downloading ${(_progress * 100).toStringAsFixed(0)}%',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ] else if (_installerOpened) ...[
+                    const _InfoBox(
+                      icon: Icons.check_circle_rounded,
+                      color: AppColors.primary,
+                      text:
+                          'The Android installer is open. Follow the prompts '
+                          'to finish updating.',
+                    ),
+                    const SizedBox(height: 16),
+                    NsPrimaryButton(
+                      label: 'Open installer',
+                      onPressed: _openInstaller,
+                      icon: Icons.open_in_new_rounded,
+                    ),
+                    if (update.isPriority) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'This update is required to keep using NagarSathi.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ] else ...[
+                    if (_error != null) ...[
+                      _InfoBox(
+                        icon: Icons.error_outline_rounded,
+                        color: AppColors.error,
+                        text: _error!,
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    if (update.isPriority)
+                      NsPrimaryButton(
+                        label: _error == null ? 'Update now' : 'Try again',
+                        onPressed: _updateNow,
+                        icon: Icons.download_rounded,
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: OutlinedButton(
+                                onPressed: _later,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.ink,
+                                  backgroundColor: Colors.white,
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                child: const Text('Later'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: NsPrimaryButton(
+                              label: _error == null ? 'Update' : 'Retry',
+                              onPressed: _updateNow,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: TextButton(
+                          onPressed: _openReleasePage,
+                          child: const Text('Download from GitHub'),
+                        ),
+                      ),
+                    ],
+                    if (update.isPriority) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'This update is required to keep using NagarSathi.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -669,12 +446,8 @@ class _Badge extends StatelessWidget {
   }
 }
 
-class _NoticeRow extends StatelessWidget {
-  const _NoticeRow({
-    required this.icon,
-    required this.title,
-    required this.detail,
-  });
+class _InfoBox extends StatelessWidget {
+  const _InfoBox({required this.icon, required this.text, required this.color});
 
   final IconData icon;
   final String title;
