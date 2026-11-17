@@ -1,7 +1,7 @@
 name: projectnagarsathi
 description: "NagarSathi - a Flutter application."
 publish_to: 'none'
-version: 1.0.4+3
+version: 1.0.5+3
 
 environment:
   sdk: ^3.13.4
@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
   material_ui: ^1.11.0
   cupertino_ui: ^1.1.6
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   shorebird_code_push: ^2.0.7
   http: ^1.6.0
   package_info_plus: ^10.2.2
@@ -32,6 +32,19 @@ flutter:
   assets:
     - shorebird.yaml
     - assets/icon/icon.png
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-400.ttf
+          weight: 400
+        - asset: assets/fonts/Nunito-600.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-700.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-800.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito-900.ttf
+          weight: 900
 
 # Regenerate Android launcher icons with:
 #   dart run flutter_launcher_icons

@@ -108,10 +108,7 @@ void main() {
       expect(update.version.display, '1.0.1');
       expect(update.apkSize, 51337335);
       expect(update.isPriority, isFalse);
-      expect(
-        update.apkUrl,
-        'https://example.com/v1.0.1/app-release.apk',
-      );
+      expect(update.apkUrl, 'https://example.com/v1.0.1/app-release.apk');
     });
 
     test('marks priority tags', () {
@@ -157,36 +154,31 @@ void main() {
   group('AppVersion.isNewerThan', () {
     test('compares major, minor and patch', () {
       expect(
-        AppVersion.tryParseTag('v2.0.0')!.isNewerThan(
-          AppVersion.tryParseTag('v1.9.9')!,
-        ),
+        AppVersion.tryParseTag('v2.0.0')!
+            .isNewerThan(AppVersion.tryParseTag('v1.9.9')!),
         isTrue,
       );
       expect(
-        AppVersion.tryParseTag('v1.3.0')!.isNewerThan(
-          AppVersion.tryParseTag('v1.2.9')!,
-        ),
+        AppVersion.tryParseTag('v1.3.0')!
+            .isNewerThan(AppVersion.tryParseTag('v1.2.9')!),
         isTrue,
       );
       expect(
-        AppVersion.tryParseTag('v1.2.4')!.isNewerThan(
-          AppVersion.tryParseTag('v1.2.3')!,
-        ),
+        AppVersion.tryParseTag('v1.2.4')!
+            .isNewerThan(AppVersion.tryParseTag('v1.2.3')!),
         isTrue,
       );
     });
 
     test('compares build numbers when the version matches', () {
       expect(
-        AppVersion.tryParseTag('v1.2.3+2')!.isNewerThan(
-          AppVersion.tryParseTag('v1.2.3+1')!,
-        ),
+        AppVersion.tryParseTag('v1.2.3+2')!
+            .isNewerThan(AppVersion.tryParseTag('v1.2.3+1')!),
         isTrue,
       );
       expect(
-        AppVersion.tryParseTag('v1.2.3+1')!.isNewerThan(
-          AppVersion.tryParseTag('v1.2.3+1')!,
-        ),
+        AppVersion.tryParseTag('v1.2.3+1')!
+            .isNewerThan(AppVersion.tryParseTag('v1.2.3+1')!),
         isFalse,
       );
     });
@@ -200,9 +192,8 @@ void main() {
 
     test('a missing build number never wins over an explicit one', () {
       expect(
-        AppVersion.tryParseTag('v1.2.3')!.isNewerThan(
-          AppVersion.tryParseTag('v1.2.3+1')!,
-        ),
+        AppVersion.tryParseTag('v1.2.3')!
+            .isNewerThan(AppVersion.tryParseTag('v1.2.3+1')!),
         isFalse,
       );
     });

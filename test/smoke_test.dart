@@ -4,8 +4,7 @@ import 'package:projectnagarsathi/main.dart';
 
 void main() {
   testWidgets('auth flow renders and navigates', (tester) async {
-    // The wizard illustration loops forever; honour reduced motion so
-    // pumpAndSettle can finish, exactly like a device with animations off.
+    // Honour reduced motion so looping decoration never blocks pumpAndSettle.
     tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(
@@ -15,20 +14,29 @@ void main() {
     await tester.pumpWidget(const NagarSathiApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.textContaining('Welcome'), findsOneWidget);
 
-    // Switch to phone login.
-    await tester.tap(find.text('Phone'));
+    // One field detects phone numbers and email addresses.
+    await tester.enterText(find.byType(TextFormField).first, '9801234567');
     await tester.pumpAndSettle();
-    expect(find.text('+977 98XXXXXXXX'), findsOneWidget);
+    expect(find.text('PHONE'), findsOneWidget);
+
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'citizen@nagarsathi.app',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('EMAIL'), findsOneWidget);
 
     // Forgot password flow.
+    await tester.ensureVisible(find.text('Forgot password?'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Forgot password?'));
     await tester.pumpAndSettle();
     expect(find.text('Send reset link'), findsOneWidget);
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
-    expect(find.text('Enter your email address'), findsOneWidget);
+    expect(find.text('Enter your email or phone number'), findsOneWidget);
 
     await tester.enterText(
       find.byType(TextFormField).first,
@@ -39,12 +47,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Reset link sent'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Back to sign in'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Back to sign in'));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.textContaining('Welcome'), findsOneWidget);
 
-    // Sign up wizard.
+    // Sign-up wizard.
     await tester.ensureVisible(find.text('Sign up'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
@@ -68,25 +79,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('3 of 4'), findsOneWidget);
 
-    // Phone is optional.
+    // Phone is optional; skipping moves straight to the password step.
     await tester.tap(find.text('Skip for now'));
     await tester.pumpAndSettle();
     expect(find.text('4 of 4'), findsOneWidget);
 
     final passwordFields = find.byType(TextFormField);
+    expect(passwordFields, findsNWidgets(2));
     await tester.enterText(passwordFields.at(0), 'password123');
     await tester.enterText(passwordFields.at(1), 'password123');
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Create account'));
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
 
     expect(find.text("You're all set"), findsOneWidget);
 
     await tester.ensureVisible(find.text('Sign out'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(find.text('New to NagarSathi?'), findsOneWidget);

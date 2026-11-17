@@ -1,6 +1,6 @@
 # NagarSathi
 
-A Flutter application with an iOS-inspired authentication flow and in-app
+A Flutter application with a playful green civic authentication flow and in-app
 updates (GitHub releases for APKs, Shorebird for Dart-only patches).
 
 ## Requirements
@@ -37,14 +37,18 @@ properly (Android Studio SDK Manager), that block can be removed.
 
 ## Authentication UI
 
-- Sign in with an email address or phone number (segmented toggle) and password
-- Forgot-password flow with email/phone recovery
-- Sign-up wizard in four steps: name → email → optional phone → password and terms
-- Minimal green theme: flat surfaces, hairline borders, one accent colour, no gradients or shadows
-- Sign-up form with name, email, optional phone, password confirmation and terms
-- Staff sign-in link below citizen sign-up, opening a separate work-email/password
-  portal and staff workspace; staff sign-out returns to the staff login screen
-- Green, iOS-inspired theme with reusable inputs, buttons and segmented control
+- Sign in with a single email-or-phone field (the field detects `@` for email and
+  digits for phone, showing an inline EMAIL/PHONE badge) plus a password
+- Compact single-viewport layout: brand and the always-visible **Staff portal**
+  entry sit in a pinned top bar, so no auth action needs scrolling on a small phone
+- Forgot-password flow that sends a reset link to an email or phone number
+- Four-step sign-up: name → email → optional phone → password, confirm password
+  and terms (phone can be skipped without skipping the password step)
+- Separate staff sign-in with a work-email/password portal, staff badge and staff
+  workspace; staff sign-out returns to the staff login screen
+- Shared green theme: vivid lime actions, forest ink and cream paper, bundled
+  Nunito in 400–900 weights, chunky depth buttons and inputs, springy entrance
+  animations, haptics and one-shot confetti (all motion honours reduced-motion)
 
 Both citizen and staff flows are UI-only: they validate form input and simulate
 sign-in. Citizen sign-in/sign-up opens the citizen home, while staff sign-in opens

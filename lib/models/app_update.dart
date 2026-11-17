@@ -55,7 +55,9 @@ class AppVersion implements Comparable<AppVersion> {
   }
 
   String get display {
-    return build == null ? '$major.$minor.$patch' : '$major.$minor.$patch+$build';
+    return build == null
+        ? '$major.$minor.$patch'
+        : '$major.$minor.$patch+$build';
   }
 
   @override

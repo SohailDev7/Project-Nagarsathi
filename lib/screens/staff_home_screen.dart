@@ -2,7 +2,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
+import '../widgets/ns_card.dart';
+import '../widgets/ns_chip.dart';
+import '../widgets/ns_entrance.dart';
 import '../widgets/ns_logo.dart';
+import '../widgets/ns_mascot.dart';
+import '../widgets/ns_outline_button.dart';
+import '../widgets/ns_pressable.dart';
 import '../widgets/ns_staff_badge.dart';
 import 'staff_login_screen.dart';
 
@@ -23,151 +29,87 @@ class StaffHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: NsBackground(
+        staff: true,
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 16, 22, 32),
+            child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
+                constraints: const BoxConstraints(maxWidth: 520),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Row(
-                      children: [
-                        NsLogo(size: 42),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'NagarSathi',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.ink,
-                              letterSpacing: -0.4,
-                            ),
-                          ),
-                        ),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: const [
+                        NsBrand(compact: true),
+                        NsStaffBadge(compact: true),
                       ],
                     ),
-                    const SizedBox(height: 28),
-                    const NsStaffBadge(),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Staff workspace',
-                      style: TextStyle(
-                        fontSize: 30,
-                        height: 1.1,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppColors.primaryLight,
-                            AppColors.primaryDark,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.2),
-                            blurRadius: 28,
-                            offset: const Offset(0, 14),
-                          ),
-                        ],
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 26),
+                    NsEntrance(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Icon(
-                            Icons.badge_outlined,
-                            size: 34,
-                            color: Colors.white,
-                          ),
-                          SizedBox(height: 18),
-                          Text(
-                            'Welcome, staff member',
-                            style: TextStyle(
-                              fontSize: 23,
-                              height: 1.2,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.5,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Staff workspace',
+                                  style: TextStyle(
+                                    fontSize: 38,
+                                    height: 1,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.forest,
+                                    letterSpacing: -1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Your municipal queue at a glance.',
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    height: 1.45,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          SizedBox(height: 10),
-                          Text(
-                            'Your workspace for municipal services.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.5,
-                              color: Colors.white,
-                            ),
-                          ),
+                          const NsMascot(size: 96, mood: NsMascotMood.happy),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Work email',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            staffEmail,
-                            style: const TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ],
+                    NsEntrance(
+                      delay: const Duration(milliseconds: 80),
+                      child: _StaffHeroCard(staffEmail: staffEmail),
+                    ),
+                    const SizedBox(height: 16),
+                    const _StatsRow(),
+                    const SizedBox(height: 22),
+                    const Text(
+                      "Today's queue",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.forest,
+                        letterSpacing: -0.3,
                       ),
                     ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _signOut(context),
-                        icon: const Icon(Icons.logout_rounded, size: 18),
-                        label: const Text('Sign out'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          backgroundColor: Colors.white,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                    const SizedBox(height: 10),
+                    const _QueueCard(),
+                    const SizedBox(height: 24),
+                    NsOutlineButton(
+                      label: 'Sign out',
+                      icon: Icons.logout_rounded,
+                      tone: NsOutlineTone.danger,
+                      onPressed: () => _signOut(context),
                     ),
                   ],
                 ),
@@ -175,6 +117,307 @@ class StaffHomeScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _StaffHeroCard extends StatelessWidget {
+  const _StaffHeroCard({required this.staffEmail});
+
+  final String staffEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.forest, AppColors.forestSoft],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.forestSoft, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.forest.withValues(alpha: 0.28),
+            offset: const Offset(0, 6),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.45),
+                    width: 1.4,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock_rounded,
+                      size: 12,
+                      color: AppColors.primaryLight,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'SIGNED IN',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primaryLight,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.badge_rounded, size: 26, color: Colors.white70),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Welcome, staff member',
+            style: TextStyle(
+              fontSize: 24,
+              height: 1.1,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -0.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'You are cleared for citizen requests and ward updates.',
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFC3D4C8),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.alternate_email_rounded,
+                  size: 16,
+                  color: AppColors.primaryLight,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    staffEmail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Expanded(
+          child: _StatCard(value: '12', label: 'Open', tone: NsChipTone.sun),
+        ),
+        SizedBox(width: 10),
+        Expanded(
+          child: _StatCard(
+            value: '8',
+            label: 'Resolved',
+            tone: NsChipTone.green,
+          ),
+        ),
+        SizedBox(width: 10),
+        Expanded(
+          child: _StatCard(
+            value: '2.4h',
+            label: 'Avg time',
+            tone: NsChipTone.sky,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.value,
+    required this.label,
+    required this.tone,
+  });
+
+  final String value;
+  final String label;
+  final NsChipTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return NsCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      radius: 20,
+      depth: 4,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 26,
+                height: 1,
+                fontWeight: FontWeight.w900,
+                color: AppColors.forest,
+                letterSpacing: -0.8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: NsChip(label: label, tone: tone, compact: true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueCard extends StatelessWidget {
+  const _QueueCard();
+
+  static const _items = <(String, String, String, NsChipTone)>[
+    ('Road repair', 'Ward 4 · Lakeside Road', 'Priority', NsChipTone.sun),
+    ('Streetlight', 'Ward 2 · Durbar Marg', 'New', NsChipTone.sky),
+    ('Waste pickup', 'Ward 7 · Baneshwor', 'Open', NsChipTone.green),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return NsCard(
+      padding: EdgeInsets.zero,
+      radius: 22,
+      depth: 5,
+      child: Column(
+        children: [
+          for (var index = 0; index < _items.length; index++) ...[
+            if (index > 0)
+              const Divider(
+                height: 1,
+                thickness: 1.5,
+                indent: 70,
+                color: AppColors.border,
+              ),
+            NsPressable(
+              onTap: () {},
+              color: Colors.transparent,
+              borderColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              borderWidth: 0,
+              depth: 0,
+              radius: 20,
+              haptic: false,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.mint,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        width: 1.4,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.assignment_rounded,
+                      size: 20,
+                      color: AppColors.primaryDeep,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _items[index].$1,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.forest,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _items[index].$2,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  NsChip(
+                    label: _items[index].$3,
+                    tone: _items[index].$4,
+                    compact: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

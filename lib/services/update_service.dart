@@ -51,8 +51,7 @@ class UpdateService {
     final prefs = await SharedPreferences.getInstance();
     if (!force) {
       final lastCheck = prefs.getInt(_lastCheckKey) ?? 0;
-      final elapsed =
-          DateTime.now().millisecondsSinceEpoch - lastCheck;
+      final elapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
       if (elapsed < UpdateConfig.checkInterval.inMilliseconds) return null;
     }
 
@@ -149,9 +148,7 @@ class UpdateService {
         .send(request)
         .timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
-      throw UpdateException(
-        'Download failed (HTTP ${response.statusCode}).',
-      );
+      throw UpdateException('Download failed (HTTP ${response.statusCode}).');
     }
 
     final total = response.contentLength ?? update.apkSize;

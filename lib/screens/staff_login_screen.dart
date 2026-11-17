@@ -1,12 +1,15 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../theme/app_theme.dart';
 import '../utils/validators.dart';
+import '../widgets/ns_auth_heading.dart';
+import '../widgets/ns_auth_scaffold.dart';
 import '../widgets/ns_back_button.dart';
-import '../widgets/ns_background.dart';
+import '../widgets/ns_bento.dart';
+import '../widgets/ns_card.dart';
+import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_logo.dart';
+import '../widgets/ns_mascot.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_staff_badge.dart';
 import '../widgets/ns_text_field.dart';
@@ -26,6 +29,9 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _celebrating = false;
+  bool _showError = false;
+  bool _focused = false;
 
   @override
   void dispose() {
@@ -34,10 +40,29 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     super.dispose();
   }
 
+  NsMascotMood get _mood {
+    if (_celebrating) return NsMascotMood.celebrate;
+    if (_showError) return NsMascotMood.sad;
+    if (_focused) return NsMascotMood.curious;
+    return NsMascotMood.idle;
+  }
+
+  String get _message {
+    if (_celebrating) return 'Badge verified. Opening your workspace…';
+    if (_showError) return 'Check your work email and password.';
+    if (_isLoading) return 'Verifying your staff access…';
+    if (_focused) return 'Use the email issued by your municipality.';
+    return "Staff badge ready. Let's get to work!";
+  }
+
   Future<void> _signIn() async {
     if (_isLoading) return;
     FocusScope.of(context).unfocus();
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      HapticFeedback.mediumImpact();
+      setState(() => _showError = true);
+      return;
+    }
 
     final staffEmail = _emailController.text.trim();
     TextInput.finishAutofillContext();
@@ -45,7 +70,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
     // UI-only, matching citizen sign-in. A future authentication service must
     // verify credentials and a server-issued staff role before opening this page.
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    await Future<void>.delayed(const Duration(milliseconds: 850));
     if (!mounted) return;
 
     // A back navigation can start before this state is disposed. Ignore the
@@ -54,6 +79,16 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       setState(() => _isLoading = false);
       return;
     }
+
+    setState(() {
+      _isLoading = false;
+      _celebrating = true;
+    });
+    HapticFeedback.mediumImpact();
+
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
@@ -79,114 +114,173 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: NsBackground(
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: NsBackButton(onPressed: _backToCitizenSignIn),
-                    ),
-                    const SizedBox(height: 28),
-                    NsEntrance(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Wrap(
-                            spacing: 16,
-                            runSpacing: 12,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [NsLogo(), NsStaffBadge()],
-                          ),
-                          const SizedBox(height: 28),
-                          const Text(
-                            'Staff sign in',
-                            style: TextStyle(
-                              fontSize: 34,
-                              height: 1.08,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                              letterSpacing: -1,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Use your work email to access your staff workspace.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.45,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    AutofillGroup(
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            NsTextField(
-                              controller: _emailController,
-                              label: 'Work email address',
-                              hint: 'you@municipality.gov.np',
-                              icon: Icons.mail_outline_rounded,
-                              keyboardType: TextInputType.emailAddress,
-                              textInputAction: TextInputAction.next,
-                              validator: Validators.email,
-                              autocorrect: false,
-                              autofillHints: const [AutofillHints.username],
-                              inputFormatters: [
-                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            NsTextField(
-                              controller: _passwordController,
-                              label: 'Password',
-                              hint: 'Enter your password',
-                              icon: Icons.lock_outline_rounded,
-                              obscureText: true,
-                              textInputAction: TextInputAction.done,
-                              validator: Validators.loginPassword,
-                              autofillHints: const [AutofillHints.password],
-                              onFieldSubmitted: (_) => _signIn(),
-                            ),
-                            const SizedBox(height: 24),
-                            NsPrimaryButton(
-                              label: 'Sign in',
-                              isLoading: _isLoading,
-                              onPressed: _signIn,
-                              icon: Icons.arrow_forward_rounded,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: TextButton(
-                        onPressed: _backToCitizenSignIn,
-                        child: const Text('Back to citizen sign in'),
-                      ),
-                    ),
-                  ],
-                ),
+    return Stack(
+      children: [
+        NsAuthScaffold(
+          staff: true,
+          topBar: Row(
+            children: [
+              NsBackButton(onPressed: _backToCitizenSignIn),
+              const Spacer(),
+              const NsStaffBadge(compact: true),
+            ],
+          ),
+          child: NsEntrance(child: _buildBody()),
+        ),
+        if (_celebrating)
+          Positioned.fill(
+            child: NsConfetti(
+              onCompleted: () {
+                if (mounted) setState(() => _celebrating = false);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NsAuthHeading(
+          title: 'Staff sign in',
+          message: _message,
+          mood: _mood,
+          look: const Offset(0, 0.7),
+          wave: _celebrating,
+        ),
+        const SizedBox(height: 18),
+        NsCard(
+          padding: const EdgeInsets.all(16),
+          child: AutofillGroup(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  NsTextField(
+                    controller: _emailController,
+                    label: 'Work email address',
+                    hint: 'you@municipality.gov.np',
+                    icon: Icons.mail_rounded,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    validator: Validators.email,
+                    autocorrect: false,
+                    autofillHints: const [AutofillHints.username],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
+                    onChanged: (_) {
+                      if (_showError) setState(() => _showError = false);
+                    },
+                    onFocusChange: (focused) =>
+                        setState(() => _focused = focused),
+                  ),
+                  const SizedBox(height: 13),
+                  NsTextField(
+                    controller: _passwordController,
+                    label: 'Password',
+                    hint: 'Enter your password',
+                    icon: Icons.lock_rounded,
+                    obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    validator: Validators.loginPassword,
+                    autofillHints: const [AutofillHints.password],
+                    onFieldSubmitted: (_) => _signIn(),
+                    onChanged: (_) {
+                      if (_showError) setState(() => _showError = false);
+                    },
+                    onFocusChange: (focused) =>
+                        setState(() => _focused = focused),
+                  ),
+                  const SizedBox(height: 16),
+                  NsPrimaryButton(
+                    label: 'Sign in',
+                    isLoading: _isLoading,
+                    onPressed: _signIn,
+                    icon: Icons.arrow_forward_rounded,
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 14),
+        const _StaffBento(),
+        Center(
+          child: TextButton(
+            onPressed: _backToCitizenSignIn,
+            child: const Text('Back to citizen sign in'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StaffBento extends StatelessWidget {
+  const _StaffBento();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 3,
+                child: NsBentoTile(
+                  icon: Icons.assignment_rounded,
+                  label: 'Your queue',
+                  caption: 'Citizen requests and ward updates.',
+                ),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: NsBentoTile(
+                  icon: Icons.verified_user_rounded,
+                  label: 'Secure',
+                  caption: 'Municipal-issued access.',
+                  tone: NsBentoTone.sky,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: NsBentoTile(
+                  icon: Icons.inbox_rounded,
+                  label: 'Requests',
+                  tone: NsBentoTone.sun,
+                ),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: NsBentoTile(
+                  icon: Icons.campaign_rounded,
+                  label: 'Notices',
+                  tone: NsBentoTone.sky,
+                ),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: NsBentoTile(icon: Icons.map_rounded, label: 'Wards'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

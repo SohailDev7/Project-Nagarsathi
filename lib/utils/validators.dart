@@ -1,8 +1,33 @@
 import 'package:flutter/widgets.dart';
 
 /// Shared form validators.
+enum IdentifierKind { empty, email, phone, unknown }
+
 abstract final class Validators {
   static final _emailPattern = RegExp(r'^[\w.\-+]+@[\w\-]+(\.[\w\-]+)+$');
+  static final _phoneCharacters = RegExp(r'^[+]?[\d\s()\-]+$');
+
+  /// Detects whether the shared sign-in field holds an email or a phone.
+  static IdentifierKind identifierKind(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return IdentifierKind.empty;
+    if (trimmed.contains('@')) return IdentifierKind.email;
+    if (_phoneCharacters.hasMatch(trimmed)) return IdentifierKind.phone;
+    return IdentifierKind.unknown;
+  }
+
+  static String? identifier(String? value) {
+    switch (identifierKind(value)) {
+      case IdentifierKind.empty:
+        return 'Enter your email or phone number';
+      case IdentifierKind.email:
+        return email(value);
+      case IdentifierKind.phone:
+        return phone(value);
+      case IdentifierKind.unknown:
+        return 'Enter a valid email or phone number';
+    }
+  }
 
   static String? name(String? value) {
     final trimmed = value?.trim() ?? '';

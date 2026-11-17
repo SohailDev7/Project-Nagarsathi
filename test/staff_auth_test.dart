@@ -9,58 +9,55 @@ import 'package:projectnagarsathi/screens/staff_login_screen.dart';
 Future<void> _openStaffPortal(WidgetTester tester) async {
   await tester.pumpWidget(const NagarSathiApp());
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('Sign in here'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Sign in here'));
+  await tester.tap(find.text('Staff portal'));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('staff link is below sign-up and returns to citizen sign-in', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 568);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'staff portal entry stays visible and returns to citizen sign-in',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const NagarSathiApp());
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextFormField).first,
-      'citizen@nagarsathi.app',
-    );
-    await tester.ensureVisible(find.text('Sign in here'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(const NagarSathiApp());
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'citizen@nagarsathi.app',
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Are you a Staff Member?'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('Sign in here')).dy,
-      greaterThan(tester.getBottomLeft(find.text('Sign up')).dy),
-    );
+      // The staff entry lives in the pinned top bar, so it never needs scrolling.
+      final staffPortal = find.text('Staff portal');
+      expect(staffPortal, findsOneWidget);
+      expect(tester.getBottomLeft(staffPortal).dy, lessThan(568));
 
-    await tester.tap(find.text('Sign in here'));
-    await tester.pumpAndSettle();
-    expect(find.byType(StaffLoginScreen), findsOneWidget);
-    expect(find.text('Staff sign in'), findsOneWidget);
-    expect(find.text('Work email address'), findsOneWidget);
-    expect(find.text('Sign up'), findsNothing);
-    expect(find.text('Phone'), findsNothing);
+      await tester.tap(staffPortal);
+      await tester.pumpAndSettle();
+      expect(find.byType(StaffLoginScreen), findsOneWidget);
+      expect(find.text('Staff sign in'), findsOneWidget);
+      expect(find.text('Work email address'), findsOneWidget);
+      expect(find.text('Sign up'), findsNothing);
+      expect(find.text('Phone'), findsNothing);
 
-    await tester.ensureVisible(find.byTooltip('Back'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pumpAndSettle();
-    expect(find.byType(LoginScreen), findsOneWidget);
-    expect(
-      tester
-          .widget<TextFormField>(find.byType(TextFormField).first)
-          .controller!
-          .text,
-      'citizen@nagarsathi.app',
-    );
-    expect(tester.takeException(), isNull);
-  });
+      await tester.ensureVisible(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(find.byType(TextFormField).first)
+            .controller!
+            .text,
+        'citizen@nagarsathi.app',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('staff sign-in rejects empty and invalid credentials', (
     tester,

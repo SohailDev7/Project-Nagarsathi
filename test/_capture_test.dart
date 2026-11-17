@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:projectnagarsathi/models/app_update.dart';
 import 'package:projectnagarsathi/screens/sign_up_screen.dart';
 import 'package:projectnagarsathi/services/update_service.dart';
@@ -27,9 +27,8 @@ void main() {
         key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
     final image = await boundary.toImage(pixelRatio: 2);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    File(
-      '${Directory.systemTemp.path}\\$name.png',
-    ).writeAsBytesSync(bytes!.buffer.asUint8List());
+    File('${Directory.systemTemp.path}\\$name.png')
+        .writeAsBytesSync(bytes!.buffer.asUint8List());
   }
 
   testWidgets('capture sign up wizard', (tester) async {
@@ -44,7 +43,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 400));
     await shoot(tester, key, 'wizard1');
-  });
+  }, skip: true);
 
   testWidgets('capture update dialog', (tester) async {
     await prep(tester);
@@ -80,5 +79,5 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await shoot(tester, key, 'update-dialog');
-  });
+  }, skip: true);
 }

@@ -1,9 +1,11 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_logo.dart';
+import '../widgets/ns_outline_button.dart';
 import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
 
@@ -54,9 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _checkForUpdates() async {
@@ -100,44 +101,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Row(
                       children: [
-                        const NsLogo(size: 30),
+                        const NsLogo(size: 36),
                         const SizedBox(width: 10),
                         const Text(
                           'NagarSathi',
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ink,
-                            letterSpacing: -0.2,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.forest,
+                            letterSpacing: -0.3,
                           ),
                         ),
                         const Spacer(),
                         Container(
-                          width: 34,
-                          height: 34,
+                          width: 38,
+                          height: 38,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.border),
+                            border: Border.all(
+                              color: AppColors.borderStrong,
+                              width: 2,
+                            ),
                           ),
                           child: const Icon(
-                            Icons.person_outline_rounded,
+                            Icons.person_rounded,
                             size: 18,
-                            color: AppColors.ink,
+                            color: AppColors.forest,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 44),
+                    const SizedBox(height: 40),
                     const Text(
                       'NagarSathi Citizen',
                       style: TextStyle(
-                        fontSize: 28,
-                        height: 1.15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                        letterSpacing: -0.8,
+                        fontSize: 30,
+                        height: 1.1,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.forest,
+                        letterSpacing: -1,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -167,25 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       onCheckForUpdates: _checkForUpdates,
                     ),
                     const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: OutlinedButton(
-                        onPressed: _signOut,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.ink,
-                          backgroundColor: AppColors.surface,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        child: const Text('Sign out'),
-                      ),
+                    NsOutlineButton(
+                      label: 'Sign out',
+                      icon: Icons.logout_rounded,
+                      tone: NsOutlineTone.danger,
+                      onPressed: _signOut,
                     ),
                     if (_version != null) ...[
                       const SizedBox(height: 16),
@@ -276,10 +266,7 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _ActionList extends StatelessWidget {
-  const _ActionList({
-    required this.checking,
-    required this.onCheckForUpdates,
-  });
+  const _ActionList({required this.checking, required this.onCheckForUpdates});
 
   final bool checking;
   final VoidCallback onCheckForUpdates;
@@ -304,19 +291,13 @@ class _ActionList extends StatelessWidget {
         children: [
           for (var index = 0; index < _actions.length; index++) ...[
             if (index > 0) const _RowDivider(),
-            _ActionRow(
-              icon: _actions[index].$1,
-              label: _actions[index].$2,
-            ),
+            _ActionRow(icon: _actions[index].$1, label: _actions[index].$2),
           ],
           const _RowDivider(),
           InkWell(
             onTap: checking ? null : onCheckForUpdates,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 15,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
               child: Row(
                 children: [
                   const Icon(
