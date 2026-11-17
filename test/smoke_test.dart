@@ -4,6 +4,14 @@ import 'package:projectnagarsathi/main.dart';
 
 void main() {
   testWidgets('auth flow renders and navigates', (tester) async {
+    // The wizard illustration loops forever; honour reduced motion so
+    // pumpAndSettle can finish, exactly like a device with animations off.
+    tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(
+      tester.binding.platformDispatcher.clearAccessibilityFeaturesTestValue,
+    );
+
     await tester.pumpWidget(const NagarSathiApp());
     await tester.pumpAndSettle();
 
@@ -35,26 +43,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Welcome back'), findsOneWidget);
 
-    // Sign up screen.
+    // Sign up wizard.
     await tester.ensureVisible(find.text('Sign up'));
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
+    expect(find.text('1 of 4'), findsOneWidget);
 
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Sita Sharma');
-    await tester.enterText(fields.at(1), 'sita@nagarsathi.app');
-    await tester.enterText(fields.at(2), '9812345678');
-    await tester.enterText(fields.at(3), 'password123');
-    await tester.enterText(fields.at(4), 'password123');
+    // Step 1 validation, then name.
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter your full name'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, 'Sita Sharma');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 4'), findsOneWidget);
+
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'sita@nagarsathi.app',
+    );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 of 4'), findsOneWidget);
+
+    // Phone is optional.
+    await tester.tap(find.text('Skip for now'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 of 4'), findsOneWidget);
+
+    final passwordFields = find.byType(TextFormField);
+    await tester.enterText(passwordFields.at(0), 'password123');
+    await tester.enterText(passwordFields.at(1), 'password123');
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byType(AnimatedContainer));
-    await tester.tap(find.byType(AnimatedContainer));
+    await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Create account'));
     await tester.tap(find.text('Create account'));
-    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
     expect(find.text("You're all set"), findsOneWidget);

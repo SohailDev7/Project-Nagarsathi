@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -20,12 +21,25 @@ class UpdateException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when the user cancels a download in progress.
+class UpdateCancelled implements Exception {
+  const UpdateCancelled();
+
+  @override
+  String toString() => 'Update cancelled.';
+}
+
 /// Checks GitHub releases for a newer APK, downloads it and opens the Android
 /// package installer.
 class UpdateService {
   UpdateService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
+
+  bool _cancelRequested = false;
+
+  /// Stops the download that is currently running, if any.
+  void cancelDownload() => _cancelRequested = true;
 
   static const _lastCheckKey = 'github_update_last_check';
   static const _snoozeVersionKey = 'github_update_snooze_version';
@@ -50,6 +64,7 @@ class UpdateService {
           : '${packageInfo.version}+$buildNumber',
     );
     if (current == null) return null;
+    debugPrint('Update check: installed ${current.display}');
 
     final response = await _client
         .get(
@@ -75,42 +90,19 @@ class UpdateService {
     final decoded = jsonDecode(response.body);
     if (decoded is! List) return null;
 
-    for (final item in decoded) {
-      if (item is! Map<String, dynamic>) continue;
-      if (item['draft'] == true || item['prerelease'] == true) continue;
+    final update = selectUpdateFromReleases(
+      decoded,
+      current,
+      fallbackReleaseUrl: UpdateConfig.releasesUrl,
+    );
 
-      final tag = item['tag_name'] as String? ?? '';
-      final version = AppVersion.tryParseTag(tag);
-      if (version == null || !version.isNewerThan(current)) continue;
-
-      final apkAsset = _findApkAsset(item['assets']);
-      if (apkAsset == null) continue;
-
-      final downloadUrl = apkAsset['browser_download_url'] as String? ?? '';
-      if (downloadUrl.isEmpty) continue;
-
-      return AppUpdate(
-        version: version,
-        tag: tag,
-        notes: (item['body'] as String? ?? '').trim(),
-        apkUrl: downloadUrl,
-        apkSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
-        isPriority: AppVersion.isPriorityTag(tag),
-        releaseUrl: item['html_url'] as String? ?? UpdateConfig.releasesUrl,
-      );
+    if (update == null) {
+      debugPrint('Update check: up to date');
+      return null;
     }
 
-    return null;
-  }
-
-  Map<String, dynamic>? _findApkAsset(Object? assets) {
-    if (assets is! List) return null;
-    for (final asset in assets) {
-      if (asset is! Map<String, dynamic>) continue;
-      final name = (asset['name'] as String? ?? '').toLowerCase();
-      if (name.endsWith('.apk')) return asset;
-    }
-    return null;
+    debugPrint('Update check: found ${update.tag}');
+    return update;
   }
 
   Future<bool> shouldPrompt(AppUpdate update) async {
@@ -138,6 +130,7 @@ class UpdateService {
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {
+    _cancelRequested = false;
     final directory = await getTemporaryDirectory();
     final file = File(
       '${directory.path}${Platform.pathSeparator}'
@@ -168,6 +161,7 @@ class UpdateService {
 
     try {
       await for (final chunk in response.stream) {
+        if (_cancelRequested) throw const UpdateCancelled();
         sink.add(chunk);
         received += chunk.length;
         if (total > 0) {
@@ -182,6 +176,7 @@ class UpdateService {
     } catch (_) {
       await sink.close();
       if (await file.exists()) await file.delete();
+      _cancelRequested = false;
       rethrow;
     }
 
@@ -192,8 +187,41 @@ class UpdateService {
       throw const UpdateException('The downloaded update file was empty.');
     }
 
+    if (total > 0 && received < total) {
+      if (await file.exists()) await file.delete();
+      throw const UpdateException(
+        'The download stopped early. Check your connection and try again.',
+      );
+    }
+
+    if (!await _looksLikeApk(file)) {
+      await file.delete();
+      throw const UpdateException(
+        'The downloaded file is not a valid APK. Try again, or install it '
+        'manually from the GitHub release.',
+      );
+    }
+
     onProgress?.call(1);
     return file.path;
+  }
+
+  /// Guards against handing a truncated file or an HTML error page to Android,
+  /// which would otherwise fail with "There was a problem parsing the package".
+  Future<bool> _looksLikeApk(File file) async {
+    if (!await file.exists() || await file.length() < 1024) return false;
+
+    final handle = await file.open();
+    try {
+      final magic = await handle.read(4);
+      return magic.length == 4 &&
+          magic[0] == 0x50 && // P
+          magic[1] == 0x4B && // K
+          magic[2] == 0x03 &&
+          magic[3] == 0x04;
+    } finally {
+      await handle.close();
+    }
   }
 
   Future<void> installApk(String path) async {

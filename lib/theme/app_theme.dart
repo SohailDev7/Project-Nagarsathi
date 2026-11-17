@@ -1,30 +1,37 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
-/// Central green palette for NagarSathi.
+/// Minimal green palette for NagarSathi.
 abstract final class AppColors {
-  static const primary = Color(0xFF0E7C4A);
-  static const primaryDark = Color(0xFF075E38);
-  static const primaryLight = Color(0xFF2FA96F);
-  static const background = Color(0xFFF4F8F5);
-  static const border = Color(0xFFE1EAE4);
-  static const ink = Color(0xFF10231A);
-  static const muted = Color(0xFF6B7F73);
-  static const error = Color(0xFFD14343);
+  static const primary = Color(0xFF14724A);
+  static const primaryDark = Color(0xFF0B4A31);
+  static const primaryLight = Color(0xFF3E9B72);
+  static const background = Color(0xFFF7F8F7);
+  static const surface = Color(0xFFFFFFFF);
+  static const border = Color(0xFFE5E8E6);
+  static const ink = Color(0xFF141A16);
+  static const muted = Color(0xFF6C7671);
+  static const error = Color(0xFFC2413A);
 }
 
 ThemeData buildAppTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: AppColors.primary,
-    brightness: Brightness.light,
-  ).copyWith(
+  const scheme = ColorScheme.light(
     primary: AppColors.primary,
     onPrimary: Colors.white,
-    surface: Colors.white,
+    primaryContainer: AppColors.background,
+    onPrimaryContainer: AppColors.primaryDark,
+    surface: AppColors.surface,
+    onSurface: AppColors.ink,
+    onSurfaceVariant: AppColors.muted,
+    outline: AppColors.border,
     error: AppColors.error,
   );
 
-  const fieldRadius = BorderRadius.all(Radius.circular(18));
+  const fieldRadius = BorderRadius.all(Radius.circular(14));
+  const fieldBorder = OutlineInputBorder(
+    borderRadius: fieldRadius,
+    borderSide: BorderSide(color: AppColors.border),
+  );
 
   return ThemeData(
     useMaterial3: true,
@@ -39,13 +46,13 @@ ThemeData buildAppTheme() {
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: AppColors.primary,
-      selectionColor: AppColors.primary.withValues(alpha: 0.18),
+      selectionColor: AppColors.primary.withValues(alpha: 0.16),
       selectionHandleColor: AppColors.primary,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      fillColor: AppColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
       hintStyle: const TextStyle(
         fontSize: 15,
         fontWeight: FontWeight.w400,
@@ -53,18 +60,12 @@ ThemeData buildAppTheme() {
       ),
       prefixIconColor: AppColors.muted,
       suffixIconColor: AppColors.muted,
-      prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 24),
-      border: const OutlineInputBorder(
-        borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: const OutlineInputBorder(
-        borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.border),
-      ),
+      prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 24),
+      border: fieldBorder,
+      enabledBorder: fieldBorder,
       focusedBorder: const OutlineInputBorder(
         borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.primary, width: 1.6),
+        borderSide: BorderSide(color: AppColors.primary, width: 1.4),
       ),
       errorBorder: const OutlineInputBorder(
         borderRadius: fieldRadius,
@@ -72,7 +73,7 @@ ThemeData buildAppTheme() {
       ),
       focusedErrorBorder: const OutlineInputBorder(
         borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.error, width: 1.6),
+        borderSide: BorderSide(color: AppColors.error, width: 1.4),
       ),
       errorStyle: const TextStyle(
         fontSize: 12.5,
@@ -84,7 +85,24 @@ ThemeData buildAppTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primary,
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        splashFactory: NoSplash.splashFactory,
       ),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      side: const BorderSide(color: AppColors.border, width: 1.4),
+      fillColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? AppColors.primary
+            : Colors.transparent,
+      ),
+      checkColor: const WidgetStatePropertyAll(Colors.white),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.primary,
+      linearTrackColor: AppColors.border,
     ),
     snackBarTheme: const SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
@@ -95,7 +113,7 @@ ThemeData buildAppTheme() {
         fontWeight: FontWeight.w500,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderRadius: BorderRadius.all(Radius.circular(12)),
       ),
     ),
   );

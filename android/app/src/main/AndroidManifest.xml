@@ -18,7 +18,7 @@
         tools:node="remove" />
 
     <application
-        android:label="projectnagarsathi"
+        android:label="NagarSathi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

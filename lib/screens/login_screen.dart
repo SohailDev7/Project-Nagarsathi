@@ -74,191 +74,176 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+              padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    NsEntrance(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const NsLogo(),
-                          const SizedBox(height: 28),
-                          const Text(
-                            'Welcome back',
-                            style: TextStyle(
-                              fontSize: 34,
-                              height: 1.08,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                              letterSpacing: -1.0,
-                            ),
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: NsEntrance(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: NsLogo(size: 44),
+                      ),
+                      const SizedBox(height: 32),
+                      const Text(
+                        'Welcome back',
+                        style: TextStyle(
+                          fontSize: 30,
+                          height: 1.15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                          letterSpacing: -0.9,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Sign in to continue.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.45,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                      AutofillGroup(
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              NsSegmentedControl(
+                                segments: const ['Email', 'Phone'],
+                                selectedIndex: _mode.index,
+                                onChanged: (index) {
+                                  FocusScope.of(context).unfocus();
+                                  setState(() {
+                                    _mode = _LoginMode.values[index];
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 180),
+                                child: _mode == _LoginMode.email
+                                    ? NsTextField(
+                                        key: const ValueKey('email-field'),
+                                        controller: _emailController,
+                                        label: 'Email',
+                                        hint: 'you@example.com',
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        textInputAction: TextInputAction.next,
+                                        validator: Validators.email,
+                                        autocorrect: false,
+                                        autofillHints: const [
+                                          AutofillHints.email,
+                                        ],
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.deny(
+                                            RegExp(r'\s'),
+                                          ),
+                                        ],
+                                      )
+                                    : NsTextField(
+                                        key: const ValueKey('phone-field'),
+                                        controller: _phoneController,
+                                        label: 'Phone number',
+                                        hint: '+977 98XXXXXXXX',
+                                        keyboardType: TextInputType.phone,
+                                        textInputAction: TextInputAction.next,
+                                        validator: Validators.phone,
+                                        autofillHints: const [
+                                          AutofillHints.telephoneNumber,
+                                        ],
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(
+                                            RegExp(r'[0-9+\-\s()]'),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                              const SizedBox(height: 16),
+                              NsTextField(
+                                controller: _passwordController,
+                                label: 'Password',
+                                hint: 'Enter your password',
+                                obscureText: true,
+                                textInputAction: TextInputAction.done,
+                                validator: Validators.loginPassword,
+                                autofillHints: const [AutofillHints.password],
+                                onFieldSubmitted: (_) => _signIn(),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _openForgotPassword,
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 10,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'Forgot password?',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              NsPrimaryButton(
+                                label: 'Sign in',
+                                isLoading: _isLoading,
+                                onPressed: _signIn,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Sign in to continue to NagarSathi.',
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      const Divider(height: 1, color: AppColors.border),
+                      const SizedBox(height: 20),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text(
+                            'New to NagarSathi?',
                             style: TextStyle(
-                              fontSize: 15,
-                              height: 1.45,
+                              fontSize: 14,
                               fontWeight: FontWeight.w400,
                               color: AppColors.muted,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    AutofillGroup(
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            NsSegmentedControl(
-                              segments: const ['Email', 'Phone'],
-                              selectedIndex: _mode.index,
-                              onChanged: (index) {
-                                FocusScope.of(context).unfocus();
-                                setState(() {
-                                  _mode = _LoginMode.values[index];
-                                });
-                              },
+                          TextButton(
+                            onPressed: _openSignUp,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            const SizedBox(height: 20),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 220),
-                              switchInCurve: Curves.easeOut,
-                              switchOutCurve: Curves.easeIn,
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.04),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _mode == _LoginMode.email
-                                  ? NsTextField(
-                                      key: const ValueKey('email-field'),
-                                      controller: _emailController,
-                                      label: 'Email address',
-                                      hint: 'you@example.com',
-                                      icon: Icons.mail_outline_rounded,
-                                      keyboardType: TextInputType.emailAddress,
-                                      textInputAction: TextInputAction.next,
-                                      validator: Validators.email,
-                                      autocorrect: false,
-                                      autofillHints: const [AutofillHints.email],
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.deny(
-                                          RegExp(r'\s'),
-                                        ),
-                                      ],
-                                    )
-                                  : NsTextField(
-                                      key: const ValueKey('phone-field'),
-                                      controller: _phoneController,
-                                      label: 'Phone number',
-                                      hint: '+977 98XXXXXXXX',
-                                      icon: Icons.phone_iphone_rounded,
-                                      keyboardType: TextInputType.phone,
-                                      textInputAction: TextInputAction.next,
-                                      validator: Validators.phone,
-                                      autofillHints: const [
-                                        AutofillHints.telephoneNumber,
-                                      ],
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.allow(
-                                          RegExp(r'[0-9+\-\s()]'),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                            const SizedBox(height: 16),
-                            NsTextField(
-                              controller: _passwordController,
-                              label: 'Password',
-                              hint: 'Enter your password',
-                              icon: Icons.lock_outline_rounded,
-                              obscureText: true,
-                              textInputAction: TextInputAction.done,
-                              validator: Validators.loginPassword,
-                              autofillHints: const [AutofillHints.password],
-                              onFieldSubmitted: (_) => _signIn(),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: _openForgotPassword,
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 8,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: const Text(
-                                  'Forgot password?',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                            child: const Text(
+                              'Sign up',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            NsPrimaryButton(
-                              label: 'Sign in',
-                              isLoading: _isLoading,
-                              onPressed: _signIn,
-                              icon: Icons.arrow_forward_rounded,
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        const Text(
-                          'New to NagarSathi?',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.muted,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _openSignUp,
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'Sign up',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

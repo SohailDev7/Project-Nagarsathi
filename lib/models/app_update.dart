@@ -107,3 +107,49 @@ class AppUpdate {
     return '${(apkSize / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
+
+/// Picks the newest applicable release from GitHub's releases payload.
+///
+/// Skips drafts, prereleases, unparseable tags, releases that are not newer
+/// than [current], and releases without an `.apk` asset.
+AppUpdate? selectUpdateFromReleases(
+  List<Object?> releases,
+  AppVersion current, {
+  required String fallbackReleaseUrl,
+}) {
+  for (final item in releases) {
+    if (item is! Map<String, dynamic>) continue;
+    if (item['draft'] == true || item['prerelease'] == true) continue;
+
+    final tag = item['tag_name'] as String? ?? '';
+    final version = AppVersion.tryParseTag(tag);
+    if (version == null || !version.isNewerThan(current)) continue;
+
+    final asset = _findApkAsset(item['assets']);
+    if (asset == null) continue;
+
+    final downloadUrl = asset['browser_download_url'] as String? ?? '';
+    if (downloadUrl.isEmpty) continue;
+
+    return AppUpdate(
+      version: version,
+      tag: tag,
+      notes: (item['body'] as String? ?? '').trim(),
+      apkUrl: downloadUrl,
+      apkSize: (asset['size'] as num?)?.toInt() ?? 0,
+      isPriority: AppVersion.isPriorityTag(tag),
+      releaseUrl: item['html_url'] as String? ?? fallbackReleaseUrl,
+    );
+  }
+  return null;
+}
+
+Map<String, dynamic>? _findApkAsset(Object? assets) {
+  if (assets is! List) return null;
+  for (final asset in assets) {
+    if (asset is! Map<String, dynamic>) continue;
+    final name = (asset['name'] as String? ?? '').toLowerCase();
+    if (name.endsWith('.apk')) return asset;
+  }
+  return null;
+}

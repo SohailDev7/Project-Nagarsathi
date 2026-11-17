@@ -16,8 +16,9 @@ abstract final class UpdateConfig {
     defaultValue: '',
   );
 
-  /// Minimum time between automatic GitHub release checks.
-  static const checkInterval = Duration(minutes: 30);
+  /// Minimum gap between automatic GitHub release checks. Small on purpose so
+  /// opening the app always re-checks; the manual check bypasses it entirely.
+  static const checkInterval = Duration(minutes: 1);
 
   /// How long "Later" postpones a non-priority update.
   static const snoozeDuration = Duration(hours: 24);

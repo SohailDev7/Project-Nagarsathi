@@ -3,14 +3,14 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
 
-/// Labelled, rounded input that matches the green iOS-inspired theme.
+/// Minimal labelled input with an optional leading icon.
 class NsTextField extends StatefulWidget {
   const NsTextField({
     super.key,
     required this.controller,
     required this.label,
     required this.hint,
-    required this.icon,
+    this.icon,
     this.obscureText = false,
     this.keyboardType,
     this.textInputAction,
@@ -20,12 +20,13 @@ class NsTextField extends StatefulWidget {
     this.inputFormatters,
     this.autofillHints,
     this.autocorrect = true,
+    this.autofocus = false,
   });
 
   final TextEditingController controller;
   final String label;
   final String hint;
-  final IconData icon;
+  final IconData? icon;
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
@@ -35,6 +36,7 @@ class NsTextField extends StatefulWidget {
   final List<TextInputFormatter>? inputFormatters;
   final Iterable<String>? autofillHints;
   final bool autocorrect;
+  final bool autofocus;
 
   @override
   State<NsTextField> createState() => _NsTextFieldState();
@@ -49,14 +51,14 @@ class _NsTextFieldState extends State<NsTextField> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          padding: const EdgeInsets.only(left: 2, bottom: 8),
           child: Text(
             widget.label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.ink.withValues(alpha: 0.8),
-              letterSpacing: -0.1,
+              color: AppColors.ink.withValues(alpha: 0.62),
+              letterSpacing: 0.1,
             ),
           ),
         ),
@@ -72,6 +74,7 @@ class _NsTextFieldState extends State<NsTextField> {
           enableSuggestions: !widget.obscureText,
           validator: widget.validator,
           onFieldSubmitted: widget.onFieldSubmitted,
+          autofocus: widget.autofocus,
           style: const TextStyle(
             fontSize: 15.5,
             fontWeight: FontWeight.w500,
@@ -81,7 +84,9 @@ class _NsTextFieldState extends State<NsTextField> {
           cursorColor: AppColors.primary,
           decoration: InputDecoration(
             hintText: widget.hint,
-            prefixIcon: Icon(widget.icon, size: 20, color: AppColors.muted),
+            prefixIcon: widget.icon == null
+                ? null
+                : Icon(widget.icon, size: 19, color: AppColors.muted),
             suffixIcon: widget.obscureText
                 ? IconButton(
                     onPressed: () => setState(() => _obscured = !_obscured),
@@ -89,11 +94,11 @@ class _NsTextFieldState extends State<NsTextField> {
                       _obscured
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
-                      size: 20,
+                      size: 19,
                       color: AppColors.muted,
                     ),
                     tooltip: _obscured ? 'Show password' : 'Hide password',
-                    splashRadius: 20,
+                    splashRadius: 18,
                   )
                 : null,
           ),

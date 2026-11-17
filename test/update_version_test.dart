@@ -67,6 +67,93 @@ void main() {
     });
   });
 
+  group('selectUpdateFromReleases', () {
+    Map<String, dynamic> release({
+      required String tag,
+      bool draft = false,
+      bool prerelease = false,
+      bool withApk = true,
+      String body = '',
+    }) {
+      return {
+        'tag_name': tag,
+        'draft': draft,
+        'prerelease': prerelease,
+        'body': body,
+        'html_url': 'https://github.com/x/y/releases/tag/$tag',
+        'assets': withApk
+            ? [
+                {
+                  'name': 'app-release.apk',
+                  'size': 51337335,
+                  'browser_download_url':
+                      'https://example.com/$tag/app-release.apk',
+                },
+              ]
+            : <Map<String, dynamic>>[],
+      };
+    }
+
+    const installed = AppVersion(major: 1, minor: 0, patch: 0, build: 1);
+
+    test('picks a newer release with an APK asset', () {
+      final update = selectUpdateFromReleases(
+        [release(tag: 'v1.0.1'), release(tag: 'v1.0.0')],
+        installed,
+        fallbackReleaseUrl: 'https://github.com/x/y/releases',
+      );
+
+      expect(update, isNotNull);
+      expect(update!.tag, 'v1.0.1');
+      expect(update.version.display, '1.0.1');
+      expect(update.apkSize, 51337335);
+      expect(update.isPriority, isFalse);
+      expect(
+        update.apkUrl,
+        'https://example.com/v1.0.1/app-release.apk',
+      );
+    });
+
+    test('marks priority tags', () {
+      final update = selectUpdateFromReleases(
+        [release(tag: 'v1.0.2-priority')],
+        installed,
+        fallbackReleaseUrl: 'https://github.com/x/y/releases',
+      );
+
+      expect(update!.isPriority, isTrue);
+    });
+
+    test('ignores drafts, prereleases and releases without an APK', () {
+      final update = selectUpdateFromReleases(
+        [
+          release(tag: 'v1.1.0', draft: true),
+          release(tag: 'v1.2.0', prerelease: true),
+          release(tag: 'v1.3.0', withApk: false),
+          release(tag: 'not-a-version'),
+        ],
+        installed,
+        fallbackReleaseUrl: 'https://github.com/x/y/releases',
+      );
+
+      expect(update, isNull);
+    });
+
+    test('ignores releases that are not newer than the installed build', () {
+      final update = selectUpdateFromReleases(
+        [
+          release(tag: 'v1.0.0'),
+          release(tag: 'v1.0.0+1'),
+          release(tag: 'v0.9.9'),
+        ],
+        installed,
+        fallbackReleaseUrl: 'https://github.com/x/y/releases',
+      );
+
+      expect(update, isNull);
+    });
+  });
+
   group('AppVersion.isNewerThan', () {
     test('compares major, minor and patch', () {
       expect(

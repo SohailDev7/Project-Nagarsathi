@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Rounded green app mark.
+/// NagarSathi app mark, identical to the launcher icon.
 class NsLogo extends StatelessWidget {
-  const NsLogo({super.key, this.size = 64});
+  const NsLogo({super.key, this.size = 48});
 
   final double size;
 
@@ -13,26 +13,18 @@ class NsLogo extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      alignment: Alignment.center,
+      padding: EdgeInsets.all(size * 0.04),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryLight, AppColors.primaryDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(size * 0.3),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.28),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Icon(
-        Icons.location_city_rounded,
         color: Colors.white,
-        size: size * 0.46,
+        borderRadius: BorderRadius.circular(size * 0.28),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'assets/icon/icon.png',
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+        semanticLabel: 'NagarSathi',
       ),
     );
   }

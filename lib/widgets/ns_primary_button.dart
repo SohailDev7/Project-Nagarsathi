@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Rounded, shadowed primary action button with a built-in loading state.
+/// Flat primary action button with a built-in loading state.
 class NsPrimaryButton extends StatelessWidget {
   const NsPrimaryButton({
     super.key,
@@ -21,65 +21,49 @@ class NsPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canTap = !isLoading && onPressed != null;
 
-    return Container(
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.all(Radius.circular(18)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.28),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return SizedBox(
+      height: 54,
+      width: double.infinity,
       child: Material(
-        color: Colors.transparent,
-        borderRadius: const BorderRadius.all(Radius.circular(18)),
+        color: canTap
+            ? AppColors.primary
+            : AppColors.primary.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
-        child: Ink(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.primaryLight, AppColors.primary],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: InkWell(
-            onTap: canTap ? onPressed : null,
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: isLoading
-                    ? const SizedBox(
-                        key: ValueKey('loader'),
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      )
-                    : Row(
-                        key: const ValueKey('label'),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            label,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          if (icon != null) ...[
-                            const SizedBox(width: 8),
-                            Icon(icon, size: 19, color: Colors.white),
-                          ],
-                        ],
+        child: InkWell(
+          onTap: canTap ? onPressed : null,
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: isLoading
+                  ? const SizedBox(
+                      key: ValueKey('loader'),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
-              ),
+                    )
+                  : Row(
+                      key: const ValueKey('label'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        if (icon != null) ...[
+                          const SizedBox(width: 8),
+                          Icon(icon, size: 18, color: Colors.white),
+                        ],
+                      ],
+                    ),
             ),
           ),
         ),

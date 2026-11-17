@@ -34,8 +34,8 @@ properly (Android Studio SDK Manager), that block can be removed.
 
 - Sign in with an email address or phone number (segmented toggle) and password
 - Forgot-password flow with email/phone recovery
-- Sign-up form with name, email, optional phone, password confirmation and terms
-- Green, iOS-inspired theme with reusable inputs, buttons and segmented control
+- Sign-up wizard in four steps: name → email → optional phone → password and terms
+- Minimal green theme: flat surfaces, hairline borders, one accent colour, no gradients or shadows
 
 The flow is UI-only: sign in and sign up currently navigate to a placeholder home
 screen. Wire the submit handlers in `lib/screens/` to your backend or auth service.
@@ -79,7 +79,10 @@ trigger a bogus update prompt.
 
 #### Publishing a release
 
-1. Bump `version` in `pubspec.yaml` (for example `1.1.0+2`).
+1. Bump `version` in `pubspec.yaml` (for example `1.1.0+2`). Keep the version
+   part identical to the release tag — the app compares its own `versionName`
+   against the tag, so an APK built as `1.0.0` will keep offering `v1.0.1`
+   forever, even after it is installed.
 2. Build the APK:
 
    ```sh
@@ -90,7 +93,13 @@ trigger a bogus update prompt.
    `build/app/outputs/flutter-apk/app-release.apk` (rename it with `.apk`).
 4. For a forced update, suffix the tag with `-priority`.
 
-The release body is shown in the dialog under "What's new", so keep it short.
+The release body is shown in the dialog under "What's new". To change it, edit
+the release description on GitHub — no new build is needed, the app reads it
+from the API. Keep it short; the dialog shows the first few lines.
+
+The app validates a downloaded file (size and ZIP/APK signature) before opening
+the installer. A corrupted or partial download is rejected with a retry prompt
+instead of Android's "There was a problem parsing the package" error.
 
 #### Signing
 

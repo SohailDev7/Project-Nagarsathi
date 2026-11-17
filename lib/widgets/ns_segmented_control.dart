@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// iOS-style two-or-more segment picker with a sliding white indicator.
+/// Minimal segmented control: text tabs with a thin sliding underline.
 class NsSegmentedControl extends StatelessWidget {
   const NsSegmentedControl({
     super.key,
@@ -17,70 +17,51 @@ class NsSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lastIndex = segments.length - 1;
-    final alignment = lastIndex == 0
-        ? Alignment.center
-        : Alignment(-1 + (2 * selectedIndex) / lastIndex, 0);
-
     return Container(
-      height: 46,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE7F0EA),
-        borderRadius: BorderRadius.circular(15),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
-      child: Stack(
+      child: Row(
         children: [
-          AnimatedAlign(
-            alignment: alignment,
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeOutCubic,
-            child: FractionallySizedBox(
-              widthFactor: 1 / segments.length,
-              heightFactor: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.ink.withValues(alpha: 0.07),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var index = 0; index < segments.length; index++)
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onChanged(index),
-                    child: Center(
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
+          for (var index = 0; index < segments.length; index++)
+            Expanded(
+              child: InkWell(
+                onTap: () => onChanged(index),
+                splashFactory: NoSplash.splashFactory,
+                highlightColor: Colors.transparent,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 180),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: index == selectedIndex
                               ? FontWeight.w700
                               : FontWeight.w500,
                           color: index == selectedIndex
-                              ? AppColors.primaryDark
+                              ? AppColors.ink
                               : AppColors.muted,
                           letterSpacing: -0.1,
                         ),
                         child: Text(segments[index]),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        height: 2,
+                        color: index == selectedIndex
+                            ? AppColors.primary
+                            : Colors.transparent,
+                      ),
+                    ],
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
         ],
       ),
     );

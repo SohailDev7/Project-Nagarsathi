@@ -63,9 +63,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Align(
             alignment: Alignment.topCenter,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
+                constraints: const BoxConstraints(maxWidth: 400),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -75,13 +75,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(opacity: animation, child: child);
-                      },
-                      child: _sent ? _buildSuccess(context) : _buildForm(),
+                      duration: const Duration(milliseconds: 220),
+                      child: _sent ? _buildSuccess() : _buildForm(),
                     ),
                   ],
                 ),
@@ -103,48 +100,42 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           const Text(
             'Forgot password?',
             style: TextStyle(
-              fontSize: 32,
-              height: 1.1,
+              fontSize: 28,
+              height: 1.2,
               fontWeight: FontWeight.w700,
               color: AppColors.ink,
-              letterSpacing: -1.0,
+              letterSpacing: -0.8,
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            "Enter the email or phone linked to your account and we'll send reset instructions.",
+          const SizedBox(height: 8),
+          const Text(
+            'Enter the email or phone linked to your account.',
             style: TextStyle(
-              fontSize: 15,
-              height: 1.45,
+              fontSize: 14.5,
+              height: 1.5,
               fontWeight: FontWeight.w400,
               color: AppColors.muted,
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
           NsSegmentedControl(
             segments: const ['Email', 'Phone'],
             selectedIndex: _mode.index,
             onChanged: (index) {
               FocusScope.of(context).unfocus();
-              setState(() {
-                _mode = _RecoveryMode.values[index];
-              });
+              setState(() => _mode = _RecoveryMode.values[index]);
             },
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           AutofillGroup(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
+              duration: const Duration(milliseconds: 180),
               child: _mode == _RecoveryMode.email
                   ? NsTextField(
                       key: const ValueKey('recovery-email'),
                       controller: _emailController,
-                      label: 'Email address',
+                      label: 'Email',
                       hint: 'you@example.com',
-                      icon: Icons.mail_outline_rounded,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.done,
                       validator: Validators.email,
@@ -159,13 +150,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       controller: _phoneController,
                       label: 'Phone number',
                       hint: '+977 98XXXXXXXX',
-                      icon: Icons.phone_iphone_rounded,
                       keyboardType: TextInputType.phone,
                       textInputAction: TextInputAction.done,
                       validator: Validators.phone,
-                      autofillHints: const [
-                        AutofillHints.telephoneNumber,
-                      ],
+                      autofillHints: const [AutofillHints.telephoneNumber],
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                           RegExp(r'[0-9+\-\s()]'),
@@ -174,14 +162,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           NsPrimaryButton(
             label: 'Send reset link',
             isLoading: _isLoading,
             onPressed: _sendInstructions,
-            icon: Icons.arrow_forward_rounded,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Center(
             child: TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -193,21 +180,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  Widget _buildSuccess(BuildContext context) {
+  Widget _buildSuccess() {
     return Column(
       key: const ValueKey('recovery-success'),
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          width: 64,
-          height: 64,
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.12),
+            color: AppColors.primary.withValues(alpha: 0.08),
             shape: BoxShape.circle,
           ),
           child: const Icon(
-            Icons.mark_email_read_rounded,
-            size: 30,
+            Icons.check_rounded,
+            size: 22,
             color: AppColors.primary,
           ),
         ),
@@ -215,25 +203,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const Text(
           'Reset link sent',
           style: TextStyle(
-            fontSize: 30,
-            height: 1.15,
+            fontSize: 28,
+            height: 1.2,
             fontWeight: FontWeight.w700,
             color: AppColors.ink,
-            letterSpacing: -1,
+            letterSpacing: -0.8,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
-          'We sent password reset instructions to $_contact. '
-          'Open them to choose a new password.',
-          style: TextStyle(
-            fontSize: 15,
+          'Check $_contact for the reset instructions.',
+          style: const TextStyle(
+            fontSize: 14.5,
             height: 1.5,
             fontWeight: FontWeight.w400,
             color: AppColors.muted,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 32),
         NsPrimaryButton(
           label: 'Back to sign in',
           onPressed: () => Navigator.of(context).pop(),
