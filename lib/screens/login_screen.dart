@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/ns_auth_heading.dart';
@@ -37,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showError = false;
   bool _identifierFocused = false;
   bool _passwordFocused = false;
+  String? _errorMessage;
   IdentifierKind _kind = IdentifierKind.empty;
 
   @override
@@ -61,7 +63,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String get _message {
     if (_celebrating) return 'Welcome back! Opening your city…';
-    if (_showError) return 'Hmm, check that and give it another go.';
+    if (_showError) {
+      return _errorMessage ?? 'Hmm, check that and give it another go.';
+    }
     if (_isLoading) return 'Checking your details…';
     if (_passwordFocused) return 'Your password stays private. Promise.';
     switch (_kind) {
@@ -82,11 +86,13 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _kind = kind;
         _showError = false;
+        _errorMessage = null;
       });
     }
   }
 
   Future<void> _signIn() async {
+    if (_isLoading) return;
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
@@ -95,11 +101,28 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     TextInput.finishAutofillContext();
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    await Future<void>.delayed(const Duration(milliseconds: 850));
+    try {
+      await const AuthService().signIn(
+        identifier: _identifierController.text,
+        password: _passwordController.text,
+      );
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+      return;
+    }
+
     if (!mounted) return;
-
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -247,7 +270,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: const [AutofillHints.password],
                     onFieldSubmitted: (_) => _signIn(),
                     onChanged: (_) {
-                      if (_showError) setState(() => _showError = false);
+                      if (_showError) {
+                        setState(() {
+                          _showError = false;
+                          _errorMessage = null;
+                        });
+                      }
                     },
                     onFocusChange: (focused) {
                       setState(() => _passwordFocused = focused);

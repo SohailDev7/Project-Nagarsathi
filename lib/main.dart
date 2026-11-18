@@ -1,11 +1,15 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'screens/login_screen.dart';
+import 'services/firebase_bootstrap.dart';
 import 'theme/app_theme.dart';
 import 'widgets/update_gate.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Never blocks start-up: without Firebase config the app runs in offline
+  // demo mode and the auth screens still work.
+  await FirebaseBootstrap.initialize();
   runApp(const NagarSathiApp());
 }
 

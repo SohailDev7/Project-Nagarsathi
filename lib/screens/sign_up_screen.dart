@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/ns_auth_heading.dart';
@@ -46,6 +47,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _celebrating = false;
   bool _showError = false;
   bool _fieldFocused = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -82,7 +84,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   String get _stepMessage {
     if (_celebrating) return 'You are all set! Welcome to NagarSathi.';
-    if (_showError) return 'Almost — check that answer and try once more.';
+    if (_showError) {
+      return _errorMessage ?? 'Almost — check that answer and try once more.';
+    }
     if (_isLoading) return 'Creating your citizen account…';
     return _copy.$2;
   }
@@ -105,6 +109,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _direction = 1;
       _step += 1;
       _showError = false;
+      _errorMessage = null;
       _fieldFocused = false;
     });
   }
@@ -119,6 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _direction = -1;
       _step -= 1;
       _showError = false;
+      _errorMessage = null;
       _fieldFocused = false;
     });
   }
@@ -129,6 +135,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _direction = 1;
       _step = _lastStep;
       _showError = false;
+      _errorMessage = null;
       _fieldFocused = false;
     });
   }
@@ -150,10 +157,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     TextInput.finishAutofillContext();
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 850));
-    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
+    try {
+      await const AuthService().createCitizenAccount(
+        name: _nameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+        phone: _phoneController.text,
+      );
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -412,7 +439,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _clearError() {
-    if (_showError) setState(() => _showError = false);
+    if (_showError) {
+      setState(() {
+        _showError = false;
+        _errorMessage = null;
+      });
+    }
   }
 
   void _setFieldFocus(bool focused) {

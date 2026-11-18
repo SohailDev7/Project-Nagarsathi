@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/ns_auth_heading.dart';
@@ -30,6 +31,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _celebrating = false;
   bool _showError = false;
   bool _focused = false;
+  String? _errorMessage;
   IdentifierKind _kind = IdentifierKind.empty;
 
   String get _contact => _identifierController.text.trim();
@@ -49,7 +51,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   String get _message {
     if (_sent) return 'Sent! Check your inbox in a moment.';
-    if (_showError) return 'I need an email or phone number first.';
+    if (_showError) {
+      return _errorMessage ?? 'I need an email or phone number first.';
+    }
     if (_isLoading) return 'Sending the reset link…';
     if (_focused) return 'Email or phone — either one works.';
     return 'Forgot it? Happens to everyone.';
@@ -61,6 +65,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() {
         _kind = kind;
         _showError = false;
+        _errorMessage = null;
       });
     }
   }
@@ -74,10 +79,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     TextInput.finishAutofillContext();
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 850));
-    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
+    try {
+      await const AuthService().sendPasswordReset(_contact);
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
       _sent = true;

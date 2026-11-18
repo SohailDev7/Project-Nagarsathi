@@ -50,11 +50,46 @@ properly (Android Studio SDK Manager), that block can be removed.
   Nunito in 400–900 weights, chunky depth buttons and inputs, springy entrance
   animations, haptics and one-shot confetti (all motion honours reduced-motion)
 
-Both citizen and staff flows are UI-only: they validate form input and simulate
-sign-in. Citizen sign-in/sign-up opens the citizen home, while staff sign-in opens
-the staff workspace. No credentials or staff roles are verified by a server yet.
-Wire the submit handlers in `lib/screens/` to your authentication service and
-verify staff roles on the server before granting staff access.
+### Firebase accounts
+
+Citizen sign-up, sign-in and password resets are wired to Firebase:
+
+- `lib/services/firebase_bootstrap.dart` initializes Firebase once and never
+  blocks start-up. If the project is not configured, the app stays in **offline
+  demo mode** and the UI behaves exactly as before.
+- `lib/services/auth_service.dart` creates accounts with Firebase Authentication
+  and writes a `users/{uid}` profile (`name`, `email`, `phone`, `role: citizen`,
+  timestamps) to Cloud Firestore.
+- Sign-in refreshes that profile document; password resets use
+  `sendPasswordResetEmail`.
+
+Configure a project once:
+
+```bash
+dart pub global activate flutterfire_cli
+flutterfire configure            # generates lib/firebase_options.dart
+```
+
+`lib/firebase_options.dart` is already wired into
+`FirebaseBootstrap.initialize()`, so the app picks it up automatically for
+Android. To override at build time instead, use dart-defines:
+
+```bash
+flutter run \
+  --dart-define=FIREBASE_API_KEY=... \
+  --dart-define=FIREBASE_APP_ID=... \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+  --dart-define=FIREBASE_PROJECT_ID=...
+```
+
+In the Firebase console, enable **Email/Password** under Authentication and
+create a Cloud Firestore database. Deploy the included rules with
+`firebase deploy --only firestore:rules` (see `firestore.rules`); they let each
+citizen read and write only their own profile document.
+
+Staff sign-in remains UI-only until a server-issued staff role exists. Verify
+staff roles in a trusted environment before granting workspace access.
+
 
 ## Updates
 
