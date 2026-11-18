@@ -1,3 +1,18 @@
+runCatching {
+    val processEnvClass = Class.forName("java.lang.ProcessEnvironment")
+    runCatching {
+        val envField = processEnvClass.getDeclaredField("theEnvironment")
+        envField.isAccessible = true
+        (envField.get(null) as? MutableMap<Any, Any>)?.remove("ANDROID_PREFS_ROOT")
+    }
+    runCatching {
+        val ciEnvField = processEnvClass.getDeclaredField("theCaseInsensitiveEnvironment")
+        ciEnvField.isAccessible = true
+        (ciEnvField.get(null) as? MutableMap<Any, Any>)?.remove("ANDROID_PREFS_ROOT")
+    }
+}
+System.clearProperty("ANDROID_PREFS_ROOT")
+
 pluginManagement {
     val flutterSdkPath =
         run {

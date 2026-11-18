@@ -15,5 +15,20 @@ service cloud.firestore {
         && request.resource.data.role == 'citizen';
       allow delete: if false;
     }
+
+    match /staff/{staffId} {
+      allow get: if request.auth != null
+        && resource.data.role == 'staff'
+        && resource.data.active == true
+        && (request.auth.uid == staffId
+          || ('phone_number' in request.auth.token
+            && resource.data.phone == request.auth.token.phone_number));
+      allow list: if request.auth != null
+        && 'phone_number' in request.auth.token
+        && resource.data.phone == request.auth.token.phone_number
+        && resource.data.role == 'staff'
+        && resource.data.active == true;
+      allow write: if false;
+    }
   }
 }

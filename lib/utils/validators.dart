@@ -6,6 +6,9 @@ enum IdentifierKind { empty, email, phone, unknown }
 abstract final class Validators {
   static final _emailPattern = RegExp(r'^[\w.\-+]+@[\w\-]+(\.[\w\-]+)+$');
   static final _phoneCharacters = RegExp(r'^[+]?[\d\s()\-]+$');
+  static final _devanagariDigits = RegExp(r'[०-९]');
+  static final _nepaliMobilePattern = RegExp(r'^9[6-8]\d{8}$');
+  static final _otpPattern = RegExp(r'^\d{6}$');
 
   /// Detects whether the shared sign-in field holds an email or a phone.
   static IdentifierKind identifierKind(String? value) {
@@ -55,6 +58,44 @@ abstract final class Validators {
   static String? optionalPhone(String? value) {
     if ((value ?? '').trim().isEmpty) return null;
     return phone(value);
+  }
+
+  /// Converts local, `+977`, `977` and `00977` input to an E.164 number.
+  /// Returns null when the number is not a Nepali mobile number.
+  static String? normalizeNepaliPhone(String? value) {
+    final localized = (value ?? '').replaceAllMapped(
+      _devanagariDigits,
+      (match) => String.fromCharCode(
+        match.group(0)!.codeUnitAt(0) - '०'.codeUnitAt(0) + '0'.codeUnitAt(0),
+      ),
+    );
+    final compact = localized.replaceAll(RegExp(r'[\s()\-]'), '');
+
+    final national = compact.startsWith('+977')
+        ? compact.substring(4)
+        : compact.startsWith('00977') && compact.length == 15
+        ? compact.substring(5)
+        : compact.startsWith('977') && compact.length == 13
+        ? compact.substring(3)
+        : compact;
+
+    if (!_nepaliMobilePattern.hasMatch(national)) return null;
+    return '+977$national';
+  }
+
+  static String? nepaliPhone(String? value) {
+    if ((value ?? '').trim().isEmpty) return 'Enter your mobile number';
+    if (normalizeNepaliPhone(value) == null) {
+      return 'Enter a valid Nepali mobile number';
+    }
+    return null;
+  }
+
+  static String? otp(String? value) {
+    if (value == null || !_otpPattern.hasMatch(value.trim())) {
+      return 'Enter the 6-digit code';
+    }
+    return null;
   }
 
   static String? password(String? value) {

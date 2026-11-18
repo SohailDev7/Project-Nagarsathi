@@ -86,63 +86,25 @@ flutter run \
   --dart-define=FIREBASE_PROJECT_ID=...
 ```
 
-> **API key note:** the key committed earlier is still present in git history.
-> Firebase client keys are not secrets by themselves, but restrict yours in
-> Google Cloud Console (APIs & Services → Credentials): limit the Android key to
-> package `com.softwarica.nagarsathi.projectnagarsathi` plus your signing
-> SHA-1/SHA-256, and limit the allowed APIs. Purge the old commits separately if
-> you want the string gone from history.
-
-In the Firebase console, enable **Email/Password** under Authentication and
+In the Firebase console, enable **Email/Password** and **Phone** under
+Authentication, add the Android app's SHA-1 and SHA-256 fingerprints, and
 create a Cloud Firestore database. Deploy the included rules with
-`firebase deploy --only firestore:rules` (see `firestore.rules`); they let each
-citizen read and write only their own profile document.
+`firebase deploy --only firestore:rules`.
 
-### Google sign-in
-
-Across Authentication → Sign-in method, enable **Google**. It opens the built-in
-Android account picker; the app never redirects to a browser.
-
-Register the Android signing certificate so Google can verify the app. For this
-machine's debug build, add both values under Project settings → Your apps
-(Android, package `com.softwarica.nagarsathi.projectnagarsathi`):
-
-- SHA-1: `62:57:33:C5:36:43:6D:DF:12:A1:74:43:A6:23:36:8A:F6:5E:AE:09`
-- SHA-256: `D8:08:F2:F2:8D:B7:CB:40:76:4C:65:9B:F4:90:9A:15:DD:90:54:4D:62:CC:D5:C7:F1:0C:64:F1:32:AC:78:B2`
-
-Add your release keystore's fingerprints too before shipping. After enabling
-Google, re-run `flutterfire configure` (or re-download `google-services.json`
-into `android/app/`, where it stays git-ignored) so the file contains a web
-OAuth client (`client_type: 3`) next to the Android client. If you keep the JSON
-outside the app, pass the Web client ID with
-`--dart-define=GOOGLE_SERVER_CLIENT_ID=...` instead.
-
-
-Staff sign-in remains UI-only until a server-issued staff role exists. Verify
-staff roles in a trusted environment before granting workspace access.
-
-### Location & ward
-
-The citizen home asks for location permission once, reverse geocodes the fix
-with the device geocoder (`geolocator` + `geocoding`) and asks the citizen to
-confirm the result:
-
-> Are you from **KMC WARD -16?**
-
-Tapping **Yes, that's me** saves the confirmed ward on their profile:
+Provision each staff member in the `staff` collection:
 
 ```text
-users/{uid}
-  location: { latitude, longitude, municipality, ward }
+staff/{firebaseAuthUid}
+  role: "staff"
+  active: true
+  email: "ward.staff@example.gov.np"
+  phone: "+9779841234567"
 ```
 
-The label uses the municipality initials (`Kathmandu Metropolitan City` →
-`KMC`), and the saved value is reused on every later launch. If the geocoder
-cannot read a ward, the app keeps the pill on "Set your location", explains why
-and retries when the citizen taps it. Android needs the
-`ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` permissions declared in
-`android/app/src/main/AndroidManifest.xml`; the system prompt is shown at
-runtime.
+The document ID must be the Firebase Auth UID for email/password staff. Phone
+OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
+country code. Staff documents are read-only from the app; create and update
+them only from a trusted admin environment.
 
 
 ## Updates
