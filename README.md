@@ -82,13 +82,25 @@ flutter run \
   --dart-define=FIREBASE_PROJECT_ID=...
 ```
 
-In the Firebase console, enable **Email/Password** under Authentication and
+In the Firebase console, enable **Email/Password** and **Phone** under
+Authentication, add the Android app's SHA-1 and SHA-256 fingerprints, and
 create a Cloud Firestore database. Deploy the included rules with
-`firebase deploy --only firestore:rules` (see `firestore.rules`); they let each
-citizen read and write only their own profile document.
+`firebase deploy --only firestore:rules`.
 
-Staff sign-in remains UI-only until a server-issued staff role exists. Verify
-staff roles in a trusted environment before granting workspace access.
+Provision each staff member in the `staff` collection:
+
+```text
+staff/{firebaseAuthUid}
+  role: "staff"
+  active: true
+  email: "ward.staff@example.gov.np"
+  phone: "+9779841234567"
+```
+
+The document ID must be the Firebase Auth UID for email/password staff. Phone
+OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
+country code. Staff documents are read-only from the app; create and update
+them only from a trusted admin environment.
 
 
 ## Updates

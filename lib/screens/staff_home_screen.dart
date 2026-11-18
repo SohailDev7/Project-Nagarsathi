@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_card.dart';
@@ -14,11 +15,18 @@ import 'staff_login_screen.dart';
 
 /// Landing page for the separate staff sign-in flow.
 class StaffHomeScreen extends StatelessWidget {
-  const StaffHomeScreen({super.key, required this.staffEmail});
+  const StaffHomeScreen({
+    super.key,
+    required this.staffIdentifier,
+    this.isPhone = false,
+  });
 
-  final String staffEmail;
+  final String staffIdentifier;
+  final bool isPhone;
 
-  void _signOut(BuildContext context) {
+  Future<void> _signOut(BuildContext context) async {
+    await StaffAuthService.signOut();
+    if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
       (route) => false,
@@ -88,7 +96,10 @@ class StaffHomeScreen extends StatelessWidget {
                     const SizedBox(height: 20),
                     NsEntrance(
                       delay: const Duration(milliseconds: 80),
-                      child: _StaffHeroCard(staffEmail: staffEmail),
+                      child: _StaffHeroCard(
+                        staffIdentifier: staffIdentifier,
+                        isPhone: isPhone,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     const _StatsRow(),
@@ -123,9 +134,10 @@ class StaffHomeScreen extends StatelessWidget {
 }
 
 class _StaffHeroCard extends StatelessWidget {
-  const _StaffHeroCard({required this.staffEmail});
+  const _StaffHeroCard({required this.staffIdentifier, required this.isPhone});
 
-  final String staffEmail;
+  final String staffIdentifier;
+  final bool isPhone;
 
   @override
   Widget build(BuildContext context) {
@@ -224,15 +236,17 @@ class _StaffHeroCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.alternate_email_rounded,
+                Icon(
+                  isPhone
+                      ? Icons.phone_android_rounded
+                      : Icons.alternate_email_rounded,
                   size: 16,
                   color: AppColors.primaryLight,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    staffEmail,
+                    staffIdentifier,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
