@@ -9,6 +9,7 @@ import '../widgets/ns_auth_scaffold.dart';
 import '../widgets/ns_back_button.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
+import '../widgets/ns_google_button.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
@@ -16,7 +17,7 @@ import '../widgets/ns_step_progress.dart';
 import '../widgets/ns_text_field.dart';
 import 'home_screen.dart';
 
-/// Four short steps: name, email, optional phone, then password and terms.
+/// Two short steps: your details, then how you keep the account secure.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -25,15 +26,16 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  static const _totalSteps = 4;
-  static const _phoneStep = 2;
-  static const _lastStep = 3;
+  static const _totalSteps = 3;
+  static const _passwordStep = 1;
+  static const _lastStep = 2;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  final _otpController = TextEditingController();
 
   final _formKeys = List<GlobalKey<FormState>>.generate(
     _totalSteps,
@@ -44,6 +46,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   int _direction = 1;
   bool _acceptedTerms = false;
   bool _isLoading = false;
+  bool _googleLoading = false;
   bool _celebrating = false;
   bool _showError = false;
   bool _fieldFocused = false;
@@ -56,6 +59,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -67,19 +71,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   (String, String) get _copy => switch (_step) {
-    0 => ('Create your account', "Namaste! I'm Sathi. What should I call you?"),
+    0 => ('Create your account', 'Tell me who you are and where to reach you.'),
     1 => (
-      'Where can we reach you?',
-      'I will use this email for sign-in and city updates.',
+    'Secure your account',
+    'At least 8 characters. I promise not to peek!',
     ),
-    2 => (
-      'Add a phone number?',
-      'Totally optional — only for urgent ward notices.',
-    ),
-    _ => (
-      'Secure your account',
-      'At least 8 characters. I promise not to peek!',
-    ),
+    _ => ('Verify your email', 'Enter the 6-digit code sent to your email.'),
   };
 
   String get _stepMessage {
@@ -87,7 +84,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_showError) {
       return _errorMessage ?? 'Almost — check that answer and try once more.';
     }
-    if (_isLoading) return 'Creating your citizen account…';
+    if (_googleLoading) {
+      return 'Opening Google… pick your account.';
+    }
+    if (_isLoading) return _step == _lastStep
+        ? 'Verifying your email…'
+        : 'Creating your citizen account…';
     return _copy.$2;
   }
 
@@ -99,6 +101,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
+    if (_step == _passwordStep) {
+      _requestOtp();
+      return;
+    }
     if (_step == _lastStep) {
       _createAccount();
       return;
@@ -129,20 +135,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
   }
 
-  void _skipPhone() {
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _direction = 1;
-      _step = _lastStep;
-      _showError = false;
-      _errorMessage = null;
-      _fieldFocused = false;
-    });
-  }
-
   Future<void> _createAccount() async {
     FocusScope.of(context).unfocus();
-    if (!(_formKeys[_lastStep].currentState?.validate() ?? false)) {
+    if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
       setState(() => _showError = true);
       return;
@@ -163,6 +158,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
+      await const AuthService().verifyEmailOtp(
+        email: _emailController.text,
+        otp: _otpController.text,
+      );
       await const AuthService().createCitizenAccount(
         name: _nameController.text,
         email: _emailController.text,
@@ -181,6 +180,77 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     if (!mounted) return;
+    _finishSignUp();
+  }
+
+  Future<void> _requestOtp() async {
+    if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
+      setState(() => _showError = true);
+      return;
+    }
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Accept the terms to continue.')),
+      );
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _showError = false;
+      _errorMessage = null;
+    });
+    try {
+      await const AuthService().requestEmailOtp(_emailController.text);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _step = _lastStep;
+      });
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
+  Future<void> _signUpWithGoogle() async {
+    if (_isLoading || _googleLoading) return;
+    FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
+    setState(() {
+      _googleLoading = true;
+      _showError = false;
+      _errorMessage = null;
+    });
+
+    final bool signedIn;
+    try {
+      signedIn = await const AuthService().signInWithGoogle();
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _googleLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    if (!signedIn) {
+      setState(() => _googleLoading = false);
+      return;
+    }
+
+    setState(() => _googleLoading = false);
+    _finishSignUp();
+  }
+
+  Future<void> _finishSignUp() async {
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -237,7 +307,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         wave: _celebrating,
                         mascotSize: 58,
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
                       _buildStep(),
                     ],
                   ),
@@ -289,107 +359,144 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStep() {
-    switch (_step) {
-      case 0:
-        return Form(
-          key: _formKeys[0],
-          child: NsTextField(
-            controller: _nameController,
-            label: 'Full name',
-            hint: 'Sita Sharma',
-            icon: Icons.person_rounded,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            validator: Validators.name,
-            autofillHints: const [AutofillHints.name],
-            autofocus: true,
-            onChanged: (_) => _clearError(),
-            onFocusChange: _setFieldFocus,
-            onFieldSubmitted: (_) => _next(),
-          ),
-        );
-      case 1:
-        return Form(
-          key: _formKeys[1],
-          child: NsTextField(
-            controller: _emailController,
-            label: 'Email',
-            hint: 'you@example.com',
-            icon: Icons.mail_rounded,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            validator: Validators.email,
-            autocorrect: false,
-            autofillHints: const [AutofillHints.email],
-            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-            onChanged: (_) => _clearError(),
-            onFocusChange: _setFieldFocus,
-            onFieldSubmitted: (_) => _next(),
-          ),
-        );
-      case 2:
-        return Form(
-          key: _formKeys[2],
-          child: NsTextField(
-            controller: _phoneController,
-            label: 'Phone number',
-            hint: '+977 98XXXXXXXX',
-            icon: Icons.phone_iphone_rounded,
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.next,
-            validator: Validators.optionalPhone,
-            autofillHints: const [AutofillHints.telephoneNumber],
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s()]')),
-            ],
-            onChanged: (_) => _clearError(),
-            onFocusChange: _setFieldFocus,
-            onFieldSubmitted: (_) => _next(),
-          ),
-        );
-      default:
+    if (_step == 0) {
+      if (_step == _lastStep) {
         return Form(
           key: _formKeys[_lastStep],
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               NsTextField(
-                controller: _passwordController,
-                label: 'Password',
-                hint: 'Create a password',
-                icon: Icons.lock_rounded,
-                obscureText: true,
-                textInputAction: TextInputAction.next,
-                validator: Validators.password,
-                autofillHints: const [AutofillHints.newPassword],
-                onChanged: (_) => _clearError(),
-                onFocusChange: _setFieldFocus,
-              ),
-              const SizedBox(height: 13),
-              NsTextField(
-                controller: _confirmController,
-                label: 'Confirm password',
-                hint: 'Repeat your password',
-                icon: Icons.lock_reset_rounded,
-                obscureText: true,
+                controller: _otpController,
+                label: 'Email verification code',
+                hint: '6-digit code',
+                icon: Icons.pin_rounded,
+                keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
-                validator: Validators.confirmPassword(_passwordController),
+                validator: (value) => RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
+                    ? null
+                    : 'Enter the 6-digit code',
+                autofocus: true,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
                 onChanged: (_) => _clearError(),
-                onFocusChange: _setFieldFocus,
                 onFieldSubmitted: (_) => _createAccount(),
               ),
-              const SizedBox(height: 16),
-              _TermsRow(
-                accepted: _acceptedTerms,
-                onChanged: (value) {
-                  HapticFeedback.selectionClick();
-                  setState(() => _acceptedTerms = value);
-                },
+              const SizedBox(height: 12),
+              Text(
+                'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.muted,
+                ),
               ),
             ],
           ),
         );
+      }
+
+      return Form(
+        key: _formKeys[0],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NsTextField(
+              controller: _nameController,
+              label: 'Full name',
+              hint: 'Sita Sharma',
+              icon: Icons.person_rounded,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              validator: Validators.name,
+              autofillHints: const [AutofillHints.name],
+              autofocus: true,
+              onChanged: (_) => _clearError(),
+              onFocusChange: _setFieldFocus,
+            ),
+            const SizedBox(height: 14),
+            NsTextField(
+              controller: _emailController,
+              label: 'Email',
+              hint: 'you@example.com',
+              icon: Icons.mail_rounded,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              validator: Validators.email,
+              autocorrect: false,
+              autofillHints: const [AutofillHints.email],
+              inputFormatters: [
+                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+              ],
+              onChanged: (_) => _clearError(),
+              onFocusChange: _setFieldFocus,
+            ),
+            const SizedBox(height: 14),
+            NsTextField(
+              controller: _phoneController,
+              label: 'Phone (optional)',
+              hint: '+977 98XXXXXXXX',
+              icon: Icons.phone_iphone_rounded,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              validator: Validators.optionalPhone,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s()]')),
+              ],
+              helper: 'Only used for urgent ward notices.',
+              onChanged: (_) => _clearError(),
+              onFocusChange: _setFieldFocus,
+              onFieldSubmitted: (_) => _next(),
+            ),
+          ],
+        ),
+      );
     }
+
+    return Form(
+      key: _formKeys[_lastStep],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NsTextField(
+            controller: _passwordController,
+            label: 'Password',
+            hint: 'Create a password',
+            icon: Icons.lock_rounded,
+            obscureText: true,
+            textInputAction: TextInputAction.next,
+            validator: Validators.password,
+            autofillHints: const [AutofillHints.newPassword],
+            onChanged: (_) => _onPasswordChanged(),
+            onFocusChange: _setFieldFocus,
+          ),
+          _PasswordStrength(password: _passwordController.text),
+          const SizedBox(height: 14),
+          NsTextField(
+            controller: _confirmController,
+            label: 'Confirm password',
+            hint: 'Repeat your password',
+            icon: Icons.lock_reset_rounded,
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            validator: Validators.confirmPassword(_passwordController),
+            onChanged: (_) => _clearError(),
+            onFocusChange: _setFieldFocus,
+            onFieldSubmitted: (_) => _createAccount(),
+          ),
+          const SizedBox(height: 18),
+          _TermsRow(
+            accepted: _acceptedTerms,
+            onChanged: (value) {
+              HapticFeedback.selectionClick();
+              setState(() => _acceptedTerms = value);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildActions() {
@@ -405,14 +512,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ? Icons.check_rounded
               : Icons.arrow_forward_rounded,
         ),
-        if (_step == _phoneStep)
-          Center(
-            child: TextButton(
-              onPressed: _skipPhone,
-              child: const Text('Skip for now'),
-            ),
+        if (_step == 0) ...[
+          const SizedBox(height: 6),
+          const NsAuthDivider(label: 'or sign up with'),
+          const SizedBox(height: 8),
+          NsGoogleButton(
+            label: 'Sign up with Google',
+            isLoading: _googleLoading,
+            onPressed: _signUpWithGoogle,
           ),
-        if (_step == 0)
+          const SizedBox(height: 2),
           Wrap(
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -434,8 +543,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ],
           ),
+        ],
       ],
     );
+  }
+
+  void _onPasswordChanged() {
+    setState(() {
+      _showError = false;
+      _errorMessage = null;
+    });
   }
 
   void _clearError() {
@@ -451,6 +568,71 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_fieldFocused != focused) {
       setState(() => _fieldFocused = focused);
     }
+  }
+}
+
+class _PasswordStrength extends StatelessWidget {
+  const _PasswordStrength({required this.password});
+
+  final String password;
+
+  int get _score {
+    if (password.isEmpty) return 0;
+    var score = 0;
+    if (password.length >= 8) score += 1;
+    if (password.length >= 12) score += 1;
+    if (RegExp(r'\d').hasMatch(password)) score += 1;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(password)) score += 1;
+    return score;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (password.isEmpty) return const SizedBox.shrink();
+
+    const labels = ['Too short', 'Fair', 'Good', 'Strong'];
+    final score = _score;
+    final label = score == 0 ? labels[0] : labels[(score - 1).clamp(0, 3)];
+    final color = switch (score) {
+      0 => AppColors.error,
+      1 => AppColors.sun,
+      2 => AppColors.primaryLight,
+      _ => AppColors.primary,
+    };
+    final filled = score == 0 ? 1 : score;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 3, right: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: List.generate(4, (index) {
+              return Expanded(
+                child: Container(
+                  height: 5,
+                  margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
+                  decoration: BoxDecoration(
+                    color: index < filled ? color : AppColors.border,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: color == AppColors.sun ? AppColors.muted : color,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

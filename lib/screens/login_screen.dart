@@ -6,11 +6,10 @@ import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/ns_auth_heading.dart';
 import '../widgets/ns_auth_scaffold.dart';
-import '../widgets/ns_bento.dart';
-import '../widgets/ns_card.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
+import '../widgets/ns_google_button.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_primary_button.dart';
@@ -36,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _celebrating = false;
   bool _showError = false;
+  bool _googleLoading = false;
   bool _identifierFocused = false;
   bool _passwordFocused = false;
   String? _errorMessage;
@@ -66,6 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_showError) {
       return _errorMessage ?? 'Hmm, check that and give it another go.';
     }
+    if (_googleLoading) return 'Opening Google… pick your account.';
     if (_isLoading) return 'Checking your details…';
     if (_passwordFocused) return 'Your password stays private. Promise.';
     switch (_kind) {
@@ -138,6 +139,51 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _signInWithGoogle() async {
+    if (_isLoading || _googleLoading) return;
+    FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
+    setState(() {
+      _googleLoading = true;
+      _showError = false;
+      _errorMessage = null;
+    });
+
+    final bool signedIn;
+    try {
+      signedIn = await const AuthService().signInWithGoogle();
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _googleLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    if (!signedIn) {
+      setState(() => _googleLoading = false);
+      return;
+    }
+
+    setState(() {
+      _googleLoading = false;
+      _celebrating = true;
+    });
+    HapticFeedback.mediumImpact();
+
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
+  }
+
   void _openSignUp() {
     Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const SignUpScreen()));
@@ -160,6 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Stack(
       children: [
         NsAuthScaffold(
+          centerContent: true,
           topBar: _buildTopBar(),
           child: NsEntrance(child: _buildBody()),
         ),
@@ -213,207 +260,146 @@ class _LoginScreenState extends State<LoginScreen> {
           look: _look,
           wave: _celebrating,
         ),
-        const SizedBox(height: 18),
-        NsCard(
-          padding: const EdgeInsets.all(16),
-          child: AutofillGroup(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  NsTextField(
-                    controller: _identifierController,
-                    label: 'Email or phone',
-                    hint: 'you@example.com or 98XXXXXXXX',
-                    icon: _kind == IdentifierKind.phone
-                        ? Icons.phone_iphone_rounded
-                        : Icons.alternate_email_rounded,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    validator: Validators.identifier,
-                    autocorrect: false,
-                    autofillHints: const [AutofillHints.username],
-                    onChanged: _onIdentifierChanged,
-                    onFocusChange: (focused) {
-                      setState(() => _identifierFocused = focused);
-                    },
-                    labelTrailing: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 160),
-                      child: _kind == IdentifierKind.email
-                          ? const NsChip(
-                              key: ValueKey('email'),
-                              label: 'EMAIL',
-                              icon: Icons.mail_rounded,
-                              compact: true,
-                            )
-                          : _kind == IdentifierKind.phone
-                          ? const NsChip(
-                              key: ValueKey('phone'),
-                              label: 'PHONE',
-                              icon: Icons.smartphone_rounded,
-                              tone: NsChipTone.sky,
-                              compact: true,
-                            )
-                          : const SizedBox.shrink(key: ValueKey('empty')),
+        const SizedBox(height: 20),
+        AutofillGroup(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                NsTextField(
+                  controller: _identifierController,
+                  label: 'Email or phone',
+                  hint: 'you@example.com or 98XXXXXXXX',
+                  icon: _kind == IdentifierKind.phone
+                      ? Icons.phone_iphone_rounded
+                      : Icons.alternate_email_rounded,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  validator: Validators.identifier,
+                  autocorrect: false,
+                  autofillHints: const [AutofillHints.username],
+                  onChanged: _onIdentifierChanged,
+                  onFocusChange: (focused) {
+                    setState(() => _identifierFocused = focused);
+                  },
+                  labelTrailing: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 160),
+                    child: _kind == IdentifierKind.email
+                        ? const NsChip(
+                            key: ValueKey('email'),
+                            label: 'EMAIL',
+                            icon: Icons.mail_rounded,
+                            compact: true,
+                          )
+                        : _kind == IdentifierKind.phone
+                        ? const NsChip(
+                            key: ValueKey('phone'),
+                            label: 'PHONE',
+                            icon: Icons.smartphone_rounded,
+                            tone: NsChipTone.sky,
+                            compact: true,
+                          )
+                        : const SizedBox.shrink(key: ValueKey('empty')),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                NsTextField(
+                  controller: _passwordController,
+                  label: 'Password',
+                  hint: 'Enter your password',
+                  icon: Icons.lock_rounded,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  validator: Validators.loginPassword,
+                  autofillHints: const [AutofillHints.password],
+                  onFieldSubmitted: (_) => _signIn(),
+                  onChanged: (_) {
+                    if (_showError) {
+                      setState(() {
+                        _showError = false;
+                        _errorMessage = null;
+                      });
+                    }
+                  },
+                  onFocusChange: (focused) {
+                    setState(() => _passwordFocused = focused);
+                  },
+                  labelTrailing: Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _openForgotPassword,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Forgot password?',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDeep,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 13),
-                  NsTextField(
-                    controller: _passwordController,
-                    label: 'Password',
-                    hint: 'Enter your password',
-                    icon: Icons.lock_rounded,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    validator: Validators.loginPassword,
-                    autofillHints: const [AutofillHints.password],
-                    onFieldSubmitted: (_) => _signIn(),
-                    onChanged: (_) {
-                      if (_showError) {
-                        setState(() {
-                          _showError = false;
-                          _errorMessage = null;
-                        });
-                      }
-                    },
-                    onFocusChange: (focused) {
-                      setState(() => _passwordFocused = focused);
-                    },
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _openForgotPassword,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 8,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Forgot password?',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryDeep,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  NsPrimaryButton(
-                    label: 'Sign in',
-                    isLoading: _isLoading,
-                    onPressed: _signIn,
-                    icon: Icons.arrow_forward_rounded,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 18),
+                NsPrimaryButton(
+                  label: 'Sign in',
+                  isLoading: _isLoading,
+                  onPressed: _signIn,
+                  icon: Icons.arrow_forward_rounded,
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            const Text(
-              'New to NagarSathi?',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-            TextButton(
-              onPressed: _openSignUp,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text(
-                'Sign up',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDeep,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const _CitizenBento(),
+        const SizedBox(height: 18),
+        const NsAuthDivider(),
+        const SizedBox(height: 10),
+        NsGoogleButton(onPressed: _signInWithGoogle, isLoading: _googleLoading),
+        const SizedBox(height: 4),
+        _buildFooter(),
       ],
     );
   }
-}
 
-class _CitizenBento extends StatelessWidget {
-  const _CitizenBento();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildFooter() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 3,
-                child: NsBentoTile(
-                  icon: Icons.location_city_rounded,
-                  label: 'Your ward',
-                  caption: 'Notices and updates from your municipality.',
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: NsBentoTile(
-                  icon: Icons.shield_rounded,
-                  label: 'Secure',
-                  caption: 'Private by default.',
-                  tone: NsBentoTone.sky,
-                ),
-              ),
-            ],
+        const Text(
+          'New to NagarSathi?',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
           ),
         ),
-        const SizedBox(height: 10),
-        const IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: NsBentoTile(
-                  icon: Icons.campaign_rounded,
-                  label: 'Notices',
-                  tone: NsBentoTone.sun,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: NsBentoTile(
-                  icon: Icons.receipt_long_rounded,
-                  label: 'Bills',
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: NsBentoTile(
-                  icon: Icons.handyman_rounded,
-                  label: 'Requests',
-                  tone: NsBentoTone.sky,
-                ),
-              ),
-            ],
+        TextButton(
+          onPressed: _openSignUp,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
+            'Sign up',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primaryDeep,
+            ),
           ),
         ),
       ],

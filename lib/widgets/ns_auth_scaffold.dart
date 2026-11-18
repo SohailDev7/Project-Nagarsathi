@@ -17,6 +17,7 @@ class NsAuthScaffold extends StatelessWidget {
     this.bottom,
     this.staff = false,
     this.maxWidth = 430,
+    this.centerContent = false,
   });
 
   final Widget child;
@@ -24,6 +25,10 @@ class NsAuthScaffold extends StatelessWidget {
   final Widget? bottom;
   final bool staff;
   final double maxWidth;
+
+  /// Centres short forms in the space under the top bar instead of leaving a
+  /// tall empty gap at the bottom of the screen.
+  final bool centerContent;
 
   @override
   Widget build(BuildContext context) {
@@ -53,23 +58,35 @@ class NsAuthScaffold extends StatelessWidget {
                       child: SizedBox(width: contentWidth, child: topBar),
                     ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontal,
-                        12,
-                        horizontal,
-                        24,
-                      ),
-                      child: Center(
-                        child: SizedBox(
-                          width: contentWidth,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [child],
+                    child: LayoutBuilder(
+                      builder: (context, body) {
+                        return SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontal,
+                            12,
+                            horizontal,
+                            24,
                           ),
-                        ),
-                      ),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: centerContent
+                                  ? math.max(0, body.maxHeight - 36)
+                                  : 0,
+                            ),
+                            child: Center(
+                              child: SizedBox(
+                                width: contentWidth,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [child],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   if (bottom != null)

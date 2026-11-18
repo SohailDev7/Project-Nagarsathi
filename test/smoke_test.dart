@@ -59,30 +59,23 @@ void main() {
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
-    expect(find.text('1 of 4'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
 
-    // Step 1 validation, then name.
+    // Details are validated together, so the first tap reports both errors.
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.text('Enter your full name'), findsOneWidget);
+    expect(find.text('Enter your email address'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).first, 'Sita Sharma');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('2 of 4'), findsOneWidget);
-
+    await tester.enterText(find.byType(TextFormField).at(0), 'Sita Sharma');
     await tester.enterText(
-      find.byType(TextFormField).first,
+      find.byType(TextFormField).at(1),
       'sita@nagarsathi.app',
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('3 of 4'), findsOneWidget);
-
-    // Phone is optional; skipping moves straight to the password step.
-    await tester.tap(find.text('Skip for now'));
-    await tester.pumpAndSettle();
-    expect(find.text('4 of 4'), findsOneWidget);
+    expect(find.text('2 of 2'), findsOneWidget);
 
     final passwordFields = find.byType(TextFormField);
     expect(passwordFields, findsNWidgets(2));
@@ -98,9 +91,11 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
 
-    expect(find.text("You're all set"), findsOneWidget);
+    expect(find.textContaining('Namaste'), findsOneWidget);
+    expect(find.text('Report an issue'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Sign out'));
+    // Sign out lives in the account sheet, opened from the header avatar.
+    await tester.tap(find.byKey(const Key('home-avatar')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();

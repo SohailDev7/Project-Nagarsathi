@@ -208,6 +208,7 @@ ThemeData buildAppTheme() {
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.forest,
       contentTextStyle: const TextStyle(
+        fontFamily: 'Nunito',
         color: Colors.white,
         fontSize: 14,
         fontWeight: FontWeight.w700,
