@@ -36,6 +36,21 @@ class AuthService {
 
   static Future<void>? _googleInitialization;
 
+  /// Clears the Firebase session and any cached Google account.
+  Future<void> signOut() async {
+    if (!isConfigured) return;
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {
+      // Google was not initialised in this session.
+    }
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {
+      // The local session is already gone.
+    }
+  }
+
   Future<void> createCitizenAccount({
     required String name,
     required String email,

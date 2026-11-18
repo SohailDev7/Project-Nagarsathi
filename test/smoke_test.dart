@@ -91,9 +91,11 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
 
-    expect(find.text("You're all set"), findsOneWidget);
+    expect(find.textContaining('Namaste'), findsOneWidget);
+    expect(find.text('Report an issue'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Sign out'));
+    // Sign out lives in the account sheet, opened from the header avatar.
+    await tester.tap(find.byKey(const Key('home-avatar')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
