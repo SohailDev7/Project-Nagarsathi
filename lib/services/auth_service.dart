@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -28,6 +29,36 @@ class AuthService {
   static bool get isConfigured => FirebaseBootstrap.isReady;
 
   static const _users = 'users';
+
+  Future<void> requestEmailOtp(String email) async {
+    if (!isConfigured) {
+      throw const AuthFailure('Firebase is not configured for email verification.');
+    }
+    try {
+      await FirebaseFunctions.instance.httpsCallable('requestEmailOtp').call({
+        'email': email.trim(),
+      });
+    } on FirebaseFunctionsException catch (error) {
+      throw AuthFailure(error.message ?? 'Could not send the verification code.');
+    }
+  }
+
+  Future<void> verifyEmailOtp({
+    required String email,
+    required String otp,
+  }) async {
+    if (!isConfigured) {
+      throw const AuthFailure('Firebase is not configured for email verification.');
+    }
+    try {
+      await FirebaseFunctions.instance.httpsCallable('verifyEmailOtp').call({
+        'email': email.trim(),
+        'otp': otp.trim(),
+      });
+    } on FirebaseFunctionsException catch (error) {
+      throw AuthFailure(error.message ?? 'Could not verify the code.');
+    }
+  }
 
   /// Optional Web OAuth client ID. When empty on Android, `google_sign_in`
   /// reads the web client from `google-services.json` instead.
@@ -123,6 +154,7 @@ class AuthService {
           'email': email.trim(),
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
+          'emailVerifiedByOtp': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
