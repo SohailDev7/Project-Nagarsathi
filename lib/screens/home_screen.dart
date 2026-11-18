@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../models/citizen_location.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_chip.dart';
@@ -12,27 +17,46 @@ import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
+import '../widgets/ns_primary_button.dart';
+import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
 
 /// Citizen home. A community reporting feed with the four primary
 /// destinations in a bottom bar; only Home is available for now.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.locationService = const LocationService()});
+
+  /// Overridable for tests so the confirmation flow can run without the
+  /// location plugin.
+  final LocationService locationService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final _updateService = UpdateService();
+
   String? _name;
   String? _email;
   String? _version;
+  CitizenLocation? _location;
+  bool _locating = false;
+  bool _locationAsked = false;
+  bool _checkingForUpdate = false;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
     _loadVersion();
+    _restoreLocation();
+  }
+
+  @override
+  void dispose() {
+    _updateService.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -62,6 +86,113 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (_) {
       // Version display is cosmetic; ignore failures (e.g. in tests).
+    }
+  }
+
+  Future<void> _restoreLocation() async {
+    final saved = await const AuthService().loadLocation();
+    if (!mounted) return;
+    if (saved != null) {
+      setState(() => _location = saved);
+      return;
+    }
+
+    // Offline demo mode has no profile to store the ward on (and widget tests
+    // have no location plugins), so leave the pill as "Set your location".
+    if (!AuthService.isConfigured) return;
+
+    // First visit on this account: ask for permission, then confirm the ward.
+    if (_locationAsked) return;
+    _locationAsked = true;
+    await _detectLocation();
+  }
+
+  Future<void> _detectLocation() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+
+    CitizenLocation? detected;
+    try {
+      detected = await widget.locationService.detect().timeout(
+        const Duration(seconds: 30),
+      );
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      _showMessage('Finding your ward took too long. Please try again.');
+      return;
+    } on LocationFailure catch (error) {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      _showMessage(error.message);
+      return;
+    } catch (_) {
+      // No platform plugin (widget tests) or an unexpected platform error.
+      if (mounted) setState(() => _locating = false);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _locating = false);
+
+    // The citizen dismissed the system permission prompt.
+    if (detected == null) return;
+    final location = detected;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ConfirmWardDialog(location: location),
+    );
+    if (!mounted) return;
+    if (confirmed != true) {
+      _showMessage('No problem. Tap the location pill to try again.');
+      return;
+    }
+
+    setState(() => _location = location);
+    final saved = await const AuthService().saveLocation(location);
+    if (!mounted) return;
+
+    if (!AuthService.isConfigured) {
+      _showMessage('Ward saved for this session.');
+    } else if (saved) {
+      _showMessage('Ward saved to your profile.');
+    } else {
+      _showMessage("Couldn't sync your ward. Tap the location pill to retry.");
+    }
+  }
+
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingForUpdate) return;
+    setState(() => _checkingForUpdate = true);
+
+    try {
+      final update = await _updateService.checkForUpdate(force: true);
+      if (!mounted) return;
+
+      if (update == null) {
+        _showMessage('NagarSathi is up to date.');
+        return;
+      }
+
+      await showUpdateDialog(
+        context: context,
+        update: update,
+        service: _updateService,
+      );
+    } on UpdateException catch (error) {
+      if (mounted) _showMessage('Could not check for updates: ${error.message}');
+    } catch (error) {
+      if (mounted) _showMessage('Could not check for updates: $error');
+    } finally {
+      if (mounted) setState(() => _checkingForUpdate = false);
     }
   }
 
@@ -110,6 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.of(sheetContext).pop();
           _signOut();
         },
+        checkingForUpdate: _checkingForUpdate,
+        onCheckForUpdates: () {
+          Navigator.of(sheetContext).pop();
+          _checkForUpdates();
+        },
       ),
     );
   }
@@ -148,7 +284,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 14),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: _LocationPill(onTap: _comingSoon),
+                        child: _LocationPill(
+                          label: _location?.label ?? 'Set your location',
+                          locating: _locating,
+                          onTap: _locating ? null : _detectLocation,
+                        ),
                       ),
                       const SizedBox(height: 20),
                       _ReportHero(onTap: _comingSoon),
@@ -264,9 +404,15 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _LocationPill extends StatelessWidget {
-  const _LocationPill({required this.onTap});
+  const _LocationPill({
+    required this.label,
+    required this.locating,
+    required this.onTap,
+  });
 
-  final VoidCallback onTap;
+  final String label;
+  final bool locating;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -282,25 +428,32 @@ class _LocationPill extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: AppColors.borderStrong, width: 1.5),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.location_on_rounded,
-                size: 15,
-                color: AppColors.primaryDeep,
-              ),
-              SizedBox(width: 5),
+              if (locating)
+                const Icon(
+                  Icons.my_location_rounded,
+                  size: 15,
+                  color: AppColors.primaryDeep,
+                )
+              else
+                const Icon(
+                  Icons.location_on_rounded,
+                  size: 15,
+                  color: AppColors.primaryDeep,
+                ),
+              const SizedBox(width: 5),
               Text(
-                'Kathmandu · Ward 12',
-                style: TextStyle(
+                locating ? 'Finding your ward…' : label,
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   color: AppColors.forest,
                 ),
               ),
-              SizedBox(width: 2),
-              Icon(
+              const SizedBox(width: 2),
+              const Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 17,
                 color: AppColors.muted,
@@ -918,6 +1071,8 @@ class _AccountSheet extends StatelessWidget {
     required this.email,
     required this.initials,
     required this.onSignOut,
+    required this.onCheckForUpdates,
+    required this.checkingForUpdate,
     this.version,
   });
 
@@ -926,6 +1081,8 @@ class _AccountSheet extends StatelessWidget {
   final String initials;
   final String? version;
   final VoidCallback onSignOut;
+  final VoidCallback onCheckForUpdates;
+  final bool checkingForUpdate;
 
   @override
   Widget build(BuildContext context) {
@@ -993,6 +1150,12 @@ class _AccountSheet extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             NsOutlineButton(
+              label: checkingForUpdate ? 'Checking for updates...' : 'Check for updates',
+              icon: Icons.system_update_rounded,
+              onPressed: checkingForUpdate ? null : onCheckForUpdates,
+            ),
+            const SizedBox(height: 12),
+            NsOutlineButton(
               label: 'Sign out',
               icon: Icons.logout_rounded,
               tone: NsOutlineTone.danger,
@@ -1011,6 +1174,107 @@ class _AccountSheet extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Asks the citizen to confirm the ward detected from their location.
+///
+/// Tapping "Yes, that's me" returns `true`; "Not quite" returns `false`.
+class _ConfirmWardDialog extends StatelessWidget {
+  const _ConfirmWardDialog({required this.location});
+
+  final CitizenLocation location;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 24, 22, 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.mint,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  size: 28,
+                  color: AppColors.primaryDeep,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Are you from',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              location.label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 24,
+                height: 1.1,
+                fontWeight: FontWeight.w900,
+                color: AppColors.forest,
+                letterSpacing: -0.7,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              location.municipality,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              "We used your phone's location. Reports you send will be routed "
+              'to this ward office.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+                color: AppColors.muted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            NsPrimaryButton(
+              label: "Yes, that's me",
+              icon: Icons.check_rounded,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Not quite'),
+            ),
           ],
         ),
       ),

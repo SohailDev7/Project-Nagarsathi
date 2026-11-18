@@ -121,6 +121,29 @@ outside the app, pass the Web client ID with
 Staff sign-in remains UI-only until a server-issued staff role exists. Verify
 staff roles in a trusted environment before granting workspace access.
 
+### Location & ward
+
+The citizen home asks for location permission once, reverse geocodes the fix
+with the device geocoder (`geolocator` + `geocoding`) and asks the citizen to
+confirm the result:
+
+> Are you from **KMC WARD -16?**
+
+Tapping **Yes, that's me** saves the confirmed ward on their profile:
+
+```text
+users/{uid}
+  location: { latitude, longitude, municipality, ward }
+```
+
+The label uses the municipality initials (`Kathmandu Metropolitan City` →
+`KMC`), and the saved value is reused on every later launch. If the geocoder
+cannot read a ward, the app keeps the pill on "Set your location", explains why
+and retries when the citizen taps it. Android needs the
+`ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` permissions declared in
+`android/app/src/main/AndroidManifest.xml`; the system prompt is shown at
+runtime.
+
 
 ## Updates
 

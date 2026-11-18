@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
 
 /// Thrown when an auth request cannot be completed. The message is already
@@ -48,6 +49,43 @@ class AuthService {
       await FirebaseAuth.instance.signOut();
     } catch (_) {
       // The local session is already gone.
+    }
+  }
+
+  /// Reads the confirmed ward from the citizen's Firestore profile.
+  Future<CitizenLocation?> loadLocation() async {
+    if (!isConfigured) return null;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(_users)
+          .doc(user.uid)
+          .get();
+      return CitizenLocation.tryFromMap(snapshot.data()?['location']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stores the confirmed ward on the citizen's profile.
+  ///
+  /// Returns `false` in offline demo mode or when the write fails, so the
+  /// caller can keep the location for the session and retry later.
+  Future<bool> saveLocation(CitizenLocation location) async {
+    if (!isConfigured) return false;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    try {
+      await FirebaseFirestore.instance.collection(_users).doc(user.uid).set({
+        'location': location.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
