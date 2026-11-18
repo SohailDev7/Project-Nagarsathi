@@ -54,3 +54,10 @@ skills-lock.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local Firebase configuration (contains the client API key).
+# Recreate with `flutterfire configure` or keep them out of the repo and use
+# --dart-define=FIREBASE_* values instead.
+/lib/firebase_options.dart
+/android/app/google-services.json
+

@@ -39,6 +39,8 @@ properly (Android Studio SDK Manager), that block can be removed.
 
 - Sign in with a single email-or-phone field (the field detects `@` for email and
   digits for phone, showing an inline EMAIL/PHONE badge) plus a password
+- **Continue with Google** opens the native Android account picker (Credential
+  Manager) and signs in through Firebase Auth. There is no web/browser fallback.
 - Compact single-viewport layout: brand and the always-visible **Staff portal**
   entry sit in a pinned top bar, so no auth action needs scrolling on a small phone
 - Forgot-password flow that sends a reset link to an email or phone number
@@ -67,12 +69,14 @@ Configure a project once:
 
 ```bash
 dart pub global activate flutterfire_cli
-flutterfire configure            # generates lib/firebase_options.dart
+flutterfire configure            # writes lib/firebase_options.dart
 ```
 
-`lib/firebase_options.dart` is already wired into
-`FirebaseBootstrap.initialize()`, so the app picks it up automatically for
-Android. To override at build time instead, use dart-defines:
+`lib/firebase_options.dart` and `android/app/google-services.json` are
+**git-ignored** because they contain the Firebase client API key. Create them
+locally with `flutterfire configure`; a fresh clone still builds and runs in
+offline demo mode without them. In CI or on another machine, either recreate
+both files from secure storage or skip them entirely and pass dart-defines:
 
 ```bash
 flutter run \
@@ -82,10 +86,37 @@ flutter run \
   --dart-define=FIREBASE_PROJECT_ID=...
 ```
 
+> **API key note:** the key committed earlier is still present in git history.
+> Firebase client keys are not secrets by themselves, but restrict yours in
+> Google Cloud Console (APIs & Services → Credentials): limit the Android key to
+> package `com.softwarica.nagarsathi.projectnagarsathi` plus your signing
+> SHA-1/SHA-256, and limit the allowed APIs. Purge the old commits separately if
+> you want the string gone from history.
+
 In the Firebase console, enable **Email/Password** under Authentication and
 create a Cloud Firestore database. Deploy the included rules with
 `firebase deploy --only firestore:rules` (see `firestore.rules`); they let each
 citizen read and write only their own profile document.
+
+### Google sign-in
+
+Across Authentication → Sign-in method, enable **Google**. It opens the built-in
+Android account picker; the app never redirects to a browser.
+
+Register the Android signing certificate so Google can verify the app. For this
+machine's debug build, add both values under Project settings → Your apps
+(Android, package `com.softwarica.nagarsathi.projectnagarsathi`):
+
+- SHA-1: `62:57:33:C5:36:43:6D:DF:12:A1:74:43:A6:23:36:8A:F6:5E:AE:09`
+- SHA-256: `D8:08:F2:F2:8D:B7:CB:40:76:4C:65:9B:F4:90:9A:15:DD:90:54:4D:62:CC:D5:C7:F1:0C:64:F1:32:AC:78:B2`
+
+Add your release keystore's fingerprints too before shipping. After enabling
+Google, re-run `flutterfire configure` (or re-download `google-services.json`
+into `android/app/`, where it stays git-ignored) so the file contains a web
+OAuth client (`client_type: 3`) next to the Android client. If you keep the JSON
+outside the app, pass the Web client ID with
+`--dart-define=GOOGLE_SERVER_CLIENT_ID=...` instead.
+
 
 Staff sign-in remains UI-only until a server-issued staff role exists. Verify
 staff roles in a trusted environment before granting workspace access.

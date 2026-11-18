@@ -1,15 +1,13 @@
-import 'package:flutter/services.dart';
+﻿import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/app_theme.dart';
 import '../utils/validators.dart';
-import '../widgets/ns_auth_heading.dart';
 import '../widgets/ns_auth_scaffold.dart';
 import '../widgets/ns_back_button.dart';
-import '../widgets/ns_bento.dart';
 import '../widgets/ns_card.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_mascot.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_staff_badge.dart';
 import '../widgets/ns_text_field.dart';
@@ -40,19 +38,12 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     super.dispose();
   }
 
-  NsMascotMood get _mood {
-    if (_celebrating) return NsMascotMood.celebrate;
-    if (_showError) return NsMascotMood.sad;
-    if (_focused) return NsMascotMood.curious;
-    return NsMascotMood.idle;
-  }
-
   String get _message {
     if (_celebrating) return 'Badge verified. Opening your workspace…';
     if (_showError) return 'Check your work email and password.';
     if (_isLoading) return 'Verifying your staff access…';
     if (_focused) return 'Use the email issued by your municipality.';
-    return "Staff badge ready. Let's get to work!";
+    return 'Municipal-issued accounts only.';
   }
 
   Future<void> _signIn() async {
@@ -125,6 +116,10 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               const NsStaffBadge(compact: true),
             ],
           ),
+          bottom: TextButton(
+            onPressed: _backToCitizenSignIn,
+            child: const Text('Back to citizen sign in'),
+          ),
           child: NsEntrance(child: _buildBody()),
         ),
         if (_celebrating)
@@ -143,14 +138,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        NsAuthHeading(
-          title: 'Staff sign in',
-          message: _message,
-          mood: _mood,
-          look: const Offset(0, 0.7),
-          wave: _celebrating,
-        ),
-        const SizedBox(height: 18),
+        _buildHero(),
+        const SizedBox(height: 16),
         NsCard(
           padding: const EdgeInsets.all(16),
           child: AutofillGroup(
@@ -178,7 +167,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     onFocusChange: (focused) =>
                         setState(() => _focused = focused),
                   ),
-                  const SizedBox(height: 13),
+                  const SizedBox(height: 14),
                   NsTextField(
                     controller: _passwordController,
                     label: 'Password',
@@ -195,7 +184,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     onFocusChange: (focused) =>
                         setState(() => _focused = focused),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   NsPrimaryButton(
                     label: 'Sign in',
                     isLoading: _isLoading,
@@ -207,80 +196,115 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        const _StaffBento(),
-        Center(
-          child: TextButton(
-            onPressed: _backToCitizenSignIn,
-            child: const Text('Back to citizen sign in'),
-          ),
+        const SizedBox(height: 12),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: 1.5),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                size: 12,
+                color: AppColors.muted,
+              ),
+            ),
+            SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                'Access is issued by your municipality.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
-}
 
-class _StaffBento extends StatelessWidget {
-  const _StaffBento();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 3,
-                child: NsBentoTile(
-                  icon: Icons.assignment_rounded,
-                  label: 'Your queue',
-                  caption: 'Citizen requests and ward updates.',
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: NsBentoTile(
-                  icon: Icons.verified_user_rounded,
-                  label: 'Secure',
-                  caption: 'Municipal-issued access.',
-                  tone: NsBentoTone.sky,
-                ),
-              ),
-            ],
+  Widget _buildHero() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        color: AppColors.forest,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.forest.withValues(alpha: 0.28),
+            offset: const Offset(0, 5),
+            blurRadius: 0,
           ),
-        ),
-        const SizedBox(height: 10),
-        const IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: NsBentoTile(
-                  icon: Icons.inbox_rounded,
-                  label: 'Requests',
-                  tone: NsBentoTone.sun,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: NsBentoTile(
-                  icon: Icons.campaign_rounded,
-                  label: 'Notices',
-                  tone: NsBentoTone.sky,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: NsBentoTile(icon: Icons.map_rounded, label: 'Wards'),
-              ),
-            ],
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: const Icon(
+              Icons.badge_rounded,
+              size: 24,
+              color: AppColors.primaryLight,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'STAFF PORTAL',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.primaryLight,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Staff sign in',
+                  style: TextStyle(
+                    fontSize: 25,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: Text(
+                    _message,
+                    key: ValueKey(_message),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: _showError
+                          ? const Color(0xFFFFC4BD)
+                          : Colors.white.withValues(alpha: 0.74),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
