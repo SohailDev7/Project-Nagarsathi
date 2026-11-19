@@ -26,29 +26,31 @@ class NsOutlineButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
     final enabled = onPressed != null;
     final (border, foreground, fill) = switch (tone) {
       NsOutlineTone.neutral => (
-        AppColors.borderStrong,
-        AppColors.forest,
-        AppColors.surface,
+        tokens.controlBorder,
+        tokens.heading,
+        tokens.surface,
       ),
       NsOutlineTone.green => (
-        AppColors.primaryDark,
-        AppColors.primaryDeep,
-        AppColors.mint,
+        tokens.primaryStrong,
+        tokens.accentText,
+        tokens.mint,
       ),
       NsOutlineTone.danger => (
-        AppColors.error,
-        AppColors.errorDark,
-        AppColors.surface,
+        tokens.errorBorder,
+        scheme.error,
+        tokens.surface,
       ),
     };
 
     return NsPressable(
       onTap: enabled ? onPressed : null,
-      color: enabled ? fill : AppColors.surfaceSoft,
-      borderColor: enabled ? border : AppColors.border,
+      color: enabled ? fill : tokens.surfaceSoft,
+      borderColor: enabled ? border : tokens.hairline,
       shadowColor: border,
       radius: NsTokens.radius,
       depth: enabled ? 4 : 0,
@@ -65,7 +67,7 @@ class NsOutlineButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.w900,
-                  color: enabled ? foreground : AppColors.muted,
+                  color: enabled ? foreground : tokens.muted,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -74,7 +76,7 @@ class NsOutlineButton extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: enabled ? foreground : AppColors.muted,
+                  color: enabled ? foreground : tokens.muted,
                 ),
               ],
             ],

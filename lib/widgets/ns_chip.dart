@@ -4,6 +4,21 @@ import '../theme/app_theme.dart';
 
 enum NsChipTone { green, sun, sky, forest, muted }
 
+/// Status tints are deliberately fixed brand colours rather than surface
+/// tokens: they keep their meaning in both themes.
+abstract final class _ChipPalette {
+  static const forest = Color(0xFF163B2B);
+  static const sky = Color(0xFF1CB0F6);
+  static const sunText = Color(0xFF866400);
+  static const skyText = Color(0xFF0B6C9E);
+
+  static const greenDark = Color(0xFF24523C);
+  static const sunDark = Color(0xFF453809);
+  static const sunTextDark = Color(0xFFFFD24A);
+  static const skyDark = Color(0xFF14405A);
+  static const skyTextDark = Color(0xFF6FD0FA);
+}
+
 /// Small, extra-bold pill used for status and context labels.
 class NsChip extends StatelessWidget {
   const NsChip({
@@ -21,29 +36,65 @@ class NsChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (background, foreground, border) = switch (tone) {
-      NsChipTone.green => (
-        AppColors.mint,
-        AppColors.primaryDeep,
-        AppColors.primary.withValues(alpha: 0.34),
-      ),
-      NsChipTone.sun => (
-        AppColors.sun.withValues(alpha: 0.2),
-        const Color(0xFF866400),
-        AppColors.sun,
-      ),
-      NsChipTone.sky => (
-        AppColors.sky.withValues(alpha: 0.14),
-        const Color(0xFF0B6C9E),
-        AppColors.sky.withValues(alpha: 0.4),
-      ),
-      NsChipTone.forest => (AppColors.forest, Colors.white, AppColors.forest),
-      NsChipTone.muted => (
-        AppColors.surfaceSoft,
-        AppColors.muted,
-        AppColors.border,
-      ),
-    };
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final (background, foreground, border) = isDark
+        ? switch (tone) {
+            NsChipTone.green => (
+              _ChipPalette.greenDark,
+              tokens.accentText,
+              scheme.primary.withValues(alpha: 0.45),
+            ),
+            NsChipTone.sun => (
+              _ChipPalette.sunDark,
+              _ChipPalette.sunTextDark,
+              scheme.secondary.withValues(alpha: 0.5),
+            ),
+            NsChipTone.sky => (
+              _ChipPalette.skyDark,
+              _ChipPalette.skyTextDark,
+              _ChipPalette.sky.withValues(alpha: 0.5),
+            ),
+            NsChipTone.forest => (
+              _ChipPalette.forest,
+              Colors.white,
+              scheme.primary.withValues(alpha: 0.25),
+            ),
+            NsChipTone.muted => (
+              tokens.surfaceSoft,
+              tokens.muted,
+              tokens.border,
+            ),
+          }
+        : switch (tone) {
+            NsChipTone.green => (
+              tokens.mint,
+              tokens.accentText,
+              scheme.primary.withValues(alpha: 0.34),
+            ),
+            NsChipTone.sun => (
+              scheme.secondary.withValues(alpha: 0.2),
+              _ChipPalette.sunText,
+              scheme.secondary,
+            ),
+            NsChipTone.sky => (
+              _ChipPalette.sky.withValues(alpha: 0.14),
+              _ChipPalette.skyText,
+              _ChipPalette.sky.withValues(alpha: 0.4),
+            ),
+            NsChipTone.forest => (
+              _ChipPalette.forest,
+              Colors.white,
+              _ChipPalette.forest,
+            ),
+            NsChipTone.muted => (
+              tokens.surfaceSoft,
+              tokens.muted,
+              tokens.hairline,
+            ),
+          };
 
     return Container(
       padding: EdgeInsets.symmetric(

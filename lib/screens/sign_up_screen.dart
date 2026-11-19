@@ -87,9 +87,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_googleLoading) {
       return 'Opening Google… pick your account.';
     }
-    if (_isLoading) return _step == _lastStep
-        ? 'Verifying your email…'
-        : 'Creating your citizen account…';
+    if (_isLoading) {
+      return _step == _lastStep
+          ? 'Verifying your email…'
+          : 'Creating your citizen account…';
+    }
     return _copy.$2;
   }
 

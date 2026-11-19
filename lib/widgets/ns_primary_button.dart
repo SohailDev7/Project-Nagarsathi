@@ -29,6 +29,7 @@ class NsPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canTap = !isLoading && onPressed != null;
+    final onPrimary = Theme.of(context).colorScheme.onPrimary;
 
     return NsPressable(
       onTap: canTap ? onPressed : null,
@@ -44,13 +45,13 @@ class NsPrimaryButton extends StatelessWidget {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 160),
             child: isLoading
-                ? const SizedBox(
-                    key: ValueKey('loader'),
+                ? SizedBox(
+                    key: const ValueKey('loader'),
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.6,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(onPrimary),
                     ),
                   )
                 : Row(
@@ -59,16 +60,16 @@ class NsPrimaryButton extends StatelessWidget {
                     children: [
                       Text(
                         label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16.5,
                           fontWeight: FontWeight.w900,
-                          color: Colors.white,
+                          color: onPrimary,
                           letterSpacing: 0.2,
                         ),
                       ),
                       if (icon != null) ...[
                         const SizedBox(width: 10),
-                        Icon(icon, size: 20, color: Colors.white),
+                        Icon(icon, size: 20, color: onPrimary),
                       ],
                     ],
                   ),
