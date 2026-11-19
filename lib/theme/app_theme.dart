@@ -6,6 +6,9 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// Vivid lime is the action colour, forest is the ink, and cream keeps the
 /// screen warm instead of clinical white.
+///
+/// These are the frozen light-mode tokens kept for existing screens. New
+/// code should read [NsColors] from the active theme instead.
 abstract final class AppColors {
   static const primary = Color(0xFF58CC02);
   static const primaryDark = Color(0xFF3F9E00);
@@ -22,7 +25,7 @@ abstract final class AppColors {
   static const border = Color(0xFFE3E7D9);
   static const borderStrong = Color(0xFFD3DAC4);
   static const ink = Color(0xFF1F3329);
-  static const muted = Color(0xFF6B7D71);
+  static const muted = Color(0xFF5A6C60);
 
   static const error = Color(0xFFE04B43);
   static const errorDark = Color(0xFFB2352F);
@@ -44,32 +47,180 @@ abstract final class NsTokens {
   static const maxContentWidth = 430.0;
 }
 
-ThemeData buildAppTheme() {
-  const scheme = ColorScheme.light(
-    primary: AppColors.primary,
-    onPrimary: Colors.white,
-    primaryContainer: AppColors.mint,
-    onPrimaryContainer: AppColors.forest,
-    secondary: AppColors.sun,
-    onSecondary: AppColors.forest,
-    surface: AppColors.surface,
-    onSurface: AppColors.ink,
-    onSurfaceVariant: AppColors.muted,
-    outline: AppColors.borderStrong,
-    error: AppColors.error,
+/// Theme-aware surface and ink tokens.
+///
+/// Existing screens still read the frozen [AppColors] values; new code (and
+/// the dark-mode migration in PR 2) should read tokens from here so surfaces,
+/// borders, and text follow the active [Brightness].
+@immutable
+class NsColors extends ThemeExtension<NsColors> {
+  const NsColors({
+    required this.background,
+    required this.surface,
+    required this.surfaceSoft,
+    required this.border,
+    required this.inputBorder,
+    required this.ink,
+    required this.muted,
+    required this.shadow,
+    required this.accentText,
+    required this.mint,
+  });
+
+  final Color background;
+  final Color surface;
+  final Color surfaceSoft;
+  final Color border;
+  final Color inputBorder;
+  final Color ink;
+  final Color muted;
+  final Color shadow;
+  final Color accentText;
+  final Color mint;
+
+  static const light = NsColors(
+    background: Color(0xFFFFFDF5),
+    surface: Color(0xFFFFFFFF),
+    surfaceSoft: Color(0xFFF7F8EE),
+    border: Color(0xFFD3DAC4),
+    inputBorder: Color(0xFF84948A),
+    ink: Color(0xFF1F3329),
+    muted: Color(0xFF5A6C60),
+    shadow: Color(0xFFE7EBD9),
+    accentText: Color(0xFF2E7D0B),
+    mint: Color(0xFFE8F8D8),
   );
 
+  static const dark = NsColors(
+    background: Color(0xFF0F1A14),
+    surface: Color(0xFF172620),
+    surfaceSoft: Color(0xFF1E3128),
+    border: Color(0xFF2C4237),
+    inputBorder: Color(0xFF5F7A6B),
+    ink: Color(0xFFEAF3EC),
+    muted: Color(0xFFA3B5A9),
+    shadow: Color(0xFF000000),
+    accentText: Color(0xFF89E219),
+    mint: Color(0xFF1F3A2A),
+  );
+
+  /// The tokens for the nearest enclosing theme, falling back to light.
+  static NsColors of(BuildContext context) {
+    return Theme.of(context).extension<NsColors>() ?? light;
+  }
+
+  @override
+  NsColors copyWith({
+    Color? background,
+    Color? surface,
+    Color? surfaceSoft,
+    Color? border,
+    Color? inputBorder,
+    Color? ink,
+    Color? muted,
+    Color? shadow,
+    Color? accentText,
+    Color? mint,
+  }) {
+    return NsColors(
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      surfaceSoft: surfaceSoft ?? this.surfaceSoft,
+      border: border ?? this.border,
+      inputBorder: inputBorder ?? this.inputBorder,
+      ink: ink ?? this.ink,
+      muted: muted ?? this.muted,
+      shadow: shadow ?? this.shadow,
+      accentText: accentText ?? this.accentText,
+      mint: mint ?? this.mint,
+    );
+  }
+
+  @override
+  NsColors lerp(covariant NsColors? other, double t) {
+    if (other == null) return this;
+    return NsColors(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceSoft: Color.lerp(surfaceSoft, other.surfaceSoft, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      inputBorder: Color.lerp(inputBorder, other.inputBorder, t)!,
+      ink: Color.lerp(ink, other.ink, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
+      shadow: Color.lerp(shadow, other.shadow, t)!,
+      accentText: Color.lerp(accentText, other.accentText, t)!,
+      mint: Color.lerp(mint, other.mint, t)!,
+    );
+  }
+}
+
+ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
+  final isDark = brightness == Brightness.dark;
+  final tokens = isDark ? NsColors.dark : NsColors.light;
+
+  final heading = isDark ? const Color(0xFFEAF3EC) : AppColors.forest;
+  final errorBorder = isDark ? const Color(0xFFFFB4AB) : AppColors.error;
+  final errorText = isDark ? const Color(0xFFFFB4AB) : AppColors.errorDark;
+
+  final scheme = isDark
+      ? ColorScheme.dark(
+          primary: AppColors.primary,
+          onPrimary: AppColors.forest,
+          primaryContainer: tokens.mint,
+          onPrimaryContainer: const Color(0xFFEAF3EC),
+          secondary: AppColors.sun,
+          onSecondary: AppColors.forest,
+          surface: tokens.surface,
+          onSurface: tokens.ink,
+          onSurfaceVariant: tokens.muted,
+          outline: tokens.border,
+          outlineVariant: tokens.inputBorder,
+          error: const Color(0xFFFFB4AB),
+          onError: const Color(0xFF690005),
+          shadow: tokens.shadow,
+          scrim: const Color(0xFF000000),
+          inverseSurface: const Color(0xFFEAF3EC),
+          onInverseSurface: const Color(0xFF0F1A14),
+          inversePrimary: AppColors.primaryDeep,
+        )
+      : ColorScheme.light(
+          primary: AppColors.primary,
+          onPrimary: AppColors.forest,
+          primaryContainer: tokens.mint,
+          onPrimaryContainer: AppColors.forest,
+          secondary: AppColors.sun,
+          onSecondary: AppColors.forest,
+          surface: tokens.surface,
+          onSurface: tokens.ink,
+          onSurfaceVariant: tokens.muted,
+          outline: tokens.border,
+          outlineVariant: tokens.inputBorder,
+          error: AppColors.errorDark,
+          onError: Colors.white,
+          shadow: tokens.shadow,
+          scrim: const Color(0xFF000000),
+          inverseSurface: AppColors.forest,
+          onInverseSurface: Colors.white,
+          inversePrimary: AppColors.primaryLight,
+        );
+
   const fieldRadius = BorderRadius.all(Radius.circular(NsTokens.radius));
-  const fieldBorder = OutlineInputBorder(
+  final fieldBorder = OutlineInputBorder(
     borderRadius: fieldRadius,
-    borderSide: BorderSide(color: AppColors.borderStrong, width: 2),
+    borderSide: BorderSide(color: tokens.inputBorder, width: 2),
   );
 
   return ThemeData(
     useMaterial3: true,
     fontFamily: 'Nunito',
+    brightness: brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: AppColors.background,
+    scaffoldBackgroundColor: tokens.background,
+    canvasColor: tokens.surface,
+    cardColor: tokens.surface,
+    dividerColor: tokens.border,
+    shadowColor: tokens.shadow,
+    extensions: [tokens],
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
         TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -77,108 +228,122 @@ ThemeData buildAppTheme() {
         TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
       },
     ),
-    textTheme: const TextTheme(
+    appBarTheme: AppBarTheme(
+      backgroundColor: tokens.surface,
+      foregroundColor: tokens.ink,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+    ),
+    textTheme: TextTheme(
       displayLarge: TextStyle(
         fontSize: 44,
         height: 1.02,
         fontWeight: FontWeight.w900,
         letterSpacing: -1.6,
-        color: AppColors.forest,
+        color: heading,
       ),
       displayMedium: TextStyle(
         fontSize: 38,
         height: 1.05,
         fontWeight: FontWeight.w900,
         letterSpacing: -1.3,
-        color: AppColors.forest,
+        color: heading,
       ),
       headlineLarge: TextStyle(
         fontSize: 32,
         height: 1.1,
         fontWeight: FontWeight.w900,
         letterSpacing: -1,
-        color: AppColors.forest,
+        color: heading,
       ),
       headlineMedium: TextStyle(
         fontSize: 26,
         height: 1.15,
         fontWeight: FontWeight.w900,
         letterSpacing: -0.7,
-        color: AppColors.forest,
+        color: heading,
       ),
       titleLarge: TextStyle(
         fontSize: 20,
         height: 1.2,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.4,
-        color: AppColors.forest,
+        color: heading,
       ),
       titleMedium: TextStyle(
         fontSize: 16,
         height: 1.25,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.2,
-        color: AppColors.forest,
+        color: heading,
       ),
       bodyLarge: TextStyle(
         fontSize: 16,
         height: 1.5,
         fontWeight: FontWeight.w600,
-        color: AppColors.muted,
+        color: tokens.muted,
       ),
       bodyMedium: TextStyle(
         fontSize: 14.5,
         height: 1.5,
         fontWeight: FontWeight.w600,
-        color: AppColors.muted,
+        color: tokens.muted,
       ),
-      labelLarge: TextStyle(
+      labelLarge: const TextStyle(
         fontSize: 15,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.2,
       ),
     ),
     textSelectionTheme: TextSelectionThemeData(
-      cursorColor: AppColors.primaryDeep,
+      cursorColor: tokens.accentText,
       selectionColor: AppColors.primary.withValues(alpha: 0.22),
-      selectionHandleColor: AppColors.primaryDark,
+      selectionHandleColor: tokens.accentText,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: tokens.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      hintStyle: const TextStyle(
+      hintStyle: TextStyle(
         fontSize: 15,
         fontWeight: FontWeight.w600,
-        color: AppColors.muted,
+        color: tokens.muted,
       ),
-      prefixIconColor: AppColors.primaryDeep,
-      suffixIconColor: AppColors.muted,
+      helperStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: tokens.muted,
+      ),
+      prefixIconColor: tokens.accentText,
+      suffixIconColor: tokens.muted,
       prefixIconConstraints: const BoxConstraints(minWidth: 52, minHeight: 24),
       border: fieldBorder,
       enabledBorder: fieldBorder,
-      focusedBorder: const OutlineInputBorder(
+      disabledBorder: fieldBorder,
+      focusedBorder: OutlineInputBorder(
         borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.primary, width: 2.4),
+        borderSide: const BorderSide(color: AppColors.primary, width: 2.4),
       ),
-      errorBorder: const OutlineInputBorder(
+      errorBorder: OutlineInputBorder(
         borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.error, width: 2),
+        borderSide: BorderSide(color: errorBorder, width: 2),
       ),
-      focusedErrorBorder: const OutlineInputBorder(
+      focusedErrorBorder: OutlineInputBorder(
         borderRadius: fieldRadius,
-        borderSide: BorderSide(color: AppColors.error, width: 2.4),
+        borderSide: BorderSide(color: errorBorder, width: 2.4),
       ),
-      errorStyle: const TextStyle(
+      errorStyle: TextStyle(
         fontSize: 13,
         height: 1.3,
         fontWeight: FontWeight.w700,
-        color: AppColors.errorDark,
+        color: errorText,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.primaryDeep,
+        foregroundColor: tokens.accentText,
         textStyle: const TextStyle(
           fontFamily: 'Nunito',
           fontSize: 14.5,
@@ -189,36 +354,44 @@ ThemeData buildAppTheme() {
     ),
     checkboxTheme: CheckboxThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-      side: const BorderSide(color: AppColors.borderStrong, width: 2),
+      side: BorderSide(color: tokens.border, width: 2),
       fillColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
             ? AppColors.primary
-            : AppColors.surface,
+            : tokens.surface,
       ),
-      checkColor: const WidgetStatePropertyAll(Colors.white),
+      checkColor: WidgetStatePropertyAll(scheme.onPrimary),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
+    progressIndicatorTheme: ProgressIndicatorThemeData(
       color: AppColors.primary,
-      linearTrackColor: AppColors.border,
-      circularTrackColor: AppColors.border,
+      linearTrackColor: tokens.border,
+      circularTrackColor: tokens.border,
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: AppColors.forest,
-      contentTextStyle: const TextStyle(
+      backgroundColor: isDark ? const Color(0xFFEAF3EC) : AppColors.forest,
+      contentTextStyle: TextStyle(
         fontFamily: 'Nunito',
-        color: Colors.white,
+        color: isDark ? const Color(0xFF0F1A14) : Colors.white,
         fontSize: 14,
         fontWeight: FontWeight.w700,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.surface,
+      backgroundColor: tokens.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: tokens.surface,
+      modalBackgroundColor: tokens.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
     ),
   );
 }
