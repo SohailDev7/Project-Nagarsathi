@@ -56,51 +56,103 @@ abstract final class NsTokens {
 class NsColors extends ThemeExtension<NsColors> {
   const NsColors({
     required this.background,
+    required this.staffBackground,
     required this.surface,
     required this.surfaceSoft,
     required this.border,
+    required this.hairline,
     required this.inputBorder,
+    required this.controlBorder,
     required this.ink,
+    required this.heading,
     required this.muted,
     required this.shadow,
     required this.accentText,
+    required this.accentBright,
+    required this.primaryStrong,
+    required this.errorBorder,
     required this.mint,
   });
 
   final Color background;
+
+  /// Staff portal backdrop; a touch greener than [background].
+  final Color staffBackground;
+
   final Color surface;
   final Color surfaceSoft;
+
+  /// Decorative borders: cards, bubbles, dividers.
   final Color border;
+
+  /// Hairline rules such as tab rails and disabled edges.
+  final Color hairline;
+
+  /// Text-field boundary.
   final Color inputBorder;
+
+  /// Boundary for buttons and other interactive controls. Matches [border] in
+  /// light and [inputBorder] in dark so controls stay visible on dark surfaces.
+  final Color controlBorder;
+
+  /// Body ink.
   final Color ink;
+
+  /// Display ink for titles, labels, and brand wordmark.
+  final Color heading;
+
   final Color muted;
   final Color shadow;
   final Color accentText;
+
+  /// Bright lime accent used for glows, logo art, and gradients.
+  final Color accentBright;
+
+  /// Deep lime used for the primary button's edge and green outlines.
+  final Color primaryStrong;
+
+  /// Error outline, which stays brighter than error text.
+  final Color errorBorder;
+
   final Color mint;
 
   static const light = NsColors(
     background: Color(0xFFFFFDF5),
+    staffBackground: Color(0xFFF8FBF0),
     surface: Color(0xFFFFFFFF),
     surfaceSoft: Color(0xFFF7F8EE),
     border: Color(0xFFD3DAC4),
+    hairline: Color(0xFFE3E7D9),
     inputBorder: Color(0xFF84948A),
+    controlBorder: Color(0xFFD3DAC4),
     ink: Color(0xFF1F3329),
+    heading: Color(0xFF163B2B),
     muted: Color(0xFF5A6C60),
     shadow: Color(0xFFE7EBD9),
     accentText: Color(0xFF2E7D0B),
+    accentBright: Color(0xFF89E219),
+    primaryStrong: Color(0xFF3F9E00),
+    errorBorder: Color(0xFFE04B43),
     mint: Color(0xFFE8F8D8),
   );
 
   static const dark = NsColors(
     background: Color(0xFF0F1A14),
+    staffBackground: Color(0xFF0C1712),
     surface: Color(0xFF172620),
     surfaceSoft: Color(0xFF1E3128),
     border: Color(0xFF2C4237),
+    hairline: Color(0xFF2C4237),
     inputBorder: Color(0xFF5F7A6B),
+    controlBorder: Color(0xFF5F7A6B),
     ink: Color(0xFFEAF3EC),
+    heading: Color(0xFFEAF3EC),
     muted: Color(0xFFA3B5A9),
     shadow: Color(0xFF000000),
     accentText: Color(0xFF89E219),
+    accentBright: Color(0xFF89E219),
+    primaryStrong: Color(0xFF3F9E00),
+    errorBorder: Color(0xFFFFB4AB),
     mint: Color(0xFF1F3A2A),
   );
 
@@ -112,26 +164,40 @@ class NsColors extends ThemeExtension<NsColors> {
   @override
   NsColors copyWith({
     Color? background,
+    Color? staffBackground,
     Color? surface,
     Color? surfaceSoft,
     Color? border,
+    Color? hairline,
     Color? inputBorder,
+    Color? controlBorder,
     Color? ink,
+    Color? heading,
     Color? muted,
     Color? shadow,
     Color? accentText,
+    Color? accentBright,
+    Color? primaryStrong,
+    Color? errorBorder,
     Color? mint,
   }) {
     return NsColors(
       background: background ?? this.background,
+      staffBackground: staffBackground ?? this.staffBackground,
       surface: surface ?? this.surface,
       surfaceSoft: surfaceSoft ?? this.surfaceSoft,
       border: border ?? this.border,
+      hairline: hairline ?? this.hairline,
       inputBorder: inputBorder ?? this.inputBorder,
+      controlBorder: controlBorder ?? this.controlBorder,
       ink: ink ?? this.ink,
+      heading: heading ?? this.heading,
       muted: muted ?? this.muted,
       shadow: shadow ?? this.shadow,
       accentText: accentText ?? this.accentText,
+      accentBright: accentBright ?? this.accentBright,
+      primaryStrong: primaryStrong ?? this.primaryStrong,
+      errorBorder: errorBorder ?? this.errorBorder,
       mint: mint ?? this.mint,
     );
   }
@@ -141,14 +207,25 @@ class NsColors extends ThemeExtension<NsColors> {
     if (other == null) return this;
     return NsColors(
       background: Color.lerp(background, other.background, t)!,
+      staffBackground: Color.lerp(
+        staffBackground,
+        other.staffBackground,
+        t,
+      )!,
       surface: Color.lerp(surface, other.surface, t)!,
       surfaceSoft: Color.lerp(surfaceSoft, other.surfaceSoft, t)!,
       border: Color.lerp(border, other.border, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
       inputBorder: Color.lerp(inputBorder, other.inputBorder, t)!,
+      controlBorder: Color.lerp(controlBorder, other.controlBorder, t)!,
       ink: Color.lerp(ink, other.ink, t)!,
+      heading: Color.lerp(heading, other.heading, t)!,
       muted: Color.lerp(muted, other.muted, t)!,
       shadow: Color.lerp(shadow, other.shadow, t)!,
       accentText: Color.lerp(accentText, other.accentText, t)!,
+      accentBright: Color.lerp(accentBright, other.accentBright, t)!,
+      primaryStrong: Color.lerp(primaryStrong, other.primaryStrong, t)!,
+      errorBorder: Color.lerp(errorBorder, other.errorBorder, t)!,
       mint: Color.lerp(mint, other.mint, t)!,
     );
   }

@@ -30,6 +30,7 @@ class NsAuthHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     final mascot = NsMascot(
       size: mascotSize,
       mood: mood,
@@ -42,11 +43,11 @@ class NsAuthHeading extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               height: 1.05,
               fontWeight: FontWeight.w900,
-              color: AppColors.forest,
+              color: tokens.heading,
               letterSpacing: -0.9,
             ),
           ),
@@ -73,23 +74,25 @@ class _MascotBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: tokens.surface,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(tailOnRight ? 14 : 4),
               topRight: Radius.circular(tailOnRight ? 4 : 14),
               bottomLeft: const Radius.circular(14),
               bottomRight: const Radius.circular(14),
             ),
-            border: Border.all(color: AppColors.borderStrong, width: 1.5),
+            border: Border.all(color: tokens.border, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: AppColors.shadow,
+                color: tokens.shadow,
                 offset: const Offset(0, 2),
                 blurRadius: 0,
               ),
@@ -100,11 +103,11 @@ class _MascotBubble extends StatelessWidget {
             child: Text(
               message,
               key: ValueKey(message),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.3,
                 fontWeight: FontWeight.w700,
-                color: AppColors.forest,
+                color: tokens.heading,
               ),
             ),
           ),
@@ -119,27 +122,15 @@ class _MascotBubble extends StatelessWidget {
               width: 9,
               height: 9,
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: tokens.surface,
                 border: tailOnRight
-                    ? const Border(
-                        top: BorderSide(
-                          color: AppColors.borderStrong,
-                          width: 1.5,
-                        ),
-                        right: BorderSide(
-                          color: AppColors.borderStrong,
-                          width: 1.5,
-                        ),
+                    ? Border(
+                        top: BorderSide(color: tokens.border, width: 1.5),
+                        right: BorderSide(color: tokens.border, width: 1.5),
                       )
-                    : const Border(
-                        left: BorderSide(
-                          color: AppColors.borderStrong,
-                          width: 1.5,
-                        ),
-                        bottom: BorderSide(
-                          color: AppColors.borderStrong,
-                          width: 1.5,
-                        ),
+                    : Border(
+                        left: BorderSide(color: tokens.border, width: 1.5),
+                        bottom: BorderSide(color: tokens.border, width: 1.5),
                       ),
               ),
             ),
