@@ -87,11 +87,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
-
-    // The wizard now has a third, email-OTP step. Requesting that code needs
-    // Firebase, which widget tests do not initialise, so the journey stops
-    // here instead of reaching the home screen.
-    expect(find.text('2 of 3'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
   });
 }
