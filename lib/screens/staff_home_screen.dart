@@ -10,6 +10,7 @@ import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_staff_badge.dart';
+import 'admin/ward_officer_management_screen.dart';
 import 'staff_login_screen.dart';
 
 /// Landing page for the separate staff sign-in flow.
@@ -92,6 +93,18 @@ class StaffHomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     const _StatsRow(),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'App admin',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.forest,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const _AdminToolsCard(),
                     const SizedBox(height: 22),
                     const Text(
                       "Today's queue",
@@ -246,6 +259,86 @@ class _StaffHeroCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AdminToolsCard extends StatelessWidget {
+  const _AdminToolsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return NsCard(
+      padding: EdgeInsets.zero,
+      radius: 22,
+      depth: 5,
+      child: NsPressable(
+        onTap: () => Navigator.of(
+          context,
+        ).pushNamed(WardOfficerManagementScreen.routeName),
+        color: Colors.transparent,
+        borderColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        borderWidth: 0,
+        depth: 0,
+        radius: 20,
+        padding: const EdgeInsets.all(14),
+        semanticLabel: 'Open ward officer management',
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppColors.mint,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  width: 1.4,
+                ),
+              ),
+              child: const Icon(
+                Icons.manage_accounts_rounded,
+                size: 23,
+                color: AppColors.primaryDeep,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ward officer management',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.forest,
+                    ),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Create accounts, suspend or reactivate access, '
+                    'reassign wards and review the audit trail.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.arrow_forward_rounded,
+              size: 18,
+              color: AppColors.primaryDeep,
+            ),
+          ],
+        ),
       ),
     );
   }

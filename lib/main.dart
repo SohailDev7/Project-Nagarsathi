@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'screens/admin/ward_officer_management_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/firebase_bootstrap.dart';
 import 'theme/app_theme.dart';
@@ -35,6 +36,10 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
         child: child ?? const SizedBox.shrink(),
       ),
       home: const LoginScreen(),
+      routes: {
+        WardOfficerManagementScreen.routeName: (_) =>
+            const WardOfficerManagementScreen(),
+      },
     );
   }
 }
