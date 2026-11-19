@@ -87,9 +87,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_googleLoading) {
       return 'Opening Google… pick your account.';
     }
-    if (_isLoading) return _step == _lastStep
-        ? 'Verifying your email…'
-        : 'Creating your citizen account…';
+    if (_isLoading) {
+      return _step == _lastStep
+          ? 'Verifying your email…'
+          : 'Creating your citizen account…';
+    }
     return _copy.$2;
   }
 
@@ -137,7 +139,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> _createAccount() async {
     FocusScope.of(context).unfocus();
-    if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
+    if (!(_formKeys[_lastStep].currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
       setState(() => _showError = true);
       return;
@@ -360,43 +362,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Widget _buildStep() {
     if (_step == 0) {
-      if (_step == _lastStep) {
-        return Form(
-          key: _formKeys[_lastStep],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              NsTextField(
-                controller: _otpController,
-                label: 'Email verification code',
-                hint: '6-digit code',
-                icon: Icons.pin_rounded,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                validator: (value) => RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
-                    ? null
-                    : 'Enter the 6-digit code',
-                autofocus: true,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                onChanged: (_) => _clearError(),
-                onFieldSubmitted: (_) => _createAccount(),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
       return Form(
         key: _formKeys[0],
         child: Column(
@@ -455,8 +420,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
     }
 
+    if (_step == _lastStep) {
+      return Form(
+        key: _formKeys[_lastStep],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NsTextField(
+              controller: _otpController,
+              label: 'Email verification code',
+              hint: '6-digit code',
+              icon: Icons.pin_rounded,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              validator: (value) =>
+                  RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
+                  ? null
+                  : 'Enter the 6-digit code',
+              autofocus: true,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              onChanged: (_) => _clearError(),
+              onFieldSubmitted: (_) => _createAccount(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.muted,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: TextButton(
+                onPressed: _isLoading ? null : _requestOtp,
+                child: const Text('Resend code'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Form(
-      key: _formKeys[_lastStep],
+      key: _formKeys[_passwordStep],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -59,7 +59,7 @@ void main() {
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
-    expect(find.text('1 of 2'), findsOneWidget);
+    expect(find.text('1 of 3'), findsOneWidget);
 
     // Details are validated together, so the first tap reports both errors.
     await tester.tap(find.text('Continue'));
@@ -75,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('2 of 2'), findsOneWidget);
+    expect(find.text('2 of 3'), findsOneWidget);
 
     final passwordFields = find.byType(TextFormField);
     expect(passwordFields, findsNWidgets(2));
@@ -87,18 +87,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Create account'));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Namaste'), findsOneWidget);
-    expect(find.text('Report an issue'), findsOneWidget);
-
-    // Sign out lives in the account sheet, opened from the header avatar.
-    await tester.tap(find.byKey(const Key('home-avatar')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign out'));
-    await tester.pumpAndSettle();
-    expect(find.text('New to NagarSathi?'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
   });
 }

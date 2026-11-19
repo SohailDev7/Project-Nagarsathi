@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
@@ -29,34 +31,63 @@ class AuthService {
   static bool get isConfigured => FirebaseBootstrap.isReady;
 
   static const _users = 'users';
+  static const _otpWorkerUrl = String.fromEnvironment(
+    'OTP_WORKER_URL',
+    defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
+  );
 
   Future<void> requestEmailOtp(String email) async {
-    if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
-    }
     try {
-      await FirebaseFunctions.instance.httpsCallable('requestEmailOtp').call({
-        'email': email.trim(),
-      });
-    } on FirebaseFunctionsException catch (error) {
-      throw AuthFailure(error.message ?? 'Could not send the verification code.');
+      final response = await http.post(
+        Uri.parse('$_otpWorkerUrl/request-email-otp'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email.trim()}),
+      ).timeout(const Duration(seconds: 20));
+      final payload = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        throw AuthFailure(
+          payload is Map && payload['error'] is String
+              ? payload['error'] as String
+              : 'Could not send the verification code.',
+        );
+      }
+    } on AuthFailure {
+      rethrow;
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the email verification service. Try again.',
+      );
     }
   }
 
-  Future<void> verifyEmailOtp({
+  Future<String?> verifyEmailOtp({
     required String email,
     required String otp,
   }) async {
-    if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
-    }
     try {
-      await FirebaseFunctions.instance.httpsCallable('verifyEmailOtp').call({
-        'email': email.trim(),
-        'otp': otp.trim(),
-      });
-    } on FirebaseFunctionsException catch (error) {
-      throw AuthFailure(error.message ?? 'Could not verify the code.');
+      final response = await http.post(
+        Uri.parse('$_otpWorkerUrl/verify-email-otp'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email.trim(), 'otp': otp.trim()}),
+      ).timeout(const Duration(seconds: 20));
+      final payload = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        throw AuthFailure(
+          payload is Map && payload['error'] is String
+              ? payload['error'] as String
+              : 'Could not verify the code.',
+        );
+      }
+      if (payload is Map && payload['verified'] == true) {
+        return payload['verificationToken'] as String?;
+      }
+      throw const AuthFailure('Could not verify the code.');
+    } on AuthFailure {
+      rethrow;
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the email verification service. Try again.',
+      );
     }
   }
 
