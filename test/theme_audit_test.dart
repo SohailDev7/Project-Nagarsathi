@@ -28,8 +28,7 @@ class _FixedLocationService extends LocationService {
   Future<CitizenLocation?> detect() async => _ward16;
 }
 
-const _releaseUrl =
-    'https://github.com/SohailDev7/Project-Nagarsathi/releases';
+const _releaseUrl = 'https://github.com/SohailDev7/Project-Nagarsathi/releases';
 
 const _normalUpdate = AppUpdate(
   version: AppVersion(major: 1, minor: 1, patch: 0, build: 3),
@@ -118,10 +117,7 @@ Future<void> _fillSignUpDetails(WidgetTester tester) async {
     find.byType(TextFormField).at(1),
     'sita@nagarsathi.app',
   );
-  await tester.enterText(
-    find.byType(TextFormField).at(2),
-    '+977 9812345678',
-  );
+  await tester.enterText(find.byType(TextFormField).at(2), '+977 9812345678');
   await tester.pumpAndSettle();
 }
 
@@ -192,7 +188,7 @@ void main() {
       'LoginScreen (typed)',
       () => const LoginScreen(),
       interact: _typeLogin,
-        note: 'Identifier and password filled, so input text is audited too.',
+      note: 'Identifier and password filled, so input text is audited too.',
     );
   });
 
@@ -275,7 +271,7 @@ void main() {
   group('StaffHomeScreen', () {
     _auditBothModes(
       'StaffHomeScreen',
-      () => const StaffHomeScreen(staffEmail: 'staff@kmc.gov.np'),
+      () => const StaffHomeScreen(staffIdentifier: 'staff@kmc.gov.np'),
     );
   });
 

@@ -9,8 +9,7 @@ import 'widgets/update_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Never blocks start-up: without Firebase config the app runs in offline
-  // demo mode and the auth screens still work.
+  // Authentication is disabled unless Firebase initializes successfully.
   await FirebaseBootstrap.initialize();
   // Guarded internally; falls back to ThemeMode.system if storage is
   // unavailable.
@@ -70,8 +69,9 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: barColor,
       systemNavigationBarDividerColor: barColor,
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
     );
   }
 }

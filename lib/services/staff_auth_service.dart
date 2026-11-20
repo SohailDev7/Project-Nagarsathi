@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
 import '../utils/validators.dart';
 import 'auth_service.dart';
@@ -20,8 +19,6 @@ class StaffPhoneChallenge {
   final String? verificationId;
   final int? resendToken;
   final PhoneAuthCredential? autoCredential;
-
-  bool get isDemo => verificationId == StaffAuthService.demoVerificationId;
 }
 
 class StaffSession {
@@ -35,9 +32,6 @@ class StaffAuthService {
   const StaffAuthService();
 
   static const _staffCollection = 'staff';
-  static const demoVerificationId = 'demo-staff-verification';
-  static const demoCode = '123456';
-
   static bool get isConfigured => FirebaseBootstrap.isReady;
 
   static Future<void> signOut() async {
@@ -55,11 +49,9 @@ class StaffAuthService {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     if (!isConfigured) {
-      if (!kDebugMode) {
-        throw const AuthFailure('Staff sign-in is temporarily unavailable.');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return StaffSession(identifier: normalizedEmail, isPhone: false);
+      throw const AuthFailure(
+        'Firebase is not connected. Staff sign-in is unavailable.',
+      );
     }
 
     late UserCredential result;
@@ -85,14 +77,8 @@ class StaffAuthService {
     }
 
     if (!isConfigured) {
-      if (!kDebugMode) {
-        throw const AuthFailure('Staff sign-in is temporarily unavailable.');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return StaffPhoneChallenge(
-        phoneNumber: phone,
-        verificationId: demoVerificationId,
-        resendToken: previous?.resendToken,
+      throw const AuthFailure(
+        'Firebase is not connected. Phone sign-in is unavailable.',
       );
     }
 
@@ -156,14 +142,9 @@ class StaffAuthService {
     String? code,
   }) async {
     if (!isConfigured) {
-      if (!kDebugMode) {
-        throw const AuthFailure('Staff sign-in is temporarily unavailable.');
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      if (code?.trim() != demoCode) {
-        throw const AuthFailure('That code is not right. Try again.');
-      }
-      return StaffSession(identifier: challenge.phoneNumber, isPhone: true);
+      throw const AuthFailure(
+        'Firebase is not connected. Phone sign-in is unavailable.',
+      );
     }
 
     final credential = challenge.autoCredential;

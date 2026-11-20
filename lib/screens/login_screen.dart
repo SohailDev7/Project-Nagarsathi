@@ -170,13 +170,13 @@ class _LoginScreenState extends State<LoginScreen> {
         _showError = false;
         _errorMessage = null;
       });
-    } catch (_) {
+    } on AuthFailure catch (error) {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       setState(() {
         _isLoading = false;
         _showError = true;
-        _errorMessage = 'Could not verify account. Please try again.';
+        _errorMessage = error.message;
       });
     }
   }
@@ -438,9 +438,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openSignUp() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SignUpScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const SignUpScreen()));
   }
 
   void _openForgotPassword() {
@@ -450,9 +449,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openStaffSignIn() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()));
   }
 
   @override
@@ -549,7 +548,9 @@ class _LoginScreenState extends State<LoginScreen> {
           radius: 999,
           expand: false,
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          semanticLabel: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+          semanticLabel: isDark
+              ? 'Switch to light mode'
+              : 'Switch to dark mode',
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

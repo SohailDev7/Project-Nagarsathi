@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:projectnagarsathi/main.dart';
-import 'package:projectnagarsathi/screens/login_screen.dart';
 import 'package:projectnagarsathi/screens/sign_up_screen.dart';
 import 'package:projectnagarsathi/screens/staff_login_screen.dart';
 import 'package:projectnagarsathi/theme/theme_controller.dart';

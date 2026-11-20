@@ -45,10 +45,7 @@ class FirebaseConfig {
 }
 
 /// Initializes Firebase once, without ever breaking app start-up.
-///
-/// A missing `google-services.json` (or missing dart-defines) simply leaves
-/// [isReady] false, and the auth screens keep their offline demo behaviour so
-/// the UI can still be explored.
+/// Authentication remains disabled until initialization succeeds.
 abstract final class FirebaseBootstrap {
   static bool _ready = false;
   static Object? _error;
@@ -77,7 +74,7 @@ abstract final class FirebaseBootstrap {
       _error = error;
       if (kDebugMode) {
         debugPrint(
-          'Firebase is not configured; continuing in offline demo mode. '
+          'Firebase is not configured; authentication is disabled. '
           'Run `flutterfire configure` or pass FIREBASE_* dart-defines. '
           'Reason: $error',
         );

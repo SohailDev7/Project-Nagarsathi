@@ -91,7 +91,7 @@ void main() {
     expect(find.byType(HomeScreen), findsNothing);
   });
 
-  testWidgets('staff sign-in and sign-out keep the workspace separate', (
+  testWidgets('staff sign-in is blocked when Firebase is unavailable', (
     tester,
   ) async {
     await _openStaffPortal(tester);
@@ -103,37 +103,17 @@ void main() {
     await tester.ensureVisible(find.text('Sign in'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign in'));
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
-    expect(find.byType(StaffHomeScreen), findsOneWidget);
-    expect(find.text('Staff workspace'), findsOneWidget);
-    expect(find.text('ward.staff@nagarsathi.gov.np'), findsOneWidget);
-    expect(find.byType(HomeScreen), findsNothing);
-    expect(find.byType(LoginScreen), findsNothing);
     expect(
-      Navigator.of(tester.element(find.byType(StaffHomeScreen))).canPop(),
-      isFalse,
+      find.text('Firebase is not connected. Staff sign-in is unavailable.'),
+      findsOneWidget,
     );
-
-    await tester.ensureVisible(find.text('Sign out'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign out'));
-    await tester.pumpAndSettle();
     expect(find.byType(StaffLoginScreen), findsOneWidget);
     expect(find.byType(StaffHomeScreen), findsNothing);
-
-    await tester.ensureVisible(find.text('Back to citizen sign in'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Back to citizen sign in'));
-    await tester.pumpAndSettle();
-    expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.byType(StaffLoginScreen), findsNothing);
     expect(find.byType(StaffHomeScreen), findsNothing);
-    expect(
-      Navigator.of(tester.element(find.byType(LoginScreen))).canPop(),
-      isFalse,
-    );
+    expect(find.byType(HomeScreen), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -188,7 +168,7 @@ void main() {
     expect(find.byType(StaffHomeScreen), findsNothing);
   });
 
-  testWidgets('staff phone OTP signs in a registered Nepali number', (
+  testWidgets('staff phone OTP is blocked when Firebase is unavailable', (
     tester,
   ) async {
     await _openStaffPortal(tester);
@@ -200,22 +180,17 @@ void main() {
     await tester.tap(find.text('Send code'));
     await tester.pumpAndSettle();
 
-    expect(find.text('6-digit code'), findsOneWidget);
-    expect(find.text('Demo code: 123456'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextFormField).last, '123456');
-    await tester.ensureVisible(find.text('Verify & sign in'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Verify & sign in'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(StaffHomeScreen), findsOneWidget);
-    expect(find.text('+9779841234567'), findsOneWidget);
+    expect(
+      find.text('Firebase is not connected. Phone sign-in is unavailable.'),
+      findsOneWidget,
+    );
+    expect(find.text('6-digit code'), findsNothing);
+    expect(find.byType(StaffHomeScreen), findsNothing);
     expect(find.byType(LoginScreen), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('citizen sign-in continues to open the citizen home', (
+  testWidgets('citizen sign-in is blocked when Firebase is unavailable', (
     tester,
   ) async {
     await tester.pumpWidget(const NagarSathiApp());
@@ -227,17 +202,13 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byType(TextFormField).first,
-      'citizen-password',
+    expect(
+      find.text(
+        'Firebase is not connected. Account verification is unavailable.',
+      ),
+      findsOneWidget,
     );
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign in'));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsNothing);
     expect(find.byType(StaffHomeScreen), findsNothing);
     expect(find.byType(StaffLoginScreen), findsNothing);
   });
