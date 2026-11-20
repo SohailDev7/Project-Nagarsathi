@@ -14,10 +14,10 @@ void main() {
   });
 
   group('ThemeController', () {
-    test('defaults to system when nothing is stored', () async {
+    test('defaults to light when nothing is stored', () async {
       final controller = ThemeController();
       await controller.load();
-      expect(controller.value, ThemeMode.system);
+      expect(controller.value, ThemeMode.light);
     });
 
     test('persists a selection and restores it', () async {
@@ -43,14 +43,14 @@ void main() {
       expect(controller.value, ThemeMode.dark);
     });
 
-    test('falls back to system for unknown stored values', () async {
+    test('falls back to light for unknown stored values', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         ThemeController.storageKey: 'purple',
       });
 
       final controller = ThemeController(ThemeMode.dark);
       await controller.load();
-      expect(controller.value, ThemeMode.system);
+      expect(controller.value, ThemeMode.light);
     });
   });
 
