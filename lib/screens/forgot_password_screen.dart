@@ -228,6 +228,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildSuccess() {
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -243,35 +245,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 height: 54,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.mint,
+                  color: tokens.mint,
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.primary, width: 2),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.mark_email_read_rounded,
                   size: 26,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Reset link sent',
                 style: TextStyle(
                   fontSize: 26,
                   height: 1.1,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.forest,
+                  color: tokens.heading,
                   letterSpacing: -0.8,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Check $_contact for the reset instructions.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   height: 1.5,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
               const SizedBox(height: 20),

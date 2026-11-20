@@ -523,6 +523,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildTopBar() {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
         if (_step == 1) ...[
@@ -531,7 +533,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
         const NsLogo(size: 34, depth: 2),
         const SizedBox(width: 10),
-        const Expanded(
+        Expanded(
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -541,7 +543,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 fontSize: 17,
                 height: 1.05,
                 fontWeight: FontWeight.w900,
-                color: AppColors.forest,
+                color: tokens.heading,
                 letterSpacing: -0.5,
               ),
             ),
@@ -696,17 +698,13 @@ class _LoginScreenState extends State<LoginScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: tokens.errorBorder.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        border: Border.all(color: tokens.errorBorder.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.info_outline_rounded,
-            size: 16,
-            color: AppColors.error,
-          ),
+          Icon(Icons.info_outline_rounded, size: 16, color: tokens.errorBorder),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -725,12 +723,12 @@ class _LoginScreenState extends State<LoginScreen> {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text(
+            child: Text(
               'Sign up',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w900,
-                color: AppColors.primaryDeep,
+                color: tokens.accentText,
               ),
             ),
           ),
@@ -785,12 +783,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
+                    child: Text(
                       'Change',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.primaryDeep,
+                        color: tokens.accentText,
                       ),
                     ),
                   ),
@@ -831,7 +829,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
-                      child: const FittedBox(
+                      child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
                         child: Text(
@@ -839,7 +837,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.primaryDeep,
+                            color: tokens.accentText,
                           ),
                         ),
                       ),
@@ -858,7 +856,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: AppColors.primaryDeep,
+                    foregroundColor: tokens.accentText,
                     textStyle: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
@@ -915,7 +913,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
-                      child: const FittedBox(
+                      child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
                         child: Text(
@@ -923,7 +921,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.primaryDeep,
+                            color: tokens.accentText,
                           ),
                         ),
                       ),
@@ -942,7 +940,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: AppColors.primaryDeep,
+                    foregroundColor: tokens.accentText,
                     textStyle: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
@@ -965,6 +963,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildFooter() {
+    final tokens = NsColors.of(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -972,12 +972,12 @@ class _LoginScreenState extends State<LoginScreen> {
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text(
+            Text(
               'New to NagarSathi?',
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
             TextButton(
@@ -987,12 +987,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
+              child: Text(
                 'Sign up',
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                 ),
               ),
             ),
@@ -1003,12 +1003,12 @@ class _LoginScreenState extends State<LoginScreen> {
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text(
+            Text(
               'Are you municipality staff? ',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
             TextButton(
@@ -1018,12 +1018,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
+              child: Text(
                 'Staff portal',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -1062,7 +1062,7 @@ class _OptionTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: selected
-              ? (isDark ? const Color(0xFF243B30) : AppColors.mint)
+              ? (isDark ? const Color(0xFF243B30) : tokens.mint)
               : tokens.surfaceSoft,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

@@ -11,6 +11,8 @@ class NsStaffPortalLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return NsPressable(
       onTap: onTap,
       color: AppColors.forest,
@@ -21,12 +23,12 @@ class NsStaffPortalLink extends StatelessWidget {
       expand: false,
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       semanticLabel: 'Staff portal',
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.badge_rounded, size: 14, color: AppColors.primaryLight),
-          SizedBox(width: 6),
-          Text(
+          Icon(Icons.badge_rounded, size: 14, color: tokens.accentBright),
+          const SizedBox(width: 6),
+          const Text(
             'Staff portal',
             style: TextStyle(
               fontSize: 11.5,
@@ -50,6 +52,8 @@ class NsStaffBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 9 : 12,
@@ -73,7 +77,7 @@ class NsStaffBadge extends StatelessWidget {
           Icon(
             Icons.badge_rounded,
             size: compact ? 13 : 15,
-            color: AppColors.primaryLight,
+            color: tokens.accentBright,
           ),
           const SizedBox(width: 6),
           Text(
