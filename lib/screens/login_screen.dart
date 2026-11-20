@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../services/auth_service.dart';
+import '../services/session_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import '../utils/validators.dart';
@@ -56,6 +57,19 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _otpFocused = false;
   String? _errorMessage;
   IdentifierKind _kind = IdentifierKind.empty;
+  bool _rememberMe = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberMe();
+  }
+
+  Future<void> _loadRememberMe() async {
+    final remember = await const SessionService().loadRememberMe();
+    if (!mounted || remember == _rememberMe) return;
+    setState(() => _rememberMe = remember);
+  }
 
   @override
   void dispose() {
@@ -292,6 +306,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _finishSignIn() async {
+    await const SessionService().saveRememberMe(_rememberMe);
+    if (!mounted) return;
+
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -818,58 +835,39 @@ class _LoginScreenState extends State<LoginScreen> {
                 onFocusChange: (focused) {
                   setState(() => _passwordFocused = focused);
                 },
-                labelTrailing: Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _openForgotPassword,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'Forgot password?',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: tokens.accentText,
-                          ),
-                        ),
-                      ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _RememberMeCheckbox(
+                      value: _rememberMe,
+                      onChanged: (value) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _rememberMe = value);
+                      },
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _openTryAnotherWaySheet,
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                  label: const Text('Try another way'),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: tokens.accentText,
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  const SizedBox(width: 8),
+                  _AuthLink(
+                    label: 'Forgot password?',
+                    onPressed: _openForgotPassword,
                   ),
-                ),
+                ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
               NsPrimaryButton(
                 label: 'Sign in',
                 isLoading: _isLoading,
                 onPressed: _signInWithPassword,
                 icon: Icons.arrow_forward_rounded,
+              ),
+              const SizedBox(height: 2),
+              Center(
+                child: _AuthLink(
+                  label: 'Try another way',
+                  onPressed: _openTryAnotherWaySheet,
+                ),
               ),
             ] else ...[
               NsTextField(
@@ -902,58 +900,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 onFocusChange: (focused) {
                   setState(() => _otpFocused = focused);
                 },
-                labelTrailing: Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _isLoading ? null : _requestEmailOtp,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'Resend code',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: tokens.accentText,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _openTryAnotherWaySheet,
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                  label: const Text('Try another way'),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: tokens.accentText,
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                child: _AuthLink(
+                  label: 'Resend code',
+                  onPressed: _isLoading ? null : _requestEmailOtp,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               NsPrimaryButton(
                 label: 'Verify & sign in',
                 isLoading: _isLoading,
                 onPressed: _signInWithOtp,
                 icon: Icons.check_rounded,
+              ),
+              const SizedBox(height: 2),
+              Center(
+                child: _AuthLink(
+                  label: 'Try another way',
+                  onPressed: _openTryAnotherWaySheet,
+                ),
               ),
             ],
           ],
@@ -1031,6 +999,93 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Google-style opt-in that keeps the Firebase session on this device.
+///
+/// Checked by default: signing in once is enough until the citizen clears the
+/// box or signs out.
+class _RememberMeCheckbox extends StatelessWidget {
+  const _RememberMeCheckbox({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
+    return MergeSemantics(
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: value,
+                onChanged: (next) => onChanged(next ?? false),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: const VisualDensity(
+                  horizontal: -4,
+                  vertical: -4,
+                ),
+                side: BorderSide(color: tokens.inputBorder, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'Remember me on this device',
+                  maxLines: 2,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthLink extends StatelessWidget {
+  const _AuthLink({required this.label, this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: tokens.accentText,
+        disabledForegroundColor: tokens.muted,
+        textStyle: const TextStyle(
+          fontSize: 12.5,
+          height: 1.2,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.1,
+        ),
+      ),
+      child: Text(label),
     );
   }
 }

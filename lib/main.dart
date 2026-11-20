@@ -1,9 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'screens/admin/ward_officer_management_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/auth_service.dart';
 import 'services/firebase_bootstrap.dart';
+import 'services/session_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 import 'widgets/update_gate.dart';
@@ -15,14 +18,40 @@ Future<void> main() async {
   // Guarded internally; falls back to ThemeMode.system if storage is
   // unavailable.
   await ThemeController.instance.load();
-  runApp(const NagarSathiApp());
+
+  // Honour "Remember me on this device" before the first frame. Firebase keeps
+  // its session on disk; when the citizen opted out we clear it and start at
+  // the sign-in screen instead.
+  final rememberMe = await const SessionService().loadRememberMe();
+  User? sessionUser;
+  if (AuthService.isConfigured) {
+    try {
+      sessionUser = FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      // Auth plugin unavailable; treat it as signed out.
+    }
+  }
+  final hasSession = sessionUser != null;
+  if (hasSession && !rememberMe) {
+    await const AuthService().signOut();
+  }
+  final startSignedIn = hasSession && rememberMe;
+
+  runApp(NagarSathiApp(startSignedIn: startSignedIn));
 }
 
 class NagarSathiApp extends StatefulWidget {
-  const NagarSathiApp({super.key, this.themeController});
+  const NagarSathiApp({
+    super.key,
+    this.themeController,
+    this.startSignedIn = false,
+  });
 
   /// Injectable for tests; defaults to the app-wide controller.
   final ThemeController? themeController;
+
+  /// Opens the citizen home when a remembered Firebase session already exists.
+  final bool startSignedIn;
 
   @override
   State<NagarSathiApp> createState() => _NagarSathiAppState();
@@ -53,7 +82,9 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
               child: child ?? const SizedBox.shrink(),
             ),
           ),
-          home: LoginScreen(themeController: _themeController),
+          home: widget.startSignedIn
+              ? const HomeScreen()
+              : LoginScreen(themeController: _themeController),
         );
       },
     );
