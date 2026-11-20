@@ -189,7 +189,9 @@ class _HomeScreenState extends State<HomeScreen> {
         service: _updateService,
       );
     } on UpdateException catch (error) {
-      if (mounted) _showMessage('Could not check for updates: ${error.message}');
+      if (mounted) {
+        _showMessage('Could not check for updates: ${error.message}');
+      }
     } catch (error) {
       if (mounted) _showMessage('Could not check for updates: $error');
     } finally {
@@ -228,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
     HapticFeedback.selectionClick();
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: NsColors.of(context).surface,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -317,10 +319,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           _version == null
                               ? 'NagarSathi · your city, by your side'
                               : 'NagarSathi · version $_version',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.muted,
+                            color: NsColors.of(context).muted,
                           ),
                         ),
                       ),
@@ -336,17 +338,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTopBar() {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
         const NsLogo(size: 32, depth: 2),
         const SizedBox(width: 9),
-        const Text(
+        Text(
           'NagarSathi',
           style: TextStyle(
             fontSize: 16,
             height: 1.05,
             fontWeight: FontWeight.w900,
-            color: AppColors.forest,
+            color: tokens.heading,
             letterSpacing: -0.4,
           ),
         ),
@@ -367,6 +371,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGreeting() {
+    final tokens = NsColors.of(context);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -378,22 +384,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Namaste, $_firstName',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 26,
                   height: 1.1,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.forest,
+                  color: tokens.heading,
                   letterSpacing: -0.9,
                 ),
               ),
               const SizedBox(height: 5),
-              const Text(
+              Text(
                 'What needs fixing in your city today?',
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ],
@@ -423,6 +429,9 @@ class _LocationPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -431,39 +440,42 @@ class _LocationPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: tokens.surface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.borderStrong, width: 1.5),
+            border: Border.all(color: tokens.border, width: 1.5),
+            boxShadow: [
+              if (isDark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  offset: const Offset(0, 2),
+                  blurRadius: 0,
+                ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (locating)
-                const Icon(
-                  Icons.my_location_rounded,
-                  size: 15,
-                  color: AppColors.primaryDeep,
-                )
-              else
-                const Icon(
-                  Icons.location_on_rounded,
-                  size: 15,
-                  color: AppColors.primaryDeep,
-                ),
+              Icon(
+                locating
+                    ? Icons.my_location_rounded
+                    : Icons.location_on_rounded,
+                size: 15,
+                color: tokens.accentText,
+              ),
               const SizedBox(width: 5),
               Text(
                 locating ? 'Finding your ward…' : label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.forest,
+                  color: tokens.heading,
                 ),
               ),
               const SizedBox(width: 2),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 17,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ],
           ),
@@ -480,15 +492,29 @@ class _ReportHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // The hero stays lime in both themes; the inner action flips to a dark
+    // forest plate in dark mode so it reads like the login screen's surfaces.
+    final actionFill = isDark ? const Color(0xFF163B2B) : tokens.surface;
+    final actionBorder = isDark ? tokens.border : AppColors.forest;
+    final actionInk = isDark ? tokens.accentBright : AppColors.forest;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.primary,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.primaryDark, width: 2),
+        border: Border.all(
+          color: isDark ? tokens.primaryStrong : AppColors.primaryDark,
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.34),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : AppColors.primaryDark.withValues(alpha: 0.34),
             offset: const Offset(0, 5),
             blurRadius: 0,
           ),
@@ -539,42 +565,40 @@ class _ReportHero extends StatelessWidget {
               fontSize: 12.5,
               height: 1.45,
               fontWeight: FontWeight.w700,
-              color: AppColors.forest.withValues(alpha: 0.72),
+              color: AppColors.forest.withValues(alpha: 0.88),
             ),
           ),
           const SizedBox(height: 14),
           NsPressable(
             onTap: onTap,
-            color: AppColors.surface,
-            borderColor: AppColors.forest,
-            shadowColor: AppColors.forest.withValues(alpha: 0.22),
+            color: actionFill,
+            borderColor: actionBorder,
+            shadowColor: isDark
+                ? Colors.black.withValues(alpha: 0.5)
+                : AppColors.forest.withValues(alpha: 0.22),
             radius: 14,
             depth: 3,
-            child: const SizedBox(
+            child: SizedBox(
               height: 44,
               child: Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.add_a_photo_rounded,
-                      size: 17,
-                      color: AppColors.forest,
-                    ),
-                    SizedBox(width: 8),
+                    Icon(Icons.add_a_photo_rounded, size: 17, color: actionInk),
+                    const SizedBox(width: 8),
                     Text(
                       'Report an issue',
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.forest,
+                        color: actionInk,
                       ),
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Icon(
                       Icons.arrow_forward_rounded,
                       size: 17,
-                      color: AppColors.forest,
+                      color: actionInk,
                     ),
                   ],
                 ),
@@ -596,15 +620,17 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w900,
-              color: AppColors.forest,
+              color: tokens.heading,
               letterSpacing: -0.4,
             ),
           ),
@@ -619,10 +645,10 @@ class _SectionTitle extends StatelessWidget {
             ),
             child: Text(
               action!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w900,
-                color: AppColors.primaryDeep,
+                color: tokens.accentText,
               ),
             ),
           ),
@@ -678,6 +704,9 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -686,9 +715,9 @@ class _CategoryTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: tokens.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.borderStrong, width: 1.5),
+            border: Border.all(color: tokens.border, width: 1.5),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -697,21 +726,27 @@ class _CategoryTile extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: tint.withValues(alpha: 0.16),
+                  color: tint.withValues(alpha: isDark ? 0.22 : 0.16),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: tint.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: tint.withValues(alpha: isDark ? 0.55 : 0.4),
+                  ),
                 ),
-                child: Icon(icon, size: 19, color: AppColors.forest),
+                child: Icon(
+                  icon,
+                  size: 19,
+                  color: isDark ? tokens.heading : AppColors.forest,
+                ),
               ),
               const SizedBox(height: 8),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w900,
-                    color: AppColors.ink,
+                    color: tokens.ink,
                   ),
                 ),
               ),
@@ -791,6 +826,8 @@ class _ReportRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -799,9 +836,9 @@ class _ReportRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: tokens.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.borderStrong, width: 1.5),
+            border: Border.all(color: tokens.border, width: 1.5),
           ),
           child: Row(
             children: [
@@ -809,11 +846,11 @@ class _ReportRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceSoft,
+                  color: tokens.surfaceSoft,
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: tokens.border),
                 ),
-                child: Icon(icon, size: 19, color: AppColors.forest),
+                child: Icon(icon, size: 19, color: tokens.heading),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -824,10 +861,10 @@ class _ReportRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
+                        color: tokens.ink,
                         letterSpacing: -0.2,
                       ),
                     ),
@@ -836,10 +873,10 @@ class _ReportRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.muted,
+                        color: tokens.muted,
                       ),
                     ),
                   ],
@@ -868,6 +905,8 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -877,14 +916,14 @@ class _RoundIconButton extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: tokens.surface,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.borderStrong, width: 1.5),
+            border: Border.all(color: tokens.border, width: 1.5),
           ),
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Icon(icon, size: 19, color: AppColors.forest),
+              Icon(icon, size: 19, color: tokens.heading),
               if (showDot)
                 Positioned(
                   top: 9,
@@ -893,9 +932,9 @@ class _RoundIconButton extends StatelessWidget {
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                      color: AppColors.error,
+                      color: tokens.errorBorder,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.surface, width: 1.4),
+                      border: Border.all(color: tokens.surface, width: 1.4),
                     ),
                   ),
                 ),
@@ -915,6 +954,9 @@ class _AvatarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -925,16 +967,19 @@ class _AvatarButton extends StatelessWidget {
           height: 40,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: AppColors.forest,
+            color: isDark ? tokens.mint : AppColors.forest,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.primaryLight, width: 2),
+            border: Border.all(
+              color: isDark ? AppColors.primary : AppColors.primaryLight,
+              width: 2,
+            ),
           ),
           child: Text(
             initials,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: isDark ? tokens.accentText : Colors.white,
               letterSpacing: 0.3,
             ),
           ),
@@ -952,17 +997,31 @@ class _BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          top: BorderSide(color: AppColors.borderStrong, width: 1.5),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Floating plate instead of a flat edge-to-edge strip: it picks up the
+    // login screen's rounded, chunky surfaces and lifts off the dark page.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: tokens.border, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : tokens.shadow,
+                offset: const Offset(0, 4),
+                blurRadius: 0,
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(6),
           child: Row(
             children: [
               _NavItem(
@@ -1017,7 +1076,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.primaryDeep : AppColors.muted;
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = active ? tokens.accentText : tokens.muted;
 
     return Expanded(
       child: Semantics(
@@ -1028,9 +1089,9 @@ class _NavItem extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1038,12 +1099,20 @@ class _NavItem extends StatelessWidget {
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOut,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
+                      horizontal: 17,
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: active ? AppColors.mint : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                      color: active ? tokens.mint : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: active
+                            ? AppColors.primary.withValues(
+                                alpha: isDark ? 0.65 : 0.4,
+                              )
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
                     ),
                     child: Icon(
                       active ? (activeIcon ?? icon) : icon,
@@ -1095,6 +1164,9 @@ class _AccountSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SafeArea(
       top: false,
       child: Padding(
@@ -1110,16 +1182,21 @@ class _AccountSheet extends StatelessWidget {
                   height: 50,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.forest,
+                    color: isDark ? tokens.mint : AppColors.forest,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primaryLight, width: 2),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.primary
+                          : AppColors.primaryLight,
+                      width: 2,
+                    ),
                   ),
                   child: Text(
                     initials,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: isDark ? tokens.accentText : Colors.white,
                     ),
                   ),
                 ),
@@ -1132,10 +1209,10 @@ class _AccountSheet extends StatelessWidget {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.forest,
+                          color: tokens.heading,
                           letterSpacing: -0.4,
                         ),
                       ),
@@ -1144,10 +1221,10 @@ class _AccountSheet extends StatelessWidget {
                         email,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.muted,
+                          color: tokens.muted,
                         ),
                       ),
                     ],
@@ -1159,7 +1236,9 @@ class _AccountSheet extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             NsOutlineButton(
-              label: checkingForUpdate ? 'Checking for updates...' : 'Check for updates',
+              label: checkingForUpdate
+                  ? 'Checking for updates...'
+                  : 'Check for updates',
               icon: Icons.system_update_rounded,
               onPressed: checkingForUpdate ? null : onCheckForUpdates,
             ),
@@ -1182,10 +1261,10 @@ class _AccountSheet extends StatelessWidget {
               Center(
                 child: Text(
                   'Version $version',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.muted,
+                    color: tokens.muted,
                   ),
                 ),
               ),
@@ -1207,8 +1286,10 @@ class _ConfirmWardDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: tokens.surface,
       surfaceTintColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -1223,39 +1304,39 @@ class _ConfirmWardDialog extends StatelessWidget {
                 width: 58,
                 height: 58,
                 decoration: BoxDecoration(
-                  color: AppColors.mint,
+                  color: tokens.mint,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: AppColors.primary.withValues(alpha: 0.4),
                     width: 1.5,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.location_on_rounded,
                   size: 28,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                 ),
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'Are you from',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
             const SizedBox(height: 3),
             Text(
               location.label,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 24,
                 height: 1.1,
                 fontWeight: FontWeight.w900,
-                color: AppColors.forest,
+                color: tokens.heading,
                 letterSpacing: -0.7,
               ),
             ),
@@ -1263,14 +1344,14 @@ class _ConfirmWardDialog extends StatelessWidget {
             Text(
               location.municipality,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               "We used your phone's location. Reports you send will be routed "
               'to this ward office.',
               textAlign: TextAlign.center,
@@ -1278,7 +1359,7 @@ class _ConfirmWardDialog extends StatelessWidget {
                 fontSize: 12.5,
                 height: 1.45,
                 fontWeight: FontWeight.w600,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
             const SizedBox(height: 20),
