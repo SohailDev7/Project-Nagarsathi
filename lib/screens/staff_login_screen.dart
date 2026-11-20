@@ -135,6 +135,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 
   Widget _buildBody() {
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -197,19 +199,19 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.only(top: 1.5),
+              padding: const EdgeInsets.only(top: 1.5),
               child: Icon(
                 Icons.lock_outline_rounded,
                 size: 12,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
-            SizedBox(width: 5),
+            const SizedBox(width: 5),
             Flexible(
               child: Text(
                 'Access is issued by your municipality.',
@@ -218,7 +220,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                   fontSize: 11.5,
                   height: 1.35,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ),

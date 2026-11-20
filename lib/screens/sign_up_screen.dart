@@ -331,6 +331,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildTopBar() {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
         NsBackButton(onPressed: _back),
@@ -342,10 +344,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             children: [
               Text(
                 '${_step + 1} of $_totalSteps',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                   letterSpacing: 0.6,
                 ),
               ),
@@ -361,6 +363,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStep() {
+    final tokens = NsColors.of(context);
+
     if (_step == 0) {
       if (_step == _lastStep) {
         return Form(
@@ -389,10 +393,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 12),
               Text(
                 'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.muted,
-                ),
+                style: TextStyle(fontSize: 12.5, color: tokens.muted),
               ),
             ],
           ),
@@ -502,6 +503,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildActions() {
+    final tokens = NsColors.of(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -528,12 +531,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text(
+              Text(
                 'Already have an account?',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
               TextButton(
@@ -592,11 +595,13 @@ class _PasswordStrength extends StatelessWidget {
   Widget build(BuildContext context) {
     if (password.isEmpty) return const SizedBox.shrink();
 
+    final tokens = NsColors.of(context);
+
     const labels = ['Too short', 'Fair', 'Good', 'Strong'];
     final score = _score;
     final label = score == 0 ? labels[0] : labels[(score - 1).clamp(0, 3)];
     final color = switch (score) {
-      0 => AppColors.error,
+      0 => tokens.errorBorder,
       1 => AppColors.sun,
       2 => AppColors.primaryLight,
       _ => AppColors.primary,
@@ -615,7 +620,7 @@ class _PasswordStrength extends StatelessWidget {
                   height: 5,
                   margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
                   decoration: BoxDecoration(
-                    color: index < filled ? color : AppColors.border,
+                    color: index < filled ? color : tokens.hairline,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -628,7 +633,7 @@ class _PasswordStrength extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: color == AppColors.sun ? AppColors.muted : color,
+              color: color == AppColors.sun ? tokens.muted : color,
               letterSpacing: 0.1,
             ),
           ),
@@ -646,6 +651,8 @@ class _TermsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => onChanged(!accepted),
@@ -660,7 +667,7 @@ class _TermsRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Padding(
               padding: EdgeInsets.only(top: 7),
               child: Text.rich(
@@ -670,7 +677,7 @@ class _TermsRow extends StatelessWidget {
                     TextSpan(
                       text: 'Terms of Service',
                       style: TextStyle(
-                        color: AppColors.primaryDeep,
+                        color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -678,7 +685,7 @@ class _TermsRow extends StatelessWidget {
                     TextSpan(
                       text: 'Privacy Policy',
                       style: TextStyle(
-                        color: AppColors.primaryDeep,
+                        color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -689,7 +696,7 @@ class _TermsRow extends StatelessWidget {
                   fontSize: 12.5,
                   height: 1.5,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ),
@@ -707,22 +714,24 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return NsPressable(
       onTap: onPressed,
-      color: AppColors.surface,
-      borderColor: AppColors.borderStrong,
-      shadowColor: AppColors.shadow,
+      color: tokens.surface,
+      borderColor: tokens.controlBorder,
+      shadowColor: tokens.shadow,
       depth: 3,
       radius: 14,
       expand: false,
       semanticLabel: 'Close',
-      child: const SizedBox(
+      child: SizedBox(
         width: 42,
         height: 42,
         child: Tooltip(
           message: 'Close',
           child: Center(
-            child: Icon(Icons.close_rounded, size: 22, color: AppColors.forest),
+            child: Icon(Icons.close_rounded, size: 22, color: tokens.heading),
           ),
         ),
       ),
