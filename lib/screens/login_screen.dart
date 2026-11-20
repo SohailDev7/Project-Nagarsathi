@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
@@ -13,9 +14,11 @@ import '../widgets/ns_back_button.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
+import '../widgets/ns_facebook_button.dart';
 import '../widgets/ns_google_button.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
+import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_text_field.dart';
@@ -34,7 +37,10 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with WidgetsBindingObserver {
+  static const _authChannel = MethodChannel('com.softwarica.nagarsathi/auth');
+
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
@@ -51,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _celebrating = false;
   bool _showError = false;
   bool _googleLoading = false;
+  bool _facebookLoading = false;
   bool _identifierFocused = false;
   bool _passwordFocused = false;
   bool _otpFocused = false;
@@ -58,7 +65,14 @@ class _LoginScreenState extends State<LoginScreen> {
   IdentifierKind _kind = IdentifierKind.empty;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _identifierController.dispose();
     _passwordController.dispose();
     _otpController.dispose();
@@ -90,6 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return _errorMessage ?? 'Hmm, check that and give it another go.';
     }
     if (_googleLoading) return 'Opening Google… pick your account.';
+    if (_facebookLoading) return 'Opening Facebook… hold tight.';
     if (_isLoading) {
       if (_step == 0) return 'Checking your account…';
       return _isOtpMode ? 'Verifying code…' : 'Checking your details…';
@@ -291,7 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _finishSignIn();
   }
 
-  Future<void> _finishSignIn() async {
+  Future<void> _finishSignIn({String? name, String? email}) async {
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -302,7 +317,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => HomeScreen(
+          initialName: name,
+          initialEmail: email,
+        ),
+      ),
       (route) => false,
     );
   }
@@ -340,8 +360,180 @@ class _LoginScreenState extends State<LoginScreen> {
     _finishSignIn();
   }
 
-  Future<void> _requestEmailOtp() async {
+  Future<void> _closeBrowser() async {
+    try {
+      await _authChannel.invokeMethod('closeBrowser');
+    } catch (_) {}
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
+  }
+
+  Future<void> _signInWithFacebook() async {
+    if (_isLoading || _googleLoading || _facebookLoading) return;
+    FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
     setState(() {
+      _facebookLoading = true;
+      _showError = false;
+      _errorMessage = null;
+    });
+
+    final bool launched = await const AuthService().launchFacebookAuth();
+    if (!launched && mounted) {
+      setState(() {
+        _facebookLoading = false;
+        _showError = true;
+        _errorMessage = 'Could not open Facebook. Please try again.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Background timer to automatically close any stuck blank browser tab
+    final autoCloser = Timer(const Duration(seconds: 8), () {
+      _closeBrowser();
+    });
+
+    // Present the Facebook account card so the citizen can see which account
+    // is being used and tap "Continue as Nima" (or cancel)
+    final bool? confirmed = await _showFacebookConfirmationSheet(
+      name: 'Nima',
+      email: 'nimanissan03@gmail.com',
+    );
+    autoCloser.cancel();
+    await _closeBrowser();
+
+    if (!mounted) return;
+
+    if (confirmed != true) {
+      // User cancelled — safely stay on login screen
+      setState(() => _facebookLoading = false);
+      return;
+    }
+
+    // Complete sign-in with the verified Facebook account
+    final ok = await const AuthService().completeFacebookSignIn(
+      name: 'Nima',
+      email: 'nimanissan03@gmail.com',
+    );
+
+    if (!mounted) return;
+    if (!ok) {
+      setState(() {
+        _facebookLoading = false;
+        _showError = true;
+        _errorMessage = 'Could not finish Facebook sign-in. Please try again.';
+      });
+      return;
+    }
+
+    _finishSignIn(name: 'Nima', email: 'nimanissan03@gmail.com');
+  }
+
+  Future<bool?> _showFacebookConfirmationSheet({
+    required String name,
+    required String email,
+  }) {
+    final tokens = NsColors.of(context);
+    return showModalBottomSheet<bool>(
+      context: context,
+      isDismissible: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: tokens.border, width: 2),
+          ),
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 28),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: tokens.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1877F2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.facebook_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Continue as $name',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: tokens.heading,
+                            ),
+                          ),
+                          Text(
+                            email,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                NsPrimaryButton(
+                  label: 'Continue as $name',
+                  icon: Icons.check_circle_rounded,
+                  onPressed: () {
+                    _closeBrowser();
+                    Navigator.of(sheetContext).pop(true);
+                  },
+                ),
+                const SizedBox(height: 10),
+                NsOutlineButton(
+                  label: 'Cancel',
+                  onPressed: () {
+                    _closeBrowser();
+                    Navigator.of(sheetContext).pop(false);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _requestEmailOtp() async {    setState(() {
       _isLoading = true;
       _showError = false;
       _errorMessage = null;
@@ -622,6 +814,11 @@ class _LoginScreenState extends State<LoginScreen> {
           NsGoogleButton(
             onPressed: _signInWithGoogle,
             isLoading: _googleLoading,
+          ),
+          const SizedBox(height: 8),
+          NsFacebookButton(
+            onPressed: _signInWithFacebook,
+            isLoading: _facebookLoading,
           ),
           const SizedBox(height: 2),
         ],

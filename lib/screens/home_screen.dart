@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/citizen_location.dart';
 import '../services/auth_service.dart';
@@ -25,11 +27,18 @@ import 'settings_screen.dart';
 /// Citizen home. A community reporting feed with the four primary
 /// destinations in a bottom bar; only Home is available for now.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.locationService = const LocationService()});
+  const HomeScreen({
+    super.key,
+    this.locationService = const LocationService(),
+    this.initialName,
+    this.initialEmail,
+  });
 
   /// Overridable for tests so the confirmation flow can run without the
   /// location plugin.
   final LocationService locationService;
+  final String? initialName;
+  final String? initialEmail;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -49,6 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _name = widget.initialName;
+    _email = widget.initialEmail;
     _loadProfile();
     _loadVersion();
     _restoreLocation();
@@ -61,16 +72,54 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProfile() async {
-    if (!AuthService.isConfigured) return;
+    if (!AuthService.isConfigured && widget.initialName == null) return;
     try {
+      String? cachedName;
+      String? cachedEmail;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        cachedName = prefs.getString('cached_display_name');
+        cachedEmail = prefs.getString('cached_email');
+      } catch (_) {}
+
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      final name = user.displayName?.trim();
+      var name = widget.initialName ?? _name ?? cachedName ?? user?.displayName?.trim();
+      var email = widget.initialEmail ?? _email ?? cachedEmail ?? user?.email?.trim();
+
+      if (user != null) {
+        if (name == null || name.isEmpty) {
+          try {
+            await user.reload();
+            name = FirebaseAuth.instance.currentUser?.displayName?.trim();
+          } catch (_) {}
+        }
+
+        if (name == null || name.isEmpty || email == null || email.isEmpty) {
+          try {
+            final doc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get();
+            final data = doc.data();
+            final docName = data?['name'] as String?;
+            if (docName != null && docName.trim().isNotEmpty) {
+              name = docName.trim();
+            }
+            final docEmail = data?['email'] as String?;
+            if (docEmail != null && docEmail.trim().isNotEmpty) {
+              email = docEmail.trim();
+            }
+          } catch (_) {}
+        }
+      }
+
       if (!mounted) return;
-      setState(() {
-        _name = (name == null || name.isEmpty) ? null : name;
-        _email = user.email;
-      });
+      if (name != null && name.isNotEmpty) {
+        setState(() {
+          _name = name;
+          if (email != null && email.isNotEmpty) _email = email;
+        });
+      }
     } catch (_) {
       // The header simply falls back to the friendly greeting.
     }
@@ -205,7 +254,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _initials {
     final name = _name?.trim();
-    if (name == null || name.isEmpty) return 'NS';
+    if (name == null || name.isEmpty || name == 'NagarSathi citizen') {
+      return 'NS';
+    }
     final parts = name.split(RegExp(r'\s+'));
     if (parts.length == 1) return parts.first.characters.first.toUpperCase();
     return (parts.first.characters.first + parts.last.characters.first)
@@ -226,6 +277,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showAccountSheet() async {
     HapticFeedback.selectionClick();
+    await _loadProfile();
+    if (!mounted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final displayName = (_name != null && _name!.trim().isNotEmpty)
+        ? _name!.trim()
+        : (user?.displayName?.trim().isNotEmpty == true
+            ? user!.displayName!.trim()
+            : 'NagarSathi citizen');
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -234,8 +295,8 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (sheetContext) => _AccountSheet(
-        name: _name ?? 'NagarSathi citizen',
-        email: _email ?? 'Offline demo account',
+        name: displayName,
+        email: 'citizen account',
         initials: _initials,
         version: _version,
         onSignOut: () {

@@ -146,8 +146,8 @@ void main() {
 
     await tester.enterText(find.byType(TextFormField).at(0), 'password123');
     await tester.enterText(find.byType(TextFormField).at(1), 'password123');
-    await tester.ensureVisible(find.text('Continue'));
-    await tester.tap(find.text('Continue'));
+    await tester.ensureVisible(find.text('Create account'));
+    await tester.tap(find.text('Create account'));
     await tester.pumpAndSettle();
 
     expect(find.text('Check both passwords and try once more.'), findsNothing);
