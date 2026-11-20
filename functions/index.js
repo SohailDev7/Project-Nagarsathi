@@ -106,6 +106,13 @@ exports.verifyEmailOtp = onCall(
       throw new HttpsError("unauthenticated", "That code is incorrect.");
     }
     await ref.update({ verified: true, verifiedAt: admin.firestore.FieldValue.serverTimestamp() });
-    return { verified: true };
+    let token = null;
+    try {
+      const user = await admin.auth().getUserByEmail(email);
+      token = await admin.auth().createCustomToken(user.uid);
+    } catch (_) {
+      // User might be creating account, so custom token is best-effort.
+    }
+    return { verified: true, token };
   },
 );

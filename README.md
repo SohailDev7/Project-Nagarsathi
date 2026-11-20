@@ -92,7 +92,6 @@ flutter run \
 > package `com.softwarica.nagarsathi.projectnagarsathi` plus your signing
 > SHA-1/SHA-256, and limit the allowed APIs. Purge the old commits separately if
 > you want the string gone from history.
-
 In the Firebase console, enable **Email/Password** and **Phone** under
 Authentication, add the Android app's SHA-1 and SHA-256 fingerprints, and
 create a Cloud Firestore database. Deploy the included rules with
@@ -112,7 +111,6 @@ The document ID must be the Firebase Auth UID for email/password staff. Phone
 OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
 country code. Staff documents are read-only from the app; create and update
 them only from a trusted admin environment.
-
 ### Google sign-in
 
 Across Authentication → Sign-in method, enable **Google**. It opens the built-in

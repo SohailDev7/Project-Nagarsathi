@@ -1,4 +1,4 @@
-﻿import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../services/auth_service.dart';
@@ -10,7 +10,6 @@ import '../widgets/ns_back_button.dart';
 import '../widgets/ns_card.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
@@ -58,13 +57,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 
   bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? false;
-
-  NsMascotMood get _mood {
-    if (_celebrating) return NsMascotMood.celebrate;
-    if (_showError) return NsMascotMood.sad;
-    if (_focused) return NsMascotMood.curious;
-    return NsMascotMood.idle;
-  }
 
   String get _message {
     if (_celebrating) return 'Badge verified. Opening your workspace…';
@@ -324,7 +316,89 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     );
   }
 
+  Widget _buildHero() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        color: AppColors.forest,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.forest.withValues(alpha: 0.28),
+            offset: const Offset(0, 5),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: const Icon(
+              Icons.badge_rounded,
+              size: 24,
+              color: AppColors.primaryLight,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'STAFF PORTAL',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.primaryLight,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Staff sign in',
+                  style: TextStyle(
+                    fontSize: 25,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: Text(
+                    _message,
+                    key: ValueKey(_message),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: _showError
+                          ? const Color(0xFFFFC4BD)
+                          : Colors.white.withValues(alpha: 0.74),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody() {
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -427,17 +501,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         onFocusChange: (focused) =>
                             setState(() => _focused = focused),
                       ),
-                      if (_challenge?.isDemo ?? false) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Demo code: ${StaffAuthService.demoCode}',
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primaryDeep,
-                          ),
-                        ),
-                      ],
                     ],
                     const SizedBox(height: 16),
                     if (_phoneStep == _PhoneStep.phone)
@@ -478,19 +541,19 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.only(top: 1.5),
+              padding: const EdgeInsets.only(top: 1.5),
               child: Icon(
                 Icons.lock_outline_rounded,
                 size: 12,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
-            SizedBox(width: 5),
+            const SizedBox(width: 5),
             Flexible(
               child: Text(
                 'Access is issued by your municipality.',
@@ -499,7 +562,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                   fontSize: 11.5,
                   height: 1.35,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ),
@@ -508,84 +571,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       ],
     );
   }
-
-  Widget _buildMethodTabs() {
-    return Row(
-      children: [
-        Expanded(
-          child: _MethodTab(
-            label: 'Email',
-            icon: Icons.mail_outline_rounded,
-            selected: _method == _StaffMethod.email,
-            enabled: !_isLoading,
-            onTap: () => _switchMethod(_StaffMethod.email),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _MethodTab(
-            label: 'Phone',
-            icon: Icons.phone_iphone_rounded,
-            selected: _method == _StaffMethod.phone,
-            enabled: !_isLoading,
-            onTap: () => _switchMethod(_StaffMethod.phone),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MethodTab extends StatelessWidget {
-  const _MethodTab({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = selected ? AppColors.primaryDeep : AppColors.forest;
-
-    return NsPressable(
-      onTap: enabled ? onTap : null,
-      color: selected ? AppColors.mint : AppColors.surface,
-      borderColor: selected ? AppColors.primaryDeep : AppColors.borderStrong,
-      shadowColor: selected ? AppColors.primaryDark : AppColors.borderStrong,
-      radius: 14,
-      depth: selected ? 3 : 2,
-      semanticLabel: label,
-      child: SizedBox(
-        height: 42,
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 17, color: foreground),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w900,
-                  color: foreground,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
   Widget _buildHero() {
     return Container(
@@ -663,6 +648,83 @@ class _MethodTab extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMethodTabs() {
+    return Row(
+      children: [
+        Expanded(
+          child: _MethodTab(
+            label: 'Email',
+            icon: Icons.mail_outline_rounded,
+            selected: _method == _StaffMethod.email,
+            enabled: !_isLoading,
+            onTap: () => _switchMethod(_StaffMethod.email),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MethodTab(
+            label: 'Phone',
+            icon: Icons.phone_iphone_rounded,
+            selected: _method == _StaffMethod.phone,
+            enabled: !_isLoading,
+            onTap: () => _switchMethod(_StaffMethod.phone),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MethodTab extends StatelessWidget {
+  const _MethodTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.primaryDeep : AppColors.forest;
+
+    return NsPressable(
+      onTap: enabled ? onTap : null,
+      color: selected ? AppColors.mint : AppColors.surface,
+      borderColor: selected ? AppColors.primaryDeep : AppColors.borderStrong,
+      shadowColor: selected ? AppColors.primaryDark : AppColors.borderStrong,
+      radius: 14,
+      depth: selected ? 3 : 2,
+      semanticLabel: label,
+      child: SizedBox(
+        height: 42,
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 17, color: foreground),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w900,
+                  color: foreground,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

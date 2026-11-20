@@ -26,16 +26,14 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  static const _totalSteps = 3;
-  static const _passwordStep = 1;
-  static const _lastStep = 2;
+  static const _totalSteps = 2;
+  static const _lastStep = 1;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  final _otpController = TextEditingController();
 
   final _formKeys = List<GlobalKey<FormState>>.generate(
     _totalSteps,
@@ -59,7 +57,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -72,24 +69,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   (String, String) get _copy => switch (_step) {
     0 => ('Create your account', 'Tell me who you are and where to reach you.'),
-    1 => (
-    'Secure your account',
-    'At least 8 characters. I promise not to peek!',
+    _ => (
+      'Secure your account',
+      'At least 8 characters. I promise not to peek!',
     ),
-    _ => ('Verify your email', 'Enter the 6-digit code sent to your email.'),
   };
 
   String get _stepMessage {
     if (_celebrating) return 'You are all set! Welcome to NagarSathi.';
     if (_showError) {
-      return _errorMessage ?? 'Almost — check that answer and try once more.';
+      return _errorMessage ??
+          (_step == _lastStep
+              ? 'Check both passwords and try once more.'
+              : 'Check your answer and try once more.');
     }
     if (_googleLoading) {
       return 'Opening Google… pick your account.';
     }
-    if (_isLoading) return _step == _lastStep
-        ? 'Verifying your email…'
-        : 'Creating your citizen account…';
+    if (_isLoading) {
+      return 'Creating your citizen account…';
+    }
     return _copy.$2;
   }
 
@@ -97,14 +96,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     FocusScope.of(context).unfocus();
     if (!(_formKeys[_step].currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
-      setState(() => _showError = true);
+      setState(() {
+        _showError = true;
+        _errorMessage = _step == _lastStep
+            ? 'Check both passwords and try once more.'
+            : null;
+      });
       return;
     }
 
-    if (_step == _passwordStep) {
-      _requestOtp();
-      return;
-    }
     if (_step == _lastStep) {
       _createAccount();
       return;
@@ -137,7 +137,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> _createAccount() async {
     FocusScope.of(context).unfocus();
-    if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
+    if (!(_formKeys[_lastStep].currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
       setState(() => _showError = true);
       return;
@@ -158,10 +158,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
-      await const AuthService().verifyEmailOtp(
-        email: _emailController.text,
-        otp: _otpController.text,
-      );
       await const AuthService().createCitizenAccount(
         name: _nameController.text,
         email: _emailController.text,
@@ -181,39 +177,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     if (!mounted) return;
     _finishSignUp();
-  }
-
-  Future<void> _requestOtp() async {
-    if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
-      setState(() => _showError = true);
-      return;
-    }
-    if (!_acceptedTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Accept the terms to continue.')),
-      );
-      return;
-    }
-    setState(() {
-      _isLoading = true;
-      _showError = false;
-      _errorMessage = null;
-    });
-    try {
-      await const AuthService().requestEmailOtp(_emailController.text);
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _step = _lastStep;
-      });
-    } on AuthFailure catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
-    }
   }
 
   Future<void> _signUpWithGoogle() async {
@@ -329,6 +292,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildTopBar() {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
         NsBackButton(onPressed: _back),
@@ -340,10 +305,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             children: [
               Text(
                 '${_step + 1} of $_totalSteps',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                   letterSpacing: 0.6,
                 ),
               ),
@@ -360,43 +325,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Widget _buildStep() {
     if (_step == 0) {
-      if (_step == _lastStep) {
-        return Form(
-          key: _formKeys[_lastStep],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              NsTextField(
-                controller: _otpController,
-                label: 'Email verification code',
-                hint: '6-digit code',
-                icon: Icons.pin_rounded,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                validator: (value) => RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
-                    ? null
-                    : 'Enter the 6-digit code',
-                autofocus: true,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                onChanged: (_) => _clearError(),
-                onFieldSubmitted: (_) => _createAccount(),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
       return Form(
         key: _formKeys[0],
         child: Column(
@@ -456,7 +384,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     return Form(
-      key: _formKeys[_lastStep],
+      key: _formKeys[1],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -500,6 +428,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildActions() {
+    final tokens = NsColors.of(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -526,12 +456,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text(
+              Text(
                 'Already have an account?',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
               TextButton(
@@ -590,13 +520,21 @@ class _PasswordStrength extends StatelessWidget {
   Widget build(BuildContext context) {
     if (password.isEmpty) return const SizedBox.shrink();
 
+    final tokens = NsColors.of(context);
+
     const labels = ['Too short', 'Fair', 'Good', 'Strong'];
     final score = _score;
     final label = score == 0 ? labels[0] : labels[(score - 1).clamp(0, 3)];
-    final color = switch (score) {
-      0 => AppColors.error,
+    final barColor = switch (score) {
+      0 => tokens.errorBorder,
       1 => AppColors.sun,
-      2 => AppColors.primaryLight,
+      2 => tokens.accentBright,
+      _ => AppColors.primary,
+    };
+    final labelColor = switch (score) {
+      0 => tokens.errorBorder,
+      1 => tokens.muted,
+      2 => tokens.accentText,
       _ => AppColors.primary,
     };
     final filled = score == 0 ? 1 : score;
@@ -613,7 +551,7 @@ class _PasswordStrength extends StatelessWidget {
                   height: 5,
                   margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
                   decoration: BoxDecoration(
-                    color: index < filled ? color : AppColors.border,
+                    color: index < filled ? barColor : tokens.hairline,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -626,7 +564,7 @@ class _PasswordStrength extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: color == AppColors.sun ? AppColors.muted : color,
+              color: labelColor,
               letterSpacing: 0.1,
             ),
           ),
@@ -644,6 +582,8 @@ class _TermsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => onChanged(!accepted),
@@ -658,7 +598,7 @@ class _TermsRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Padding(
               padding: EdgeInsets.only(top: 7),
               child: Text.rich(
@@ -668,7 +608,7 @@ class _TermsRow extends StatelessWidget {
                     TextSpan(
                       text: 'Terms of Service',
                       style: TextStyle(
-                        color: AppColors.primaryDeep,
+                        color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -676,7 +616,7 @@ class _TermsRow extends StatelessWidget {
                     TextSpan(
                       text: 'Privacy Policy',
                       style: TextStyle(
-                        color: AppColors.primaryDeep,
+                        color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -687,7 +627,7 @@ class _TermsRow extends StatelessWidget {
                   fontSize: 12.5,
                   height: 1.5,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ),
@@ -705,22 +645,24 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return NsPressable(
       onTap: onPressed,
-      color: AppColors.surface,
-      borderColor: AppColors.borderStrong,
-      shadowColor: AppColors.shadow,
+      color: tokens.surface,
+      borderColor: tokens.controlBorder,
+      shadowColor: tokens.shadow,
       depth: 3,
       radius: 14,
       expand: false,
       semanticLabel: 'Close',
-      child: const SizedBox(
+      child: SizedBox(
         width: 42,
         height: 42,
         child: Tooltip(
           message: 'Close',
           child: Center(
-            child: Icon(Icons.close_rounded, size: 22, color: AppColors.forest),
+            child: Icon(Icons.close_rounded, size: 22, color: tokens.heading),
           ),
         ),
       ),

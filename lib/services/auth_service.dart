@@ -19,10 +19,8 @@ class AuthFailure implements Exception {
 
 /// Citizen authentication backed by Firebase Auth and Cloud Firestore.
 ///
-/// When Firebase has not been configured yet, every call resolves in a short
-/// simulated delay so the existing UI flow stays fully explorable. Once
-/// [FirebaseBootstrap.isReady] is true, real accounts are created and each
-/// citizen gets a `users/{uid}` profile document.
+/// Authentication is available only when Firebase initialization succeeded.
+/// Demo sign-in is intentionally not implemented.
 class AuthService {
   const AuthService();
 
@@ -32,14 +30,23 @@ class AuthService {
 
   Future<void> requestEmailOtp(String email) async {
     if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
+      throw const AuthFailure(
+        'Firebase is not configured for email verification.',
+      );
     }
     try {
       await FirebaseFunctions.instance.httpsCallable('requestEmailOtp').call({
         'email': email.trim(),
       });
     } on FirebaseFunctionsException catch (error) {
-      throw AuthFailure(error.message ?? 'Could not send the verification code.');
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
+      throw AuthFailure(
+        error.message ?? 'Could not send the verification code.',
+      );
     }
   }
 
@@ -48,7 +55,9 @@ class AuthService {
     required String otp,
   }) async {
     if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
+      throw const AuthFailure(
+        'Firebase is not configured for email verification.',
+      );
     }
     try {
       await FirebaseFunctions.instance.httpsCallable('verifyEmailOtp').call({
@@ -56,8 +65,70 @@ class AuthService {
         'otp': otp.trim(),
       });
     } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
       throw AuthFailure(error.message ?? 'Could not verify the code.');
     }
+  }
+
+  /// Verifies an OTP and establishes a Firebase Auth session using the custom
+  /// token returned by the backend.
+  Future<void> signInWithEmailOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final cleanEmail = email.trim();
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Email sign-in is unavailable.',
+      );
+    }
+
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('verifyEmailOtp')
+          .call({'email': cleanEmail, 'otp': otp.trim()});
+      final data = result.data;
+      final token = data is Map ? data['token'] as String? : null;
+      if (token != null && token.isNotEmpty) {
+        final credential = await FirebaseAuth.instance.signInWithCustomToken(
+          token,
+        );
+        final user = credential.user;
+        if (user != null) {
+          await _touchProfile(user, provider: 'email-otp');
+        }
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
+      throw AuthFailure(error.message ?? 'Could not verify the code.');
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    }
+  }
+
+  /// Checks whether an account with [email] exists in the backend.
+  Future<bool> checkEmailExists(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!_looksLikeEmail(cleanEmail)) return false;
+
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Account verification is unavailable.',
+      );
+    }
+
+    // Do not query Firestore here. Anonymous users are intentionally denied
+    // by the Firestore rules, and Firebase Auth will verify the account
+    // when the password or OTP sign-in method is submitted.
+    return true;
   }
 
   /// Optional Web OAuth client ID. When empty on Android, `google_sign_in`
@@ -102,8 +173,7 @@ class AuthService {
 
   /// Stores the confirmed ward on the citizen's profile.
   ///
-  /// Returns `false` in offline demo mode or when the write fails, so the
-  /// caller can keep the location for the session and retry later.
+  /// Returns `false` when Firebase is unavailable or the write fails.
   Future<bool> saveLocation(CitizenLocation location) async {
     if (!isConfigured) return false;
     final user = FirebaseAuth.instance.currentUser;
@@ -127,8 +197,9 @@ class AuthService {
     String? phone,
   }) async {
     if (!isConfigured) {
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return;
+      throw const AuthFailure(
+        'Firebase is not connected. Account creation is unavailable.',
+      );
     }
 
     try {
@@ -154,7 +225,6 @@ class AuthService {
           'email': email.trim(),
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
-          'emailVerifiedByOtp': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -171,8 +241,9 @@ class AuthService {
     required String password,
   }) async {
     if (!isConfigured) {
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return;
+      throw const AuthFailure(
+        'Firebase is not connected. Sign-in is unavailable.',
+      );
     }
 
     final email = identifier.trim();
@@ -189,10 +260,21 @@ class AuthService {
       );
       final user = credential.user;
       if (user != null) {
-        await _touchProfile(user, provider: 'password');
+        await _touchProfile(
+          user,
+          provider: 'password',
+        ).timeout(const Duration(seconds: 3), onTimeout: () {});
       }
     } on FirebaseAuthException catch (error) {
       throw AuthFailure(friendlyMessage(error));
+    } on FirebaseException catch (_) {
+      throw const AuthFailure(
+        'Could not connect to Firebase. Check your internet and try again.',
+      );
+    } catch (_) {
+      throw const AuthFailure(
+        'Sign-in could not finish. Check your connection and try again.',
+      );
     }
   }
 
@@ -202,8 +284,9 @@ class AuthService {
   /// browser-based flow.
   Future<bool> signInWithGoogle() async {
     if (!isConfigured) {
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return true;
+      throw const AuthFailure(
+        'Firebase is not connected. Google sign-in is unavailable.',
+      );
     }
 
     await _ensureGoogleInitialized();
@@ -289,8 +372,9 @@ class AuthService {
 
   Future<void> sendPasswordReset(String identifier) async {
     if (!isConfigured) {
-      await Future<void>.delayed(const Duration(milliseconds: 850));
-      return;
+      throw const AuthFailure(
+        'Firebase is not connected. Password reset is unavailable.',
+      );
     }
 
     final email = identifier.trim();

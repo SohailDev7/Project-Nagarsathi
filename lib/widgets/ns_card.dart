@@ -8,9 +8,9 @@ class NsCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
-    this.color = AppColors.surface,
-    this.borderColor = AppColors.borderStrong,
-    this.shadowColor = AppColors.shadow,
+    this.color,
+    this.borderColor,
+    this.shadowColor,
     this.radius = NsTokens.cardRadius,
     this.depth = NsTokens.cardDepth,
     this.width,
@@ -18,27 +18,38 @@ class NsCard extends StatelessWidget {
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color color;
-  final Color borderColor;
-  final Color shadowColor;
+
+  /// Defaults to [NsColors.surface].
+  final Color? color;
+
+  /// Defaults to [NsColors.border].
+  final Color? borderColor;
+
+  /// Defaults to [NsColors.shadow].
+  final Color? shadowColor;
   final double radius;
   final double depth;
   final double? width;
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Container(
       width: width,
       margin: EdgeInsets.only(bottom: depth),
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? tokens.surface,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: NsTokens.borderWidth),
+        border: Border.all(
+          color: borderColor ?? tokens.border,
+          width: NsTokens.borderWidth,
+        ),
         boxShadow: [
           if (depth > 0)
             BoxShadow(
-              color: shadowColor,
+              color: shadowColor ?? tokens.shadow,
               offset: Offset(0, depth),
               blurRadius: 0,
             ),

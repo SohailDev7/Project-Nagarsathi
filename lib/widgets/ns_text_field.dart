@@ -100,6 +100,9 @@ class _NsTextFieldState extends State<NsTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -110,10 +113,10 @@ class _NsTextFieldState extends State<NsTextField> {
               Flexible(
                 child: Text(
                   widget.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w900,
-                    color: AppColors.forest,
+                    color: tokens.heading,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -133,7 +136,7 @@ class _NsTextFieldState extends State<NsTextField> {
             boxShadow: _focused
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.18),
+                      color: scheme.primary.withValues(alpha: 0.18),
                       spreadRadius: 4,
                       blurRadius: 0,
                     ),
@@ -157,13 +160,13 @@ class _NsTextFieldState extends State<NsTextField> {
             onChanged: widget.onChanged,
             autofocus: widget.autofocus,
             maxLength: widget.maxLength,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: tokens.ink,
               letterSpacing: -0.1,
             ),
-            cursorColor: AppColors.primaryDeep,
+            cursorColor: tokens.accentText,
             cursorWidth: 2.4,
             cursorRadius: const Radius.circular(2),
             decoration: InputDecoration(
@@ -178,8 +181,8 @@ class _NsTextFieldState extends State<NsTextField> {
                         key: ValueKey(widget.icon),
                         size: 20,
                         color: _focused
-                            ? AppColors.primaryDeep
-                            : AppColors.muted,
+                            ? tokens.accentText
+                            : tokens.muted,
                       ),
                     ),
               suffixIcon:
@@ -193,7 +196,7 @@ class _NsTextFieldState extends State<NsTextField> {
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                             size: 20,
-                            color: AppColors.muted,
+                            color: tokens.muted,
                           ),
                           tooltip: _obscured
                               ? 'Show password'
@@ -213,11 +216,11 @@ class _NsTextFieldState extends State<NsTextField> {
             padding: const EdgeInsets.only(left: 4, right: 4, top: 7),
             child: Text(
               widget.helper!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
                 fontWeight: FontWeight.w600,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
             ),
           ),

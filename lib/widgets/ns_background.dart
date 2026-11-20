@@ -14,19 +14,22 @@ class NsBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+
     return Stack(
       fit: StackFit.expand,
       clipBehavior: Clip.hardEdge,
       children: [
         ColoredBox(
-          color: staff ? const Color(0xFFF8FBF0) : AppColors.background,
+          color: staff ? tokens.staffBackground : tokens.background,
         ),
         Positioned(
           top: -190,
           right: -140,
           child: _Glow(
             size: 430,
-            color: AppColors.primary.withValues(alpha: staff ? 0.14 : 0.17),
+            color: scheme.primary.withValues(alpha: staff ? 0.14 : 0.17),
           ),
         ),
         Positioned(
@@ -34,7 +37,7 @@ class NsBackground extends StatelessWidget {
           left: -150,
           child: _Glow(
             size: 400,
-            color: AppColors.primaryLight.withValues(alpha: 0.12),
+            color: tokens.accentBright.withValues(alpha: 0.12),
           ),
         ),
         Positioned.fill(child: child),
