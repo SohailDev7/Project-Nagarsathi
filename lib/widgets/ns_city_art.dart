@@ -44,6 +44,28 @@ class _NsCityArtState extends State<NsCityArt>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Light art keeps the original paper tones; dark art sits just above the
+    // page background with a slightly lighter outline.
+    final palette = isDark
+        ? _CityPalette(
+            fill: const Color(0xFF20332A),
+            line: const Color(0xFF3A5745),
+            sun: scheme.primary,
+            mote: tokens.accentBright,
+            window: tokens.accentBright,
+          )
+        : _CityPalette(
+            fill: const Color(0xFFEDF3EF),
+            line: const Color(0xFFD9E4DD),
+            sun: scheme.primary,
+            mote: scheme.primary,
+            window: scheme.primary,
+          );
+
     return ExcludeSemantics(
       child: SizedBox(
         height: widget.height,
@@ -52,7 +74,10 @@ class _NsCityArtState extends State<NsCityArt>
           animation: _controller,
           builder: (context, _) {
             return CustomPaint(
-              painter: _CityPainter(progress: _controller.value),
+              painter: _CityPainter(
+                progress: _controller.value,
+                palette: palette,
+              ),
             );
           },
         ),
@@ -61,11 +86,43 @@ class _NsCityArtState extends State<NsCityArt>
   }
 }
 
+/// Skyline colours for one theme.
+@immutable
+class _CityPalette {
+  const _CityPalette({
+    required this.fill,
+    required this.line,
+    required this.sun,
+    required this.mote,
+    required this.window,
+  });
+
+  final Color fill;
+  final Color line;
+  final Color sun;
+  final Color mote;
+  final Color window;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _CityPalette &&
+        other.fill == fill &&
+        other.line == line &&
+        other.sun == sun &&
+        other.mote == mote &&
+        other.window == window;
+  }
+
+  @override
+  int get hashCode => Object.hash(fill, line, sun, mote, window);
+}
+
 class _CityPainter extends CustomPainter {
-  const _CityPainter({required this.progress});
+  const _CityPainter({required this.progress, required this.palette});
 
   /// 0 → 1 → 0 over the animation's lifetime.
   final double progress;
+  final _CityPalette palette;
 
   static const _buildings = <(double, double, double)>[
     (0.04, 0.15, 0.42),
@@ -84,11 +141,11 @@ class _CityPainter extends CustomPainter {
 
     final buildingFill = Paint()
       ..style = PaintingStyle.fill
-      ..color = const Color(0xFFEDF3EF);
+      ..color = palette.fill;
     final buildingLine = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0
-      ..color = const Color(0xFFD9E4DD);
+      ..color = palette.line;
 
     final sunCenter = Offset(
       width * 0.8,
@@ -97,7 +154,7 @@ class _CityPainter extends CustomPainter {
     canvas.drawCircle(
       sunCenter,
       14,
-      Paint()..color = AppColors.primary.withValues(alpha: 0.09),
+      Paint()..color = palette.sun.withValues(alpha: 0.09),
     );
     canvas.drawCircle(
       sunCenter,
@@ -105,12 +162,12 @@ class _CityPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.1
-        ..color = AppColors.primary.withValues(alpha: 0.32),
+        ..color = palette.sun.withValues(alpha: 0.32),
     );
 
     // Slow drifting motes above the skyline.
     final drift = (progress - 0.5) * 14;
-    final mote = Paint()..color = AppColors.primary.withValues(alpha: 0.22);
+    final mote = Paint()..color = palette.mote.withValues(alpha: 0.22);
     canvas.drawCircle(
       Offset(width * 0.22 + drift, size.height * 0.18),
       2.6,
@@ -142,7 +199,7 @@ class _CityPainter extends CustomPainter {
       Offset(width, baseY),
       Paint()
         ..strokeWidth = 1.0
-        ..color = const Color(0xFFD9E4DD),
+        ..color = palette.line,
     );
   }
 
@@ -169,7 +226,7 @@ class _CityPainter extends CustomPainter {
             Rect.fromCenter(center: center, width: 4.5, height: 4.5),
             const Radius.circular(1.4),
           ),
-          Paint()..color = AppColors.primary.withValues(alpha: pulse),
+          Paint()..color = palette.window.withValues(alpha: pulse),
         );
       }
     }
@@ -177,6 +234,6 @@ class _CityPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CityPainter oldDelegate) {
-    return oldDelegate.progress != progress;
+    return oldDelegate.progress != progress || oldDelegate.palette != palette;
   }
 }

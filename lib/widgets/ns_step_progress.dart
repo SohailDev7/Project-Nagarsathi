@@ -17,6 +17,8 @@ class NsStepProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
     final fraction = total <= 0 ? 0.0 : ((step + 1) / total).clamp(0.0, 1.0);
 
     return LayoutBuilder(
@@ -24,9 +26,9 @@ class NsStepProgress extends StatelessWidget {
         return Container(
           height: height,
           decoration: BoxDecoration(
-            color: AppColors.surfaceSoft,
+            color: tokens.surfaceSoft,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.borderStrong, width: 2),
+            border: Border.all(color: tokens.border, width: 2),
           ),
           padding: const EdgeInsets.all(2),
           child: ClipRRect(
@@ -46,10 +48,10 @@ class NsStepProgress extends StatelessWidget {
                         heightFactor: 1,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
+                            gradient: LinearGradient(
                               colors: [
-                                AppColors.primary,
-                                AppColors.primaryLight,
+                                scheme.primary,
+                                tokens.accentBright,
                               ],
                             ),
                             borderRadius: BorderRadius.circular(999),

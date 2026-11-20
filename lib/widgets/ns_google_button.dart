@@ -18,13 +18,14 @@ class NsGoogleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     final canTap = !isLoading && onPressed != null;
 
     return NsPressable(
       onTap: canTap ? onPressed : null,
-      color: AppColors.surface,
-      shadowColor: AppColors.shadow,
-      borderColor: AppColors.borderStrong,
+      color: tokens.surface,
+      shadowColor: tokens.shadow,
+      borderColor: tokens.controlBorder,
       radius: NsTokens.radius,
       depth: NsTokens.buttonDepth,
       semanticLabel: label,
@@ -34,13 +35,15 @@ class NsGoogleButton extends StatelessWidget {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 160),
             child: isLoading
-                ? const SizedBox(
-                    key: ValueKey('loader'),
+                ? SizedBox(
+                    key: const ValueKey('loader'),
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.6,
-                      valueColor: AlwaysStoppedAnimation(AppColors.primaryDeep),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        tokens.accentText,
+                      ),
                     ),
                   )
                 : Row(
@@ -59,10 +62,10 @@ class NsGoogleButton extends StatelessWidget {
                           label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15.5,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.forest,
+                            color: tokens.heading,
                             letterSpacing: 0.1,
                           ),
                         ),
@@ -84,22 +87,24 @@ class NsAuthDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Row(
       children: [
-        const Expanded(child: Divider(color: AppColors.borderStrong)),
+        Expanded(child: Divider(color: tokens.border)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w800,
-              color: AppColors.muted,
+              color: tokens.muted,
               letterSpacing: 0.2,
             ),
           ),
         ),
-        const Expanded(child: Divider(color: AppColors.borderStrong)),
+        Expanded(child: Divider(color: tokens.border)),
       ],
     );
   }

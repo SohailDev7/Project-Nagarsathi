@@ -17,9 +17,12 @@ class NsSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.hairline)),
       ),
       child: Row(
         children: [
@@ -42,8 +45,8 @@ class NsSegmentedControl extends StatelessWidget {
                               ? FontWeight.w700
                               : FontWeight.w500,
                           color: index == selectedIndex
-                              ? AppColors.ink
-                              : AppColors.muted,
+                              ? tokens.ink
+                              : tokens.muted,
                           letterSpacing: -0.1,
                         ),
                         child: Text(segments[index]),
@@ -54,7 +57,7 @@ class NsSegmentedControl extends StatelessWidget {
                         curve: Curves.easeOut,
                         height: 2,
                         color: index == selectedIndex
-                            ? AppColors.primary
+                            ? scheme.primary
                             : Colors.transparent,
                       ),
                     ],

@@ -20,6 +20,7 @@ import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
+import 'settings_screen.dart';
 
 /// Citizen home. A community reporting feed with the four primary
 /// destinations in a bottom bar; only Home is available for now.
@@ -245,6 +246,12 @@ class _HomeScreenState extends State<HomeScreen> {
         onCheckForUpdates: () {
           Navigator.of(sheetContext).pop();
           _checkForUpdates();
+        },
+        onOpenSettings: () {
+          Navigator.of(sheetContext).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          );
         },
       ),
     );
@@ -1072,6 +1079,7 @@ class _AccountSheet extends StatelessWidget {
     required this.initials,
     required this.onSignOut,
     required this.onCheckForUpdates,
+    required this.onOpenSettings,
     required this.checkingForUpdate,
     this.version,
   });
@@ -1082,6 +1090,7 @@ class _AccountSheet extends StatelessWidget {
   final String? version;
   final VoidCallback onSignOut;
   final VoidCallback onCheckForUpdates;
+  final VoidCallback onOpenSettings;
   final bool checkingForUpdate;
 
   @override
@@ -1153,6 +1162,13 @@ class _AccountSheet extends StatelessWidget {
               label: checkingForUpdate ? 'Checking for updates...' : 'Check for updates',
               icon: Icons.system_update_rounded,
               onPressed: checkingForUpdate ? null : onCheckForUpdates,
+            ),
+            const SizedBox(height: 12),
+            NsOutlineButton(
+              key: const Key('open-settings'),
+              label: 'Appearance',
+              icon: Icons.palette_outlined,
+              onPressed: onOpenSettings,
             ),
             const SizedBox(height: 12),
             NsOutlineButton(

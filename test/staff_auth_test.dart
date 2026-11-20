@@ -10,6 +10,8 @@ import 'package:projectnagarsathi/utils/validators.dart';
 Future<void> _openStaffPortal(WidgetTester tester) async {
   await tester.pumpWidget(const NagarSathiApp());
   await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Staff portal'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Staff portal'));
   await tester.pumpAndSettle();
 }
@@ -31,11 +33,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The staff entry lives in the pinned top bar, so it never needs scrolling.
+      // The staff entry lives in the bottom section.
       final staffPortal = find.text('Staff portal');
       expect(staffPortal, findsOneWidget);
-      expect(tester.getBottomLeft(staffPortal).dy, lessThan(568));
-
+      await tester.ensureVisible(staffPortal);
+      await tester.pumpAndSettle();
       await tester.tap(staffPortal);
       await tester.pumpAndSettle();
       expect(find.byType(StaffLoginScreen), findsOneWidget);
@@ -219,11 +221,14 @@ void main() {
     await tester.pumpWidget(const NagarSathiApp());
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byType(TextFormField).at(0),
+      find.byType(TextFormField).first,
       'citizen@nagarsathi.app',
     );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(
-      find.byType(TextFormField).at(1),
+      find.byType(TextFormField).first,
       'citizen-password',
     );
     await tester.ensureVisible(find.text('Sign in'));

@@ -16,11 +16,13 @@ class NsBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return NsPressable(
       onTap: onPressed ?? () => Navigator.of(context).maybePop(),
-      color: AppColors.surface,
-      borderColor: AppColors.borderStrong,
-      shadowColor: AppColors.shadow,
+      color: tokens.surface,
+      borderColor: tokens.controlBorder,
+      shadowColor: tokens.shadow,
       depth: 3,
       radius: 14,
       expand: false,
@@ -31,7 +33,7 @@ class NsBackButton extends StatelessWidget {
         height: 42,
         child: Tooltip(
           message: 'Back',
-          child: Center(child: Icon(icon, size: 22, color: AppColors.forest)),
+          child: Center(child: Icon(icon, size: 22, color: tokens.heading)),
         ),
       ),
     );

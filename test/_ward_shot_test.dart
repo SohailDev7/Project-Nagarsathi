@@ -26,12 +26,14 @@ Future<void> _loadFonts() async {
   }
   await loader.load();
 
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'] ?? r'C:\flutter';
   final icons = FontLoader('MaterialIcons')
     ..addFont(
       Future.value(
         ByteData.view(
           File(
-            r'C:\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf',
+            '$flutterRoot/bin/cache/artifacts/material_fonts/'
+            'materialicons-regular.otf',
           ).readAsBytesSync().buffer,
         ),
       ),

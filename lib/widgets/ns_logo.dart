@@ -11,6 +11,9 @@ class NsLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = NsColors.of(context);
+
     return Container(
       width: size,
       height: size + depth,
@@ -19,7 +22,7 @@ class NsLogo extends StatelessWidget {
         boxShadow: [
           if (depth > 0)
             BoxShadow(
-              color: AppColors.primaryDark.withValues(alpha: 0.28),
+              color: tokens.primaryStrong.withValues(alpha: 0.28),
               offset: Offset(0, depth),
               blurRadius: 0,
             ),
@@ -28,10 +31,12 @@ class NsLogo extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(size * 0.035),
         decoration: BoxDecoration(
+          // The mark artwork ships with a white plate, so the sticker frame
+          // stays white in both themes instead of picking up the dark surface.
           color: Colors.white,
           borderRadius: BorderRadius.circular(size * 0.3),
           border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.55),
+            color: scheme.primary.withValues(alpha: 0.55),
             width: 2,
           ),
         ),
@@ -56,6 +61,8 @@ class NsBrand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -71,19 +78,19 @@ class NsBrand extends StatelessWidget {
                 fontSize: compact ? 17 : 18,
                 height: 1.05,
                 fontWeight: FontWeight.w900,
-                color: AppColors.forest,
+                color: tokens.heading,
                 letterSpacing: -0.5,
               ),
             ),
             if (!compact) ...[
               const SizedBox(height: 3),
-              const Text(
+              Text(
                 'YOUR CITY, BY YOUR SIDE',
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: 8,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDeep,
+                  color: tokens.accentText,
                   letterSpacing: 0.5,
                 ),
               ),
