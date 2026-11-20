@@ -28,6 +28,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('EMAIL'), findsOneWidget);
 
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
     // Forgot password flow.
     await tester.ensureVisible(find.text('Forgot password?'));
     await tester.pumpAndSettle();

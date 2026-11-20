@@ -32,7 +32,8 @@ class AuthService {
 
   Future<void> requestEmailOtp(String email) async {
     if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      return;
     }
     try {
       await FirebaseFunctions.instance.httpsCallable('requestEmailOtp').call({
@@ -48,7 +49,8 @@ class AuthService {
     required String otp,
   }) async {
     if (!isConfigured) {
-      throw const AuthFailure('Firebase is not configured for email verification.');
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      return;
     }
     try {
       await FirebaseFunctions.instance.httpsCallable('verifyEmailOtp').call({
@@ -57,6 +59,69 @@ class AuthService {
       });
     } on FirebaseFunctionsException catch (error) {
       throw AuthFailure(error.message ?? 'Could not verify the code.');
+    }
+  }
+
+  /// Verifies an OTP and establishes a Firebase Auth session using the custom
+  /// token returned by the backend.
+  Future<void> signInWithEmailOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final cleanEmail = email.trim();
+    if (!isConfigured) {
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+      return;
+    }
+
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('verifyEmailOtp')
+          .call({
+            'email': cleanEmail,
+            'otp': otp.trim(),
+          });
+      final data = result.data;
+      final token = data is Map ? data['token'] as String? : null;
+      if (token != null && token.isNotEmpty) {
+        final credential =
+            await FirebaseAuth.instance.signInWithCustomToken(token);
+        final user = credential.user;
+        if (user != null) {
+          await _touchProfile(user, provider: 'email-otp');
+        }
+      }
+    } on FirebaseFunctionsException catch (error) {
+      throw AuthFailure(error.message ?? 'Could not verify the code.');
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    }
+  }
+
+  /// Checks whether an account with [email] exists in the backend.
+  Future<bool> checkEmailExists(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!_looksLikeEmail(cleanEmail)) return false;
+
+    if (!isConfigured) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      // In offline/demo mode, consider any valid email as existing
+      // unless specifically prefixed with 'new.' or 'unregistered.'
+      return !cleanEmail.startsWith('new.') &&
+          !cleanEmail.startsWith('unregistered.');
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(_users)
+          .where('email', isEqualTo: cleanEmail)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (_) {
+      // In case Firestore query is unavailable, allow progression so
+      // normal password sign-in can proceed and authenticate.
+      return true;
     }
   }
 

@@ -53,7 +53,7 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
               child: child ?? const SizedBox.shrink(),
             ),
           ),
-          home: const LoginScreen(),
+          home: LoginScreen(themeController: _themeController),
         );
       },
     );
