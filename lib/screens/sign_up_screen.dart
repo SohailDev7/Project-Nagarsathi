@@ -600,10 +600,16 @@ class _PasswordStrength extends StatelessWidget {
     const labels = ['Too short', 'Fair', 'Good', 'Strong'];
     final score = _score;
     final label = score == 0 ? labels[0] : labels[(score - 1).clamp(0, 3)];
-    final color = switch (score) {
+    final barColor = switch (score) {
       0 => tokens.errorBorder,
       1 => AppColors.sun,
-      2 => AppColors.primaryLight,
+      2 => tokens.accentBright,
+      _ => AppColors.primary,
+    };
+    final labelColor = switch (score) {
+      0 => tokens.errorBorder,
+      1 => tokens.muted,
+      2 => tokens.accentText,
       _ => AppColors.primary,
     };
     final filled = score == 0 ? 1 : score;
@@ -620,7 +626,7 @@ class _PasswordStrength extends StatelessWidget {
                   height: 5,
                   margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
                   decoration: BoxDecoration(
-                    color: index < filled ? color : tokens.hairline,
+                    color: index < filled ? barColor : tokens.hairline,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -633,7 +639,7 @@ class _PasswordStrength extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: color == AppColors.sun ? tokens.muted : color,
+              color: labelColor,
               letterSpacing: 0.1,
             ),
           ),
