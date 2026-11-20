@@ -1,0 +1,12 @@
+{
+  "name": "nagarsathi-otp-worker",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:init": "wrangler d1 execute nagarsathi-otp --remote --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.164.0"
+  }
+}
