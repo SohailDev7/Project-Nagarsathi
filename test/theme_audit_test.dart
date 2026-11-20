@@ -125,7 +125,7 @@ Future<void> _reachPasswordStep(WidgetTester tester) async {
   await _fillSignUpDetails(tester);
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
-  expect(find.text('2 of 3'), findsOneWidget);
+  expect(find.text('2 of 2'), findsOneWidget);
 
   await tester.enterText(find.byType(TextFormField).at(0), 'password123');
   await tester.enterText(find.byType(TextFormField).at(1), 'password123');
@@ -194,26 +194,23 @@ void main() {
 
   group('SignUpScreen', () {
     _auditBothModes(
-      'SignUpScreen step 1 of 3',
+      'SignUpScreen step 1 of 2',
       () => const SignUpScreen(),
-      note:
-          'Step 3 (email OTP) is unreachable offline: Firebase is not '
-          'configured. The step-2 branch in _buildStep is also guarded by '
-          '_step == 0, so it can never render.',
+      note: 'Firebase is unavailable; account creation stays disabled.',
     );
     _auditBothModes(
-      'SignUpScreen step 1 of 3 (details filled)',
+      'SignUpScreen step 1 of 2 (details filled)',
       () => const SignUpScreen(),
       interact: _fillSignUpDetails,
     );
     _auditBothModes(
-      'SignUpScreen step 1 of 3 (errors)',
+      'SignUpScreen step 1 of 2 (errors)',
       () => const SignUpScreen(),
       interact: _signUpWithErrors,
       note: 'Validation errors and error borders are visible.',
     );
     _auditBothModes(
-      'SignUpScreen step 2 of 3',
+      'SignUpScreen step 2 of 2',
       () => const SignUpScreen(),
       interact: _reachPasswordStep,
       note: 'Password strength label and terms row are visible.',

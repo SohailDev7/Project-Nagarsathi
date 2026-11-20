@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -210,10 +212,12 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await const AuthService().signIn(
-        identifier: _identifierController.text,
-        password: _passwordController.text,
-      );
+      await const AuthService()
+          .signIn(
+            identifier: _identifierController.text,
+            password: _passwordController.text,
+          )
+          .timeout(const Duration(seconds: 15));
     } on AuthFailure catch (error) {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
@@ -221,6 +225,25 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
         _showError = true;
         _errorMessage = error.message;
+      });
+      return;
+    } on TimeoutException {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage =
+            'Firebase did not respond. Check your internet and try again.';
+      });
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = 'Sign-in could not finish. Please try again.';
       });
       return;
     }

@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../firebase_options.dart';
+
 /// Compile-time Firebase overrides.
 ///
 /// Provide these with `--dart-define` for CI or to keep the Firebase client key
@@ -63,9 +65,9 @@ abstract final class FirebaseBootstrap {
         if (FirebaseConfig.isConfigured) {
           await Firebase.initializeApp(options: FirebaseConfig.options);
         } else {
-          // Reads the local (git-ignored) google-services.json through the
-          // Google Services Gradle plugin.
-          await Firebase.initializeApp();
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
         }
       }
       _ready = Firebase.apps.isNotEmpty;

@@ -73,87 +73,84 @@ void main() {
     expect(find.byType(StaffLoginScreen), findsOneWidget);
   });
 
-  testWidgets('email not found shows inline banner with Sign up link', (
+  testWidgets('email account check is blocked when Firebase is unavailable', (
     tester,
   ) async {
     disableAnimations(tester);
     await tester.pumpWidget(const NagarSathiApp());
     await tester.pumpAndSettle();
 
-    // In demo mode, 'new.' prefix simulates unregistered account
     await tester.enterText(
       find.byType(TextFormField).first,
       'new.citizen@nagarsathi.app',
     );
     await tester.tap(find.text('Continue'));
-    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    // Verify inline banner
-    expect(find.text('No account found with this email.'), findsOneWidget);
-    final signUpLink = find.widgetWithText(TextButton, 'Sign up').first;
-    expect(signUpLink, findsOneWidget);
-
-    await tester.tap(signUpLink);
-    await tester.pumpAndSettle();
-    expect(find.byType(SignUpScreen), findsOneWidget);
+    expect(
+      find.text(
+        'Firebase is not connected. Account verification is unavailable.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Password'), findsNothing);
+    expect(find.text('Continue'), findsOneWidget);
   });
 
-  testWidgets(
-    'stepped flow slides to password and supports try another way with OTP',
-    (tester) async {
-      disableAnimations(tester);
-      await tester.pumpWidget(const NagarSathiApp());
-      await tester.pumpAndSettle();
+  testWidgets('stepped sign-in does not bypass Firebase', (tester) async {
+    disableAnimations(tester);
+    await tester.pumpWidget(const NagarSathiApp());
+    await tester.pumpAndSettle();
 
-      // Step 0: only identifier field
-      expect(find.byType(TextFormField), findsOneWidget);
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'citizen@nagarsathi.app',
-      );
-      await tester.tap(find.text('Continue'));
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
+    // Step 0: only identifier field
+    expect(find.byType(TextFormField), findsOneWidget);
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'citizen@nagarsathi.app',
+    );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
 
-      // Step 1: Password field and Try another way button
-      expect(find.text('citizen@nagarsathi.app'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Try another way'), findsOneWidget);
+    expect(
+      find.text(
+        'Firebase is not connected. Account verification is unavailable.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Password'), findsNothing);
+    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Email or phone'), findsOneWidget);
+  });
 
-      // Open Try another way bottom sheet
-      await tester.tap(find.text('Try another way'));
-      await tester.pumpAndSettle();
+  testWidgets('sign-up password Continue validates the password form', (
+    tester,
+  ) async {
+    disableAnimations(tester);
+    await tester.pumpWidget(const NagarSathiApp());
+    await tester.pumpAndSettle();
 
-      expect(find.text('Sign in another way'), findsOneWidget);
-      expect(find.text('Use password'), findsOneWidget);
-      expect(find.text('Get OTP via email'), findsOneWidget);
+    await tester.ensureVisible(find.text('Sign up'));
+    await tester.tap(find.text('Sign up'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SignUpScreen), findsOneWidget);
 
-      // Select Get OTP via email
-      await tester.tap(find.text('Get OTP via email'));
-      await tester.pump(const Duration(milliseconds: 700));
-      await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).at(0), 'Sita Sharma');
+    await tester.enterText(
+      find.byType(TextFormField).at(1),
+      'citizen@nagarsathi.app',
+    );
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Secure your account'), findsOneWidget);
 
-      // Now on OTP input mode
-      expect(find.text('Verification code'), findsOneWidget);
-      expect(find.text('Verify & sign in'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).at(0), 'password123');
+    await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
 
-      // Try another way to switch back to password
-      await tester.tap(find.text('Try another way'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Use password'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Sign in'), findsOneWidget);
-
-      // Back to email step via Change button
-      await tester.tap(find.text('Change'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Continue'), findsOneWidget);
-      expect(find.text('Email or phone'), findsOneWidget);
-    },
-  );
+    expect(find.text('Check both passwords and try once more.'), findsNothing);
+    expect(find.text('Accept the terms to continue.'), findsOneWidget);
+  });
 }

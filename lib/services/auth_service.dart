@@ -39,6 +39,11 @@ class AuthService {
         'email': email.trim(),
       });
     } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
       throw AuthFailure(
         error.message ?? 'Could not send the verification code.',
       );
@@ -60,6 +65,11 @@ class AuthService {
         'otp': otp.trim(),
       });
     } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
       throw AuthFailure(error.message ?? 'Could not verify the code.');
     }
   }
@@ -93,6 +103,11 @@ class AuthService {
         }
       }
     } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
+        throw const AuthFailure(
+          'Email OTP service is currently unavailable. Please sign in with your password.',
+        );
+      }
       throw AuthFailure(error.message ?? 'Could not verify the code.');
     } on FirebaseAuthException catch (error) {
       throw AuthFailure(friendlyMessage(error));
@@ -110,18 +125,10 @@ class AuthService {
       );
     }
 
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection(_users)
-          .where('email', isEqualTo: cleanEmail)
-          .limit(1)
-          .get();
-      return snapshot.docs.isNotEmpty;
-    } catch (_) {
-      throw const AuthFailure(
-        'Could not verify your account. Check your connection and try again.',
-      );
-    }
+    // Do not query Firestore here. Anonymous users are intentionally denied
+    // by the Firestore rules, and Firebase Auth will verify the account
+    // when the password or OTP sign-in method is submitted.
+    return true;
   }
 
   /// Optional Web OAuth client ID. When empty on Android, `google_sign_in`
@@ -218,7 +225,6 @@ class AuthService {
           'email': email.trim(),
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
-          'emailVerifiedByOtp': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -254,10 +260,21 @@ class AuthService {
       );
       final user = credential.user;
       if (user != null) {
-        await _touchProfile(user, provider: 'password');
+        await _touchProfile(
+          user,
+          provider: 'password',
+        ).timeout(const Duration(seconds: 3), onTimeout: () {});
       }
     } on FirebaseAuthException catch (error) {
       throw AuthFailure(friendlyMessage(error));
+    } on FirebaseException catch (_) {
+      throw const AuthFailure(
+        'Could not connect to Firebase. Check your internet and try again.',
+      );
+    } catch (_) {
+      throw const AuthFailure(
+        'Sign-in could not finish. Check your connection and try again.',
+      );
     }
   }
 

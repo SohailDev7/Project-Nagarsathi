@@ -62,7 +62,7 @@ void main() {
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
-    expect(find.text('1 of 3'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
 
     // Details are validated together, so the first tap reports both errors.
     await tester.tap(find.text('Continue'));
@@ -78,7 +78,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('2 of 3'), findsOneWidget);
+    expect(find.text('2 of 2'), findsOneWidget);
 
     final passwordFields = find.byType(TextFormField);
     expect(passwordFields, findsNWidgets(2));
@@ -91,10 +91,9 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
 
-    // The wizard now has a third, email-OTP step. Requesting that code needs
-    // Firebase, which widget tests do not initialise, so the journey stops
-    // here instead of reaching the home screen.
-    expect(find.text('2 of 3'), findsOneWidget);
-    expect(find.text('Continue'), findsOneWidget);
+    // Firebase is not initialised in unit widget tests, so creating the
+    // account stops before reaching the home screen.
+    expect(find.text('2 of 2'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
   });
 }
