@@ -21,15 +21,33 @@ import '../firebase_options.dart';
 class FirebaseConfig {
   const FirebaseConfig._();
 
-  static const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const appId = String.fromEnvironment('FIREBASE_APP_ID');
+  static const apiKey = String.fromEnvironment(
+    'FIREBASE_API_KEY',
+    defaultValue: 'AIzaSyDOkcMhw7gpQWvHhbecJsOtvp-ToEYXwxU',
+  );
+  static const appId = String.fromEnvironment(
+    'FIREBASE_APP_ID',
+    defaultValue: '1:184279715658:android:1bc1acf8500e07e07bfbb3',
+  );
   static const messagingSenderId = String.fromEnvironment(
     'FIREBASE_MESSAGING_SENDER_ID',
+    defaultValue: '184279715658',
   );
-  static const projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
-  static const authDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN');
+  static const projectId = String.fromEnvironment(
+    'FIREBASE_PROJECT_ID',
+    defaultValue: 'nagar-sathi-23080',
+  );
+  static const authDomain = String.fromEnvironment(
+    'FIREBASE_AUTH_DOMAIN',
+    defaultValue: 'nagar-sathi-23080.firebaseapp.com',
+  );
   static const storageBucket = String.fromEnvironment(
     'FIREBASE_STORAGE_BUCKET',
+    defaultValue: 'nagar-sathi-23080.firebasestorage.app',
+  );
+  static const facebookAppId = String.fromEnvironment(
+    'FACEBOOK_APP_ID',
+    defaultValue: '1195903589782570',
   );
 
   /// True when enough values exist to build [options] by hand.

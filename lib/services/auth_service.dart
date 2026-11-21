@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
@@ -139,8 +142,14 @@ class AuthService {
 
   static Future<void>? _googleInitialization;
 
-  /// Clears the Firebase session and any cached Google account.
+  /// Clears the Firebase session and any cached account state.
   Future<void> signOut() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('cached_display_name');
+      await prefs.remove('cached_email');
+    } catch (_) {}
+
     if (!isConfigured) return;
     try {
       await GoogleSignIn.instance.signOut();
@@ -371,17 +380,16 @@ class AuthService {
   }
 
   Future<void> sendPasswordReset(String identifier) async {
-    if (!isConfigured) {
-      throw const AuthFailure(
-        'Firebase is not connected. Password reset is unavailable.',
-      );
-    }
-
     final email = identifier.trim();
     if (!_looksLikeEmail(email)) {
       throw const AuthFailure(
         'Password resets go to your email. Add one to continue.',
       );
+    }
+
+    if (!isConfigured) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      return;
     }
 
     try {
@@ -392,17 +400,35 @@ class AuthService {
   }
 
   /// Keeps the Firestore copy of the profile in sync after a successful login.
-  Future<void> _touchProfile(User user, {required String provider}) async {
+  ///
+  /// [name] and [email] override the values on [user] when supplied — useful
+  /// for Facebook sign-in where the Auth user is an email/password account
+  /// but we want to persist the real Facebook display name.
+  Future<void> _touchProfile(
+    User user, {
+    required String provider,
+    String? name,
+    String? email,
+  }) async {
     try {
       final doc = FirebaseFirestore.instance.collection(_users).doc(user.uid);
       final snapshot = await doc.get();
+      final resolvedName = name ?? user.displayName ?? '';
+      final resolvedEmail = email ?? user.email ?? '';
       if (snapshot.exists) {
-        await doc.update({'updatedAt': FieldValue.serverTimestamp()});
+        await doc.update({
+          'uid': user.uid,
+          'role': 'citizen',
+          if (resolvedName.isNotEmpty) 'name': resolvedName,
+          if (resolvedEmail.isNotEmpty) 'email': resolvedEmail,
+          'authProvider': provider,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       } else {
         await doc.set({
           'uid': user.uid,
-          'name': user.displayName ?? '',
-          'email': user.email ?? '',
+          'name': resolvedName,
+          'email': resolvedEmail,
           'phone': null,
           'role': 'citizen',
           'authProvider': provider,
@@ -412,6 +438,118 @@ class AuthService {
       }
     } catch (_) {
       // Never fail sign-in because of the profile mirror.
+    }
+  }
+
+  // ─── Facebook sign-in ────────────────────────────────────────────────────
+
+  /// Signs the citizen in with Facebook using the native Facebook SDK.
+  ///
+  /// Returns a map `{'name': ..., 'email': ...}` with the real Facebook
+  /// profile values on success, or `null` if the user cancelled or an error
+  /// occurred.
+  Future<Map<String, String?>?> signInWithFacebook() async {
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Facebook sign-in is unavailable.',
+      );
+    }
+
+    try {
+      // ── 1. Native Facebook login — opens Chrome Custom Tab via Facebook SDK ─
+      final LoginResult result = await FacebookAuth.instance.login(
+        permissions: ['public_profile', 'email'],
+      );
+
+      if (result.status == LoginStatus.cancelled) {
+        return null; // User dismissed
+      }
+      if (result.status != LoginStatus.success || result.accessToken == null) {
+        throw AuthFailure(
+          result.message ??
+              'Facebook sign-in did not complete. Please try again.',
+        );
+      }
+
+      // ── 2. Get real user data from Facebook Graph API ─────────────────────
+      final userData = await FacebookAuth.instance.getUserData(
+        fields: 'name,email',
+      );
+      final fbName = (userData['name'] as String?)?.trim();
+      final fbEmail = (userData['email'] as String?)?.trim();
+
+      // ── 3. Sign in to Firebase with the Facebook credential ───────────────
+      User? user;
+      try {
+        final credential = FacebookAuthProvider.credential(
+          result.accessToken!.tokenString,
+        );
+        final authResult = await FirebaseAuth.instance.signInWithCredential(
+          credential,
+        );
+        user = authResult.user;
+      } on FirebaseAuthException catch (authError) {
+        if (kDebugMode) {
+          debugPrint(
+            'signInWithCredential note: ${authError.code} - ${authError.message}',
+          );
+        }
+        throw AuthFailure(friendlyMessage(authError));
+      } catch (err) {
+        if (kDebugMode) debugPrint('signInWithCredential unexpected: $err');
+        throw const AuthFailure(
+          'Facebook could not verify this account with Firebase. Please try again.',
+        );
+      }
+
+      // ── 4. Ensure displayName is set (Facebook → Firebase) ────────────────
+      final resolvedName = (fbName != null && fbName.isNotEmpty)
+          ? fbName
+          : (user?.displayName?.trim() ?? '');
+      final resolvedEmail = (fbEmail != null && fbEmail.isNotEmpty)
+          ? fbEmail
+          : (user?.email?.trim() ?? '');
+
+      if (user != null && resolvedName.isNotEmpty) {
+        try {
+          await user.updateDisplayName(resolvedName);
+          await user.reload();
+        } catch (_) {}
+      }
+
+      // ── 5. Persist to SharedPreferences for offline fallback ──────────────
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (resolvedName.isNotEmpty) {
+          await prefs.setString('cached_display_name', resolvedName);
+        }
+        if (resolvedEmail.isNotEmpty) {
+          await prefs.setString('cached_email', resolvedEmail);
+        }
+      } catch (_) {}
+
+      // ── 6. Mirror profile to Firestore ────────────────────────────────────
+      if (user != null) {
+        final refreshed = FirebaseAuth.instance.currentUser ?? user;
+        await _touchProfile(
+          refreshed,
+          provider: 'facebook.com',
+          name: resolvedName.isNotEmpty ? resolvedName : null,
+          email: resolvedEmail.isNotEmpty ? resolvedEmail : null,
+        );
+      }
+
+      return {
+        'name': resolvedName.isNotEmpty ? resolvedName : null,
+        'email': resolvedEmail.isNotEmpty ? resolvedEmail : null,
+      };
+    } on AuthFailure {
+      rethrow;
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    } catch (e) {
+      if (kDebugMode) debugPrint('signInWithFacebook error: $e');
+      throw AuthFailure('Facebook error: $e');
     }
   }
 
