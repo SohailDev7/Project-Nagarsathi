@@ -44,8 +44,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   bool _isLoading = false;
   bool _celebrating = false;
   bool _showError = false;
-  bool _focused = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
@@ -58,35 +56,10 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? false;
 
-  String get _message {
-    if (_celebrating) return 'Badge verified. Opening your workspace…';
-    if (_showError) {
-      return _errorMessage ??
-          (_method == _StaffMethod.phone
-              ? 'Check your number and code.'
-              : 'Check your work email and password.');
-    }
-    if (_isLoading) {
-      if (_method == _StaffMethod.phone) {
-        return _phoneStep == _PhoneStep.phone
-            ? 'Sending your code…'
-            : 'Verifying your code…';
-      }
-      return 'Verifying your staff access…';
-    }
-    if (_focused) {
-      return _method == _StaffMethod.phone
-          ? 'Use the number registered with your ward office.'
-          : 'Use the email issued by your municipality.';
-    }
-    return "Staff badge ready. Let's get to work!";
-  }
-
   void _clearError() {
     if (!_showError) return;
     setState(() {
       _showError = false;
-      _errorMessage = null;
     });
   }
 
@@ -95,7 +68,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
-      _errorMessage = null;
     });
   }
 
@@ -105,7 +77,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
-      _errorMessage = message;
     });
   }
 
@@ -118,7 +89,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _challenge = null;
       _otpController.clear();
       _showError = false;
-      _errorMessage = null;
     });
   }
 
@@ -135,7 +105,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
-      _errorMessage = null;
     });
 
     try {
@@ -170,7 +139,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
-      _errorMessage = null;
     });
 
     try {
@@ -213,7 +181,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
-      _errorMessage = null;
     });
 
     try {
@@ -269,7 +236,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _challenge = null;
       _otpController.clear();
       _showError = false;
-      _errorMessage = null;
     });
   }
 
@@ -322,7 +288,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHero(),
         const SizedBox(height: 16),
         NsCard(
           padding: const EdgeInsets.all(16),
@@ -349,8 +314,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         FilteringTextInputFormatter.deny(RegExp(r'\s')),
                       ],
                       onChanged: (_) => _clearError(),
-                      onFocusChange: (focused) =>
-                          setState(() => _focused = focused),
                     ),
                     const SizedBox(height: 13),
                     NsTextField(
@@ -364,8 +327,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       autofillHints: const [AutofillHints.password],
                       onFieldSubmitted: (_) => _signIn(),
                       onChanged: (_) => _clearError(),
-                      onFocusChange: (focused) =>
-                          setState(() => _focused = focused),
                     ),
                     const SizedBox(height: 16),
                     NsPrimaryButton(
@@ -396,8 +357,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       helper: 'Nepali mobile numbers only (+977).',
                       onFieldSubmitted: (_) => _sendCode(),
                       onChanged: (_) => _clearError(),
-                      onFocusChange: (focused) =>
-                          setState(() => _focused = focused),
                     ),
                     if (_phoneStep == _PhoneStep.code) ...[
                       const SizedBox(height: 13),
@@ -418,8 +377,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         ],
                         onFieldSubmitted: (_) => _verifyCode(),
                         onChanged: (_) => _clearError(),
-                        onFocusChange: (focused) =>
-                            setState(() => _focused = focused),
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -489,86 +446,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildHero() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
-      decoration: BoxDecoration(
-        color: AppColors.forest,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.forest.withValues(alpha: 0.28),
-            offset: const Offset(0, 5),
-            blurRadius: 0,
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-            ),
-            child: const Icon(
-              Icons.badge_rounded,
-              size: 24,
-              color: AppColors.primaryLight,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'STAFF PORTAL',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primaryLight,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Staff sign in',
-                  style: TextStyle(
-                    fontSize: 25,
-                    height: 1.05,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.8,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: Text(
-                    _message,
-                    key: ValueKey(_message),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
-                      color: _showError
-                          ? const Color(0xFFFFC4BD)
-                          : Colors.white.withValues(alpha: 0.74),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
