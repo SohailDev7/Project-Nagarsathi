@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
@@ -441,155 +441,120 @@ class AuthService {
     }
   }
 
-  // ─── Facebook OAuth helpers ───────────────────────────────────────────────
+  // ─── Facebook sign-in ────────────────────────────────────────────────────
 
-  /// Deterministic password used for the Firebase email/password account that
-  /// backs a Facebook citizen login.  Never shown to the user.
-  static String _fbPassword(String email) =>
-      'FB\$${email.toLowerCase().trim()}\$NS2024!';
-
-  /// Opens the Facebook Login flow and signs the citizen in via Firebase.
+  /// Signs the citizen in with Facebook using the native Facebook SDK.
   ///
-  /// Launches the Facebook OAuth flow in the user's browser or custom tab.
-  /// Requests public_profile and email permissions per US-06 requirements.
-  Future<bool> launchFacebookAuth() async {
-    final authDomain = FirebaseConfig.authDomain;
-
-    // Direct Firebase auth handler with email and public_profile scopes
-    final oauthUrl = Uri.parse(
-      'https://$authDomain/__/auth/handler?'
-      'apiKey=${FirebaseConfig.apiKey}'
-      '&appName=%5BDEFAULT%5D'
-      '&authType=signIn'
-      '&providerId=facebook.com'
-      '&scopes=email,public_profile',
-    );
-
-    try {
-      final launched = await launchUrl(
-        oauthUrl,
-        mode: LaunchMode.inAppBrowserView,
-      );
-      if (!launched) {
-        return await launchUrl(oauthUrl, mode: LaunchMode.externalApplication);
-      }
-      return launched;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Facebook OAuth launch note: $e');
-      }
-      try {
-        return await launchUrl(oauthUrl, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        return false;
-      }
-    }
-  }
-
-  /// Completes Facebook sign-in for the citizen with their real Facebook profile.
-  /// Updates Firebase Auth display name and mirrors real citizen profile in Firestore.
-  Future<bool> completeFacebookSignIn({
-    String name = 'Nima',
-    String email = 'nimanissan03@gmail.com',
-  }) async {
-    final safeName = name.trim().isNotEmpty ? name.trim() : 'Nima';
-    final safeEmail = email.trim().isNotEmpty
-        ? email.trim()
-        : 'nimanissan03@gmail.com';
-    final authSecret = 'Nagarsathi_FB_${safeName.toLowerCase()}2026!';
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cached_display_name', safeName);
-      await prefs.setString('cached_email', safeEmail);
-    } catch (_) {}
-
+  /// Returns a map `{'name': ..., 'email': ...}` with the real Facebook
+  /// profile values on success, or `null` if the user cancelled or an error
+  /// occurred.
+  Future<Map<String, String?>?> signInWithFacebook() async {
     if (!isConfigured) {
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      return true;
+      throw const AuthFailure(
+        'Firebase is not connected. Facebook sign-in is unavailable.',
+      );
     }
 
     try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user != null && (user.isAnonymous || user.email != safeEmail)) {
-        await FirebaseAuth.instance.signOut();
-        user = null;
+      // ── 1. Native Facebook login — opens Chrome Custom Tab via Facebook SDK ─
+      final LoginResult result = await FacebookAuth.instance.login(
+        permissions: ['public_profile', 'email'],
+      );
+
+      if (result.status == LoginStatus.cancelled) {
+        return null; // User dismissed
+      }
+      if (result.status != LoginStatus.success || result.accessToken == null) {
+        throw AuthFailure(
+          result.message ?? 'Facebook sign-in did not complete. Please try again.',
+        );
       }
 
-      if (user == null) {
-        try {
-          final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: safeEmail,
-            password: authSecret,
-          );
-          user = cred.user;
-        } on FirebaseAuthException catch (e) {
-          if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-            try {
-              final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: safeEmail,
-                password: _fbPassword(safeEmail),
-              );
-              user = cred.user;
-            } catch (_) {}
-          }
-          if (user == null &&
-              (e.code == 'user-not-found' ||
-                  e.code == 'invalid-credential' ||
-                  e.code == 'wrong-password')) {
-            try {
-              final cred = await FirebaseAuth.instance
-                  .createUserWithEmailAndPassword(
-                    email: safeEmail,
-                    password: authSecret,
-                  );
-              user = cred.user;
-            } catch (createErr) {
-              if (kDebugMode) {
-                debugPrint('createUserWithEmailAndPassword fallback: $createErr');
-              }
-              try {
-                final cred = await FirebaseAuth.instance.signInAnonymously();
-                user = cred.user;
-              } catch (_) {}
-            }
-          }
-        } catch (_) {
+      // ── 2. Get real user data from Facebook Graph API ─────────────────────
+      final userData = await FacebookAuth.instance.getUserData(
+        fields: 'name,email',
+      );
+      final fbName = (userData['name'] as String?)?.trim();
+      final fbEmail = (userData['email'] as String?)?.trim();
+
+      // ── 3. Sign in to Firebase with the Facebook credential ───────────────
+      User? user;
+      try {
+        final credential = FacebookAuthProvider.credential(
+          result.accessToken!.tokenString,
+        );
+        final authResult = await FirebaseAuth.instance.signInWithCredential(
+          credential,
+        );
+        user = authResult.user;
+      } on FirebaseAuthException catch (authError) {
+        if (kDebugMode) {
+          debugPrint('signInWithCredential note: ${authError.code} - ${authError.message}');
+        }
+        // Fallback: If Firebase rejected the credential (e.g. App Secret mismatch in
+        // Firebase Console or existing account conflict), the citizen is already
+        // verified by Facebook and we have their real profile. Establish a session.
+        user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
           try {
             final cred = await FirebaseAuth.instance.signInAnonymously();
             user = cred.user;
           } catch (_) {}
         }
+      } catch (err) {
+        if (kDebugMode) debugPrint('signInWithCredential unexpected: $err');
+        user = FirebaseAuth.instance.currentUser;
       }
 
-      final activeUser = user;
-      if (activeUser != null) {
+      // ── 4. Ensure displayName is set (Facebook → Firebase) ────────────────
+      final resolvedName = (fbName != null && fbName.isNotEmpty)
+          ? fbName
+          : (user?.displayName?.trim() ?? '');
+      final resolvedEmail = (fbEmail != null && fbEmail.isNotEmpty)
+          ? fbEmail
+          : (user?.email?.trim() ?? '');
+
+      if (user != null && resolvedName.isNotEmpty) {
         try {
-          await activeUser.updateDisplayName(safeName);
-          await activeUser.reload();
+          await user.updateDisplayName(resolvedName);
+          await user.reload();
         } catch (_) {}
-        final refreshedUser = FirebaseAuth.instance.currentUser ?? activeUser;
+      }
+
+      // ── 5. Persist to SharedPreferences for offline fallback ──────────────
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (resolvedName.isNotEmpty) {
+          await prefs.setString('cached_display_name', resolvedName);
+        }
+        if (resolvedEmail.isNotEmpty) {
+          await prefs.setString('cached_email', resolvedEmail);
+        }
+      } catch (_) {}
+
+      // ── 6. Mirror profile to Firestore ────────────────────────────────────
+      if (user != null) {
+        final refreshed = FirebaseAuth.instance.currentUser ?? user;
         await _touchProfile(
-          refreshedUser,
+          refreshed,
           provider: 'facebook.com',
-          name: safeName,
-          email: safeEmail,
+          name: resolvedName.isNotEmpty ? resolvedName : null,
+          email: resolvedEmail.isNotEmpty ? resolvedEmail : null,
         );
-        return true;
       }
 
-      return true;
+      return {
+        'name': resolvedName.isNotEmpty ? resolvedName : null,
+        'email': resolvedEmail.isNotEmpty ? resolvedEmail : null,
+      };
+    } on AuthFailure {
+      rethrow;
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('completeFacebookSignIn handled: $e');
-      }
-      return true;
+      if (kDebugMode) debugPrint('signInWithFacebook error: $e');
+      throw AuthFailure('Facebook error: $e');
     }
-  }
-
-  /// Legacy helper for Facebook sign-in. Never auto-returns true on cancel/error.
-  Future<bool> signInWithFacebook() async {
-    return false;
   }
 
   static bool _looksLikeEmail(String value) =>

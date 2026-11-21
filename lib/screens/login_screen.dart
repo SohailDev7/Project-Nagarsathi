@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -379,57 +380,60 @@ class _LoginScreenState extends State<LoginScreen>
       _errorMessage = null;
     });
 
-    final bool launched = await const AuthService().launchFacebookAuth();
-    if (!launched && mounted) {
+    try {
+      // ── 1. Native Facebook login via flutter_facebook_auth ────────────────
+      // The SDK opens a Chrome Custom Tab, handles the OAuth, and returns
+      // the real Facebook name + email directly to Dart code.
+      final result = await const AuthService().signInWithFacebook();
+
+      if (!mounted) return;
+
+      if (result == null) {
+        // User cancelled the Facebook login dialog
+        setState(() => _facebookLoading = false);
+        return;
+      }
+
+      final String resolvedName = result['name'] ?? '';
+      final String resolvedEmail = result['email'] ?? '';
+
+      // ── 2. Show confirmation sheet with the REAL Facebook name ────────────
+      final bool? confirmed = await _showFacebookConfirmationSheet(
+        name: resolvedName.isNotEmpty ? resolvedName : 'you',
+        email: resolvedEmail,
+      );
+
+      if (!mounted) return;
+
+      if (confirmed != true) {
+        // User cancelled — sign out of Firebase and return to login
+        try {
+          await FirebaseAuth.instance.signOut();
+        } catch (_) {}
+        setState(() => _facebookLoading = false);
+        return;
+      }
+
+      // ── 3. Navigate to Home with the real name ────────────────────────────
+      _finishSignIn(
+        name: resolvedName.isNotEmpty ? resolvedName : null,
+        email: resolvedEmail.isNotEmpty ? resolvedEmail : null,
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
       setState(() {
         _facebookLoading = false;
         _showError = true;
-        _errorMessage = 'Could not open Facebook. Please try again.';
+        _errorMessage = e.message;
       });
-      return;
-    }
-
-    if (!mounted) return;
-
-    // Background timer to automatically close any stuck blank browser tab
-    final autoCloser = Timer(const Duration(seconds: 8), () {
-      _closeBrowser();
-    });
-
-    // Present the Facebook account card so the citizen can see which account
-    // is being used and tap "Continue as Nima" (or cancel)
-    final bool? confirmed = await _showFacebookConfirmationSheet(
-      name: 'Nima',
-      email: 'nimanissan03@gmail.com',
-    );
-    autoCloser.cancel();
-    await _closeBrowser();
-
-    if (!mounted) return;
-
-    if (confirmed != true) {
-      // User cancelled — safely stay on login screen
-      setState(() => _facebookLoading = false);
-      return;
-    }
-
-    // Complete sign-in with the verified Facebook account
-    final ok = await const AuthService().completeFacebookSignIn(
-      name: 'Nima',
-      email: 'nimanissan03@gmail.com',
-    );
-
-    if (!mounted) return;
-    if (!ok) {
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _facebookLoading = false;
         _showError = true;
-        _errorMessage = 'Could not finish Facebook sign-in. Please try again.';
+        _errorMessage = 'Facebook sign-in failed. Please try again.';
       });
-      return;
     }
-
-    _finishSignIn(name: 'Nima', email: 'nimanissan03@gmail.com');
   }
 
   Future<bool?> _showFacebookConfirmationSheet({
