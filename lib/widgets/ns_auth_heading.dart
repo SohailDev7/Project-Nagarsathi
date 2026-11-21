@@ -2,12 +2,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_theme.dart';
 import 'ns_mascot.dart';
+import 'ns_speech_bubble.dart';
 
 /// One title and one mascot line of dialogue.
 ///
-/// Sathi carries the supporting message in a speech bubble instead of a topic
-/// chip or a second subtitle, so each screen keeps a single voice. The mascot
-/// sits on the right so the greeting reads first.
+/// Sathi the yeti carries the supporting message in a speech bubble instead of
+/// a topic chip or a second subtitle, so each screen keeps a single voice. The
+/// mascot sits on the right so the greeting reads first.
 class NsAuthHeading extends StatelessWidget {
   const NsAuthHeading({
     super.key,
@@ -37,6 +38,12 @@ class NsAuthHeading extends StatelessWidget {
       look: look,
       wave: wave,
     );
+    final tone = switch (mood) {
+      NsMascotMood.sad => NsSpeechTone.error,
+      NsMascotMood.celebrate => NsSpeechTone.success,
+      NsMascotMood.curious => NsSpeechTone.info,
+      _ => NsSpeechTone.neutral,
+    };
     final copy = Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,7 +59,12 @@ class NsAuthHeading extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          _MascotBubble(message: message, tailOnRight: mascotOnRight),
+          NsSpeechBubble(
+            messages: [message],
+            speaker: 'Sathi the Yeti',
+            tailOnRight: mascotOnRight,
+            tone: tone,
+          ),
         ],
       ),
     );
@@ -62,81 +74,6 @@ class NsAuthHeading extends StatelessWidget {
       children: mascotOnRight
           ? [copy, const SizedBox(width: 10), mascot]
           : [mascot, const SizedBox(width: 10), copy],
-    );
-  }
-}
-
-class _MascotBubble extends StatelessWidget {
-  const _MascotBubble({required this.message, this.tailOnRight = true});
-
-  final String message;
-  final bool tailOnRight;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(tailOnRight ? 14 : 4),
-              topRight: Radius.circular(tailOnRight ? 4 : 14),
-              bottomLeft: const Radius.circular(14),
-              bottomRight: const Radius.circular(14),
-            ),
-            border: Border.all(color: tokens.border, width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: tokens.shadow,
-                offset: const Offset(0, 2),
-                blurRadius: 0,
-              ),
-            ],
-          ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: Text(
-              message,
-              key: ValueKey(message),
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.3,
-                fontWeight: FontWeight.w700,
-                color: tokens.heading,
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          right: tailOnRight ? -5.5 : null,
-          left: tailOnRight ? null : -5.5,
-          top: 9,
-          child: Transform.rotate(
-            angle: 0.785,
-            child: Container(
-              width: 9,
-              height: 9,
-              decoration: BoxDecoration(
-                color: tokens.surface,
-                border: tailOnRight
-                    ? Border(
-                        top: BorderSide(color: tokens.border, width: 1.5),
-                        right: BorderSide(color: tokens.border, width: 1.5),
-                      )
-                    : Border(
-                        left: BorderSide(color: tokens.border, width: 1.5),
-                        bottom: BorderSide(color: tokens.border, width: 1.5),
-                      ),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

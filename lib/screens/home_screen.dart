@@ -20,6 +20,8 @@ import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_rotating_line.dart';
+import '../widgets/ns_yeti_lines.dart';
 import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
@@ -83,8 +85,13 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {}
 
       final user = FirebaseAuth.instance.currentUser;
-      var name = widget.initialName ?? _name ?? cachedName ?? user?.displayName?.trim();
-      var email = widget.initialEmail ?? _email ?? cachedEmail ?? user?.email?.trim();
+      var name =
+          widget.initialName ??
+          _name ??
+          cachedName ??
+          user?.displayName?.trim();
+      var email =
+          widget.initialEmail ?? _email ?? cachedEmail ?? user?.email?.trim();
 
       if (user != null) {
         if (name == null || name.isEmpty) {
@@ -286,8 +293,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final displayName = (_name != null && _name!.trim().isNotEmpty)
         ? _name!.trim()
         : (user?.displayName?.trim().isNotEmpty == true
-            ? user!.displayName!.trim()
-            : 'NagarSathi citizen');
+              ? user!.displayName!.trim()
+              : 'NagarSathi citizen');
 
     await showModalBottomSheet<void>(
       context: context,
@@ -454,8 +461,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 5),
-              Text(
-                'What needs fixing in your city today?',
+              NsRotatingLine(
+                lines: NsYetiLines.home,
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
