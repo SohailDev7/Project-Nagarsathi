@@ -353,6 +353,7 @@ class _WardOfficerManagementScreenState
   }
 
   Widget _buildHeader(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Row(
       children: [
         NsBackButton(onPressed: () => Navigator.of(context).maybePop()),
@@ -361,23 +362,23 @@ class _WardOfficerManagementScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Ward officers',
                 style: TextStyle(
                   fontSize: 24,
                   height: 1.15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: tokens.heading,
                   letterSpacing: -0.7,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 'App admin · $_adminLabel',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ],
@@ -408,10 +409,10 @@ class _WardOfficerManagementScreenState
           TextField(
             controller: _searchController,
             textInputAction: TextInputAction.search,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: AppColors.ink,
+              color: NsColors.of(context).ink,
             ),
             decoration: InputDecoration(
               hintText: 'Search name, email, phone or ward',
@@ -606,15 +607,12 @@ class _CircleAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Container(
       width: 46,
       height: 46,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryLight, AppColors.primary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: tokens.primaryStrong,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -686,12 +684,13 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: tokens.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -709,10 +708,10 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.muted,
+              color: tokens.muted,
             ),
           ),
         ],
@@ -733,7 +732,7 @@ class _WardFilter extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: value == null ? AppColors.border : AppColors.primary,
@@ -801,7 +800,7 @@ class _StatusFilter extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: value == null ? AppColors.border : AppColors.primary,
@@ -871,6 +870,7 @@ class _OfficerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     final statusColor = officer.isActive
         ? AppColors.primary
         : _AdminColors.suspended;
@@ -878,12 +878,12 @@ class _OfficerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: tokens.border),
         boxShadow: [
           BoxShadow(
-            color: AppColors.ink.withValues(alpha: 0.04),
+            color: tokens.shadow.withValues(alpha: 0.18),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -924,10 +924,10 @@ class _OfficerCard extends StatelessWidget {
                             officer.fullName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                              color: tokens.ink,
                               letterSpacing: -0.2,
                             ),
                           ),
@@ -1131,7 +1131,7 @@ class _AuditLogCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
@@ -1279,7 +1279,7 @@ class _EmptyState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.border),
       ),
@@ -1406,8 +1406,8 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
@@ -1529,8 +1529,8 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
@@ -1629,8 +1629,8 @@ class _ReasonSheetState extends State<_ReasonSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
@@ -1736,7 +1736,7 @@ class _WardField extends StatelessWidget {
           height: 58,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColors.border),
           ),

@@ -1,9 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/citizen_location.dart';
@@ -30,25 +33,37 @@ class AuthService {
   static bool get isConfigured => FirebaseBootstrap.isReady;
 
   static const _users = 'users';
+  static const _otpWorkerUrl = String.fromEnvironment(
+    'OTP_WORKER_URL',
+    defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
+  );
 
   Future<void> requestEmailOtp(String email) async {
-    if (!isConfigured) {
-      throw const AuthFailure(
-        'Firebase is not configured for email verification.',
-      );
-    }
     try {
-      await FirebaseFunctions.instance.httpsCallable('requestEmailOtp').call({
-        'email': email.trim(),
-      });
-    } on FirebaseFunctionsException catch (error) {
-      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
-        throw const AuthFailure(
-          'Email OTP service is currently unavailable. Please sign in with your password.',
+      final response = await http
+          .post(
+            Uri.parse('$_otpWorkerUrl/request-email-otp'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email.trim()}),
+          )
+          .timeout(const Duration(seconds: 20));
+      final payload = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        throw AuthFailure(
+          payload is Map && payload['error'] is String
+              ? payload['error'] as String
+              : 'Could not send the verification code.',
         );
       }
-      throw AuthFailure(
-        error.message ?? 'Could not send the verification code.',
+    } on AuthFailure {
+      rethrow;
+    } on TimeoutException {
+      throw const AuthFailure(
+        'The verification email timed out. Please try again.',
+      );
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the email verification service. Try again.',
       );
     }
   }
@@ -57,23 +72,30 @@ class AuthService {
     required String email,
     required String otp,
   }) async {
-    if (!isConfigured) {
-      throw const AuthFailure(
-        'Firebase is not configured for email verification.',
-      );
-    }
     try {
-      await FirebaseFunctions.instance.httpsCallable('verifyEmailOtp').call({
-        'email': email.trim(),
-        'otp': otp.trim(),
-      });
-    } on FirebaseFunctionsException catch (error) {
-      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
-        throw const AuthFailure(
-          'Email OTP service is currently unavailable. Please sign in with your password.',
+      final response = await http
+          .post(
+            Uri.parse('$_otpWorkerUrl/verify-email-otp'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email.trim(), 'otp': otp.trim()}),
+          )
+          .timeout(const Duration(seconds: 20));
+      final payload = jsonDecode(response.body);
+      if (response.statusCode != 200) {
+        throw AuthFailure(
+          payload is Map && payload['error'] is String
+              ? payload['error'] as String
+              : 'Could not verify the code.',
         );
       }
-      throw AuthFailure(error.message ?? 'Could not verify the code.');
+    } on AuthFailure {
+      rethrow;
+    } on TimeoutException {
+      throw const AuthFailure('The verification timed out. Please try again.');
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the email verification service. Try again.',
+      );
     }
   }
 
@@ -83,38 +105,10 @@ class AuthService {
     required String email,
     required String otp,
   }) async {
-    final cleanEmail = email.trim();
-    if (!isConfigured) {
-      throw const AuthFailure(
-        'Firebase is not connected. Email sign-in is unavailable.',
-      );
-    }
-
-    try {
-      final result = await FirebaseFunctions.instance
-          .httpsCallable('verifyEmailOtp')
-          .call({'email': cleanEmail, 'otp': otp.trim()});
-      final data = result.data;
-      final token = data is Map ? data['token'] as String? : null;
-      if (token != null && token.isNotEmpty) {
-        final credential = await FirebaseAuth.instance.signInWithCustomToken(
-          token,
-        );
-        final user = credential.user;
-        if (user != null) {
-          await _touchProfile(user, provider: 'email-otp');
-        }
-      }
-    } on FirebaseFunctionsException catch (error) {
-      if (error.code == 'not-found' || error.message == 'NOT_FOUND') {
-        throw const AuthFailure(
-          'Email OTP service is currently unavailable. Please sign in with your password.',
-        );
-      }
-      throw AuthFailure(error.message ?? 'Could not verify the code.');
-    } on FirebaseAuthException catch (error) {
-      throw AuthFailure(friendlyMessage(error));
-    }
+    await verifyEmailOtp(email: email, otp: otp);
+    throw const AuthFailure(
+      'The code was verified. Use password sign-in or resend it after your account password is set.',
+    );
   }
 
   /// Checks whether an account with [email] exists in the backend.

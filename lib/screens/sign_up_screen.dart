@@ -26,14 +26,16 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  static const _totalSteps = 2;
-  static const _lastStep = 1;
+  static const _totalSteps = 3;
+  static const _passwordStep = 1;
+  static const _lastStep = 2;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  final _otpController = TextEditingController();
 
   final _formKeys = List<GlobalKey<FormState>>.generate(
     _totalSteps,
@@ -57,6 +59,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -69,10 +72,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   (String, String) get _copy => switch (_step) {
     0 => ('Create your account', 'Tell me who you are and where to reach you.'),
-    _ => (
+    1 => (
       'Secure your account',
       'At least 8 characters. I promise not to peek!',
     ),
+    _ => ('Verify your email', 'Enter the 6-digit code sent to your email.'),
   };
 
   String get _stepMessage {
@@ -109,6 +113,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _createAccount();
       return;
     }
+    if (_step == _passwordStep) {
+      _requestOtp();
+      return;
+    }
 
     HapticFeedback.selectionClick();
     setState(() {
@@ -135,6 +143,43 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
   }
 
+  Future<void> _requestOtp() async {
+    if (_step == _passwordStep) {
+      if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
+        setState(() => _showError = true);
+        return;
+      }
+      if (!_acceptedTerms) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Accept the terms to continue.')),
+        );
+        return;
+      }
+    }
+
+    setState(() {
+      _isLoading = true;
+      _showError = false;
+      _errorMessage = null;
+    });
+    try {
+      await const AuthService().requestEmailOtp(_emailController.text);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _direction = 1;
+        _step = _lastStep;
+      });
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
   Future<void> _createAccount() async {
     FocusScope.of(context).unfocus();
     if (!(_formKeys[_lastStep].currentState?.validate() ?? false)) {
@@ -158,6 +203,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
+      await const AuthService().verifyEmailOtp(
+        email: _emailController.text,
+        otp: _otpController.text,
+      );
       await const AuthService().createCitizenAccount(
         name: _nameController.text,
         email: _emailController.text,
@@ -383,8 +432,50 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
     }
 
+    if (_step == _lastStep) {
+      return Form(
+        key: _formKeys[_lastStep],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NsTextField(
+              controller: _otpController,
+              label: 'Email verification code',
+              hint: '6-digit code',
+              icon: Icons.pin_rounded,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              validator: (value) =>
+                  RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
+                  ? null
+                  : 'Enter the 6-digit code',
+              autofocus: true,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              onChanged: (_) => _clearError(),
+              onFieldSubmitted: (_) => _createAccount(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: TextButton(
+                onPressed: _isLoading ? null : _requestOtp,
+                child: const Text('Resend code'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Form(
-      key: _formKeys[1],
+      key: _formKeys[_passwordStep],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -36,6 +36,7 @@ class StaffHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Scaffold(
       body: NsBackground(
         staff: true,
@@ -67,24 +68,24 @@ class StaffHomeScreen extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Staff workspace',
                                   style: TextStyle(
                                     fontSize: 38,
                                     height: 1,
                                     fontWeight: FontWeight.w900,
-                                    color: AppColors.forest,
+                                    color: tokens.heading,
                                     letterSpacing: -1.5,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                const Text(
+                                Text(
                                   'Your municipal queue at a glance.',
                                   style: TextStyle(
                                     fontSize: 14.5,
                                     height: 1.45,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.muted,
+                                    color: tokens.muted,
                                   ),
                                 ),
                               ],
@@ -105,24 +106,24 @@ class StaffHomeScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     const _StatsRow(),
                     const SizedBox(height: 22),
-                    const Text(
+                    Text(
                       'App admin',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.forest,
+                        color: tokens.heading,
                         letterSpacing: -0.3,
                       ),
                     ),
                     const SizedBox(height: 10),
                     const _AdminToolsCard(),
                     const SizedBox(height: 22),
-                    const Text(
+                    Text(
                       "Today's queue",
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.forest,
+                        color: tokens.heading,
                         letterSpacing: -0.3,
                       ),
                     ),
@@ -154,14 +155,12 @@ class _StaffHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = NsColors.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.forest, AppColors.forestSoft],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? tokens.surface : AppColors.forest,
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: AppColors.forestSoft, width: 2),
         boxShadow: [
@@ -190,13 +189,15 @@ class _StaffHeroCard extends StatelessWidget {
                     width: 1.4,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.lock_rounded,
                       size: 12,
-                      color: AppColors.primaryLight,
+                      color: isDark
+                          ? tokens.accentText
+                          : AppColors.primaryLight,
                     ),
                     SizedBox(width: 5),
                     Text(
@@ -204,7 +205,9 @@ class _StaffHeroCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.primaryLight,
+                        color: isDark
+                            ? tokens.accentText
+                            : AppColors.primaryLight,
                         letterSpacing: 0.7,
                       ),
                     ),
@@ -212,38 +215,46 @@ class _StaffHeroCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              const Icon(Icons.badge_rounded, size: 26, color: Colors.white70),
+              Icon(
+                Icons.badge_rounded,
+                size: 26,
+                color: isDark ? tokens.muted : Colors.white70,
+              ),
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
+          Text(
             'Welcome, staff member',
             style: TextStyle(
               fontSize: 24,
               height: 1.1,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: isDark ? tokens.heading : Colors.white,
               letterSpacing: -0.6,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'You are cleared for citizen requests and ward updates.',
             style: TextStyle(
               fontSize: 13.5,
               height: 1.45,
               fontWeight: FontWeight.w600,
-              color: Color(0xFFC3D4C8),
+              color: isDark ? tokens.muted : const Color(0xFFC3D4C8),
             ),
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
+              color: isDark
+                  ? tokens.surfaceSoft
+                  : Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.14),
+                color: isDark
+                    ? tokens.border
+                    : Colors.white.withValues(alpha: 0.14),
                 width: 1.2,
               ),
             ),
@@ -254,7 +265,7 @@ class _StaffHeroCard extends StatelessWidget {
                       ? Icons.phone_android_rounded
                       : Icons.alternate_email_rounded,
                   size: 16,
-                  color: AppColors.primaryLight,
+                  color: isDark ? tokens.accentText : AppColors.primaryLight,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -262,10 +273,10 @@ class _StaffHeroCard extends StatelessWidget {
                     staffIdentifier,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: isDark ? tokens.ink : Colors.white,
                     ),
                   ),
                 ),
@@ -283,14 +294,15 @@ class _AdminToolsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return NsCard(
       padding: EdgeInsets.zero,
       radius: 22,
       depth: 5,
       child: NsPressable(
-        onTap: () => Navigator.of(
-          context,
-        ).pushNamed(WardOfficerManagementScreen.routeName),
+        onTap: () =>
+            Navigator.of(context)
+                .pushNamed(WardOfficerManagementScreen.routeName),
         color: Colors.transparent,
         borderColor: Colors.transparent,
         shadowColor: Colors.transparent,
@@ -319,7 +331,7 @@ class _AdminToolsCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -328,7 +340,7 @@ class _AdminToolsCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w900,
-                      color: AppColors.forest,
+                      color: tokens.heading,
                     ),
                   ),
                   SizedBox(height: 3),
@@ -339,7 +351,7 @@ class _AdminToolsCard extends StatelessWidget {
                       fontSize: 11.5,
                       height: 1.4,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.muted,
+                      color: tokens.muted,
                     ),
                   ),
                 ],
@@ -402,6 +414,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return NsCard(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       radius: 20,
@@ -414,11 +427,11 @@ class _StatCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 26,
                 height: 1,
                 fontWeight: FontWeight.w900,
-                color: AppColors.forest,
+                color: tokens.heading,
                 letterSpacing: -0.8,
               ),
             ),
@@ -496,19 +509,19 @@ class _QueueCard extends StatelessWidget {
                       children: [
                         Text(
                           _items[index].$1,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.forest,
+                            color: NsColors.of(context).heading,
                           ),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           _items[index].$2,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.muted,
+                            color: NsColors.of(context).muted,
                           ),
                         ),
                       ],

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/admin/ward_officer_management_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/session_service.dart';
@@ -75,6 +76,10 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
           theme: buildAppTheme(brightness: Brightness.light),
           darkTheme: buildAppTheme(brightness: Brightness.dark),
           themeMode: mode,
+          routes: {
+            WardOfficerManagementScreen.routeName: (_) =>
+                const WardOfficerManagementScreen(),
+          },
           builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
             value: _overlayStyle(context),
             child: UpdateGate(
