@@ -25,6 +25,7 @@ class _FakeAdminOfficerService extends AdminOfficerService {
 
   Completer<void>? suspendGate;
   Completer<void>? reasonGate;
+  Completer<void>? deleteGate;
 
   @override
   Future<List<WardOfficer>> getOfficers() async {
@@ -89,6 +90,34 @@ class _FakeAdminOfficerService extends AdminOfficerService {
         body: 'Suspended',
         status: OfficerNotificationStatus.sent,
         dispatchedAt: now,
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteOfficer(
+    String officerId, {
+    String reason = '',
+  }) async {
+    final gate = deleteGate;
+    if (gate != null) await gate.future;
+
+    final index = officers.indexWhere((officer) => officer.id == officerId);
+    final existing = officers[index];
+    officers.removeAt(index);
+
+    final now = DateTime(2026, 11, 19, 11);
+    logs.add(
+      OfficerAuditLog(
+        id: 'audit_delete_1',
+        adminId: adminId,
+        targetOfficerId: existing.id,
+        targetOfficerName: existing.fullName,
+        actionType: OfficerAuditAction.delete,
+        previousValue: '${existing.wardLabel}, ${existing.status.value}',
+        newValue: 'deleted',
+        reason: reason.trim().isEmpty ? 'Officer account deleted by admin.' : reason,
+        timestamp: now,
       ),
     );
   }
@@ -255,4 +284,62 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'cancel in delete dialog keeps the officer listed',
+    (tester) async {
+      final service = _FakeAdminOfficerService(officers: [_officer()]);
+
+      await _pumpScreen(tester, service);
+      await tester.pumpAndSettle();
+
+      // Tap the Delete button on the officer card.
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog should appear.
+      expect(find.text('Delete officer?'), findsOneWidget);
+
+      // Tap Cancel — officer must remain.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete officer?'), findsNothing);
+      expect(find.text('Anita Sharma'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'confirm delete removes the officer and shows toast',
+    (tester) async {
+      final service = _FakeAdminOfficerService(officers: [_officer()]);
+      service.deleteGate = Completer<void>();
+
+      await _pumpScreen(tester, service);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete officer?'), findsOneWidget);
+
+      // Confirm deletion.
+      await tester.tap(find.text('Delete').last);
+      await tester.pump();
+
+      // Progress indicator visible while async delete runs.
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+      service.deleteGate!.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(
+        find.textContaining('has been permanently deleted'),
+        findsOneWidget,
+      );
+      // Officer card removed from list.
+      expect(find.text('Anita Sharma'), findsNothing);
+    },
+  );
 }

@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../models/ward_officer.dart';
+import '../utils/password_utils.dart';
+import 'firebase_bootstrap.dart';
 
 /// Thrown when an officer operation cannot be completed.
 class AdminOfficerException implements Exception {
@@ -63,7 +66,7 @@ class OfficerNotification {
   }
 }
 
-/// Everything the UI needs after a create/suspend/reactivate/reassign action.
+/// Everything the UI needs after a create/suspend/reactivate action.
 class OfficerActionResult {
   const OfficerActionResult({
     required this.officer,
@@ -209,15 +212,52 @@ class AdminOfficerService {
         );
       }
 
+      final tempPassword = PasswordUtils.generateTempPassword(
+        length: 8,
+        digitsOnly: true,
+      );
+
+      // Attempt to register the Firebase Auth account using a temporary secondary app
+      // so the acting admin remains signed in.
+      String? createdUid;
+      try {
+        if (FirebaseBootstrap.isReady) {
+          final tempAppName =
+              'OfficerCreator_${DateTime.now().millisecondsSinceEpoch}';
+          final secondaryApp = await Firebase.initializeApp(
+            name: tempAppName,
+            options: Firebase.app().options,
+          );
+          try {
+            final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+            final userCred = await secondaryAuth.createUserWithEmailAndPassword(
+              email: emailValue,
+              password: tempPassword,
+            );
+            createdUid = userCred.user?.uid;
+          } finally {
+            await secondaryApp.delete();
+          }
+        }
+      } catch (e) {
+        if (e is FirebaseAuthException && e.code == 'email-already-in-use') {
+          throw const AdminOfficerException(
+            'An officer with this email already exists.',
+          );
+        }
+      }
+
       final now = DateTime.now();
       final officer = WardOfficer(
-        id: _newId('officer', now),
+        id: createdUid ?? _newId('officer', now),
         fullName: name,
         email: emailValue,
         phoneNumber: phone,
         assignedWard: assignedWard,
         status: OfficerStatus.active,
         createdAt: now,
+        mustChangePassword: true,
+        tempPassword: tempPassword,
       );
 
       return _finishAction(
@@ -284,34 +324,72 @@ class AdminOfficerService {
     });
   }
 
-  Future<OfficerActionResult> reassignWard(
+  /// Permanently removes a ward officer from Firestore.
+  ///
+  /// All audit log entries that reference the officer are deleted as well.
+  /// A final audit entry and notification are written first so the action
+  /// remains traceable in reporting dashboards.
+  Future<void> deleteOfficer(
     String officerId, {
-    required int newWard,
     String reason = '',
   }) {
-    return _guard('Could not reassign the officer.', () async {
-      _validateWard(newWard);
-
+    return _guard('Could not delete the officer.', () async {
       final existing = await _requireOfficer(officerId);
 
-      if (existing.assignedWard == newWard) {
-        throw AdminOfficerException(
-          'This officer is already assigned to ${existing.wardLabel}.',
-        );
-      }
-
       final now = DateTime.now();
-      final updated = existing.copyWith(assignedWard: newWard);
+      final trimmedReason = reason.trim();
+      final auditLog = OfficerAuditLog(
+        id: _newId('audit', now),
+        adminId: adminId,
+        targetOfficerId: existing.id,
+        targetOfficerName: existing.fullName,
+        actionType: OfficerAuditAction.delete,
+        previousValue: '${existing.wardLabel}, ${existing.status.value}',
+        newValue: 'deleted',
+        reason:
+            trimmedReason.isEmpty ? 'Officer account deleted by admin.' : trimmedReason,
+        timestamp: now,
+      );
 
-      return _finishAction(
-        officer: updated,
-        action: OfficerAuditAction.reassign,
-        previousValue: existing.wardLabel,
-        newValue: updated.wardLabel,
-        reason: reason,
-        fallbackReason: 'Ward reassigned by admin.',
+      final notification = _dispatchNotification(
+        officer: existing,
+        action: OfficerAuditAction.delete,
+        previousValue: '${existing.wardLabel}, ${existing.status.value}',
+        newValue: 'deleted',
+        reason: auditLog.reason,
         now: now,
       );
+
+      // Write the deletion audit entry before wiping the documents so the
+      // record always exists regardless of partial failures.
+      final batch = _firestore.batch();
+      batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
+      batch.delete(_officers.doc(existing.id));
+      batch.delete(_firestore.collection('staff').doc(existing.id));
+      await batch.commit();
+
+      // Best-effort: delete related audit logs (pre-delete entries).
+      try {
+        final logsSnapshot = await _auditLogs
+            .where('targetOfficerId', isEqualTo: existing.id)
+            .get();
+        final cleanupBatch = _firestore.batch();
+        for (final doc in logsSnapshot.docs) {
+          // Keep the deletion audit entry itself.
+          if (doc.id != auditLog.id) cleanupBatch.delete(doc.reference);
+        }
+        await cleanupBatch.commit();
+      } catch (_) {
+        // Cleanup is best-effort; the main delete has already been committed.
+      }
+
+      try {
+        await _notifications.doc('notification_${auditLog.id}').set(
+          _notificationRecord(notification: notification, auditLog: auditLog),
+        );
+      } catch (_) {
+        // Notification write is best-effort.
+      }
     });
   }
 
@@ -385,6 +463,17 @@ class AdminOfficerService {
     final batch = _firestore.batch();
     batch.set(_officers.doc(officer.id), officer.toFirestore());
     batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
+    batch.set(_firestore.collection('staff').doc(officer.id), {
+      'uid': officer.id,
+      'email': officer.email,
+      'name': officer.fullName,
+      'phone': officer.phoneNumber,
+      'role': 'staff',
+      'active': officer.isActive,
+      'mustChangePassword': officer.mustChangePassword,
+      'assignedWard': officer.assignedWard,
+      'updatedAt': Timestamp.fromDate(now),
+    }, SetOptions(merge: true));
     await batch.commit();
 
     try {
@@ -419,13 +508,19 @@ class AdminOfficerService {
         'Your NagarSathi ward officer account has been reactivated',
       OfficerAuditAction.reassign =>
         'Your NagarSathi ward assignment has changed',
+      OfficerAuditAction.delete =>
+        'Your NagarSathi ward officer account has been removed',
     };
 
     final body = switch (action) {
       OfficerAuditAction.create =>
-        'Hello ${officer.fullName}, your ward officer account for '
-            '${officer.wardLabel} has been created. '
-            'Sign in with ${officer.email} to get started.',
+        'Hello ${officer.fullName},\n\n'
+            'Your NagarSathi ward officer account for ${officer.wardLabel} has been created.\n\n'
+            'Sign-in details:\n'
+            '• Email: ${officer.email}\n'
+            '• Temporary Password: ${officer.tempPassword ?? '8-digit temporary code'}\n\n'
+            'Please sign in via the Staff Login screen using this temporary 8-digit password. '
+            'You will be prompted to set your new permanent password immediately upon first sign-in.',
       OfficerAuditAction.suspend =>
         'Hello ${officer.fullName}, your access to ${officer.wardLabel} has '
             'been suspended. Reason: $reason',
@@ -435,6 +530,10 @@ class AdminOfficerService {
       OfficerAuditAction.reassign =>
         'Hello ${officer.fullName}, you have been moved from '
             '${previousValue ?? 'your previous ward'} to $newValue. '
+            'Reason: $reason',
+      OfficerAuditAction.delete =>
+        'Hello ${officer.fullName}, your ward officer account '
+            '(${officer.wardLabel}) has been permanently removed. '
             'Reason: $reason',
     };
 
