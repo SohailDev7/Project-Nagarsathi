@@ -64,19 +64,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   bool _otpFocused = false;
   String? _errorMessage;
   IdentifierKind _kind = IdentifierKind.empty;
-  bool _rememberMe = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadRememberMe();
-  }
-
-  Future<void> _loadRememberMe() async {
-    final remember = await const SessionService().loadRememberMe();
-    if (!mounted || remember == _rememberMe) return;
-    setState(() => _rememberMe = remember);
   }
 
   @override
@@ -135,6 +127,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       case IdentifierKind.empty:
         return 'Namaste! Ready when you are.';
     }
+  }
+
+  bool get _showCredentialHelp {
+    if (!_showError || _errorMessage == null) return false;
+    final message = _errorMessage!.toLowerCase();
+    return message.contains('incorrect') ||
+        message.contains('never set a password') ||
+        message.contains('no account found');
   }
 
   void _onIdentifierChanged(String value) {
@@ -295,10 +295,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       _errorMessage = null;
     });
 
+    final passwordAttempt = _passwordController.text.trim().isNotEmpty
+        ? _passwordController.text
+        : null;
+
     try {
       await const AuthService().signInWithEmailOtp(
         email: _identifierController.text,
         otp: otp,
+        password: passwordAttempt,
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
@@ -308,6 +313,41 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         _showError = true;
         _errorMessage = error.message;
       });
+      // When a reset link was dispatched for an existing account, switch back
+      // to password mode so the user can easily enter their updated password.
+      if (error.message.contains('password reset link')) {
+        setState(() {
+          _isOtpMode = false;
+          _passwordController.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Reset link sent to ${_identifierController.text.trim()}. Check your inbox.',
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
+    } on TimeoutException {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage =
+            'Firebase did not respond. Check your internet and try again.';
+      });
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = 'Sign-in could not finish. Please try again.';
+      });
       return;
     }
 
@@ -316,7 +356,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _finishSignIn({String? name, String? email}) async {
-    await const SessionService().saveRememberMe(_rememberMe);
+    await const SessionService().clearStaffSession();
     if (!mounted) return;
     setState(() {
       _isLoading = false;
@@ -329,7 +369,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => HomeScreen(initialName: name, initialEmail: email),
+        builder: (_) => HomeScreen(
+          initialName: name,
+          initialEmail: email,
+          showRememberMePrompt: true,
+        ),
       ),
       (route) => false,
     );
@@ -545,6 +589,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _requestEmailOtp() async {
+    if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _showError = false;
@@ -558,6 +603,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       setState(() {
         _isLoading = false;
         _isOtpMode = true;
+        _direction = 1;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -573,6 +619,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         _isLoading = false;
         _showError = true;
         _errorMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _showError = true;
+        _errorMessage = 'Could not send the code. Please try again.';
       });
     }
   }
@@ -654,6 +707,30 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _requestEmailOtp();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _OptionTile(
+                  icon: Icons.g_mobiledata_rounded,
+                  title: 'Continue with Google',
+                  subtitle: 'Sign in with your Google account',
+                  selected: false,
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    _signInWithGoogle();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _OptionTile(
+                  icon: Icons.facebook_rounded,
+                  title: 'Continue with Facebook',
+                  subtitle: 'Sign in with your Facebook account',
+                  selected: false,
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop();
+                    _signInWithFacebook();
                   },
                 ),
               ],
@@ -946,6 +1023,83 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildCredentialHelp() {
+    final tokens = NsColors.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: tokens.accentText,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Wrong password, or signed up with Google/Facebook? '
+                  'Use "Try another way" below, or send a password reset link.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.32,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _AuthLink(
+                label: 'Send reset link',
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        try {
+                          await const AuthService().sendPasswordReset(
+                            _identifierController.text.trim(),
+                          );
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Password reset link sent to ${_identifierController.text.trim()}',
+                              ),
+                            ),
+                          );
+                        } on AuthFailure catch (e) {
+                          if (!mounted) return;
+                          setState(() {
+                            _showError = true;
+                            _errorMessage = e.message;
+                          });
+                        }
+                      },
+              ),
+              const SizedBox(width: 8),
+              _AuthLink(
+                label: 'Email me a code',
+                onPressed: _isLoading ? null : _requestEmailOtp,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep1() {
     final tokens = NsColors.of(context);
 
@@ -1028,24 +1182,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   setState(() => _passwordFocused = focused);
                 },
               ),
+              if (_showCredentialHelp) ...[
+                const SizedBox(height: 10),
+                _buildCredentialHelp(),
+              ],
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _RememberMeCheckbox(
-                      value: _rememberMe,
-                      onChanged: (value) {
-                        HapticFeedback.selectionClick();
-                        setState(() => _rememberMe = value);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _AuthLink(
-                    label: 'Forgot password?',
-                    onPressed: _openForgotPassword,
-                  ),
-                ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: _AuthLink(
+                  label: 'Forgot password?',
+                  onPressed: _openForgotPassword,
+                ),
               ),
               const SizedBox(height: 16),
               NsPrimaryButton(
@@ -1094,12 +1241,40 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 },
               ),
               const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _AuthLink(
-                  label: 'Resend code',
-                  onPressed: _isLoading ? null : _requestEmailOtp,
-                ),
+              Row(
+                children: [
+                  _AuthLink(
+                    label: 'Resend code',
+                    onPressed: _isLoading ? null : _requestEmailOtp,
+                  ),
+                  const Spacer(),
+                  _AuthLink(
+                    label: 'Send reset link instead',
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            try {
+                              await const AuthService().sendPasswordReset(
+                                _identifierController.text.trim(),
+                              );
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Reset link sent to ${_identifierController.text.trim()}',
+                                  ),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              setState(() {
+                                _showError = true;
+                                _errorMessage = e.toString();
+                              });
+                            }
+                          },
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               NsPrimaryButton(
@@ -1195,62 +1370,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 }
 
-/// Google-style opt-in that keeps the Firebase session on this device.
-///
-/// Checked by default: signing in once is enough until the citizen clears the
-/// box or signs out.
-class _RememberMeCheckbox extends StatelessWidget {
-  const _RememberMeCheckbox({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-
-    return MergeSemantics(
-      child: InkWell(
-        onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Checkbox(
-                value: value,
-                onChanged: (next) => onChanged(next ?? false),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: const VisualDensity(
-                  horizontal: -4,
-                  vertical: -4,
-                ),
-                side: BorderSide(color: tokens.inputBorder, width: 2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'Remember me on this device',
-                  maxLines: 2,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.muted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _AuthLink extends StatelessWidget {
   const _AuthLink({required this.label, this.onPressed});

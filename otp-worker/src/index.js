@@ -65,6 +65,197 @@ async function parseJson(request) {
   }
 }
 
+// ─── Firebase custom tokens ───────────────────────────────────────────────
+//
+// A verified code alone cannot start a Firebase session. After the code checks
+// out we mint a Firebase custom token, which the app exchanges with
+// `signInWithCustomToken` to become a real signed-in user.
+//
+// This needs a service account: Firebase console → Project settings →
+// Service accounts → Generate new private key, then store the JSON as the
+// FIREBASE_SERVICE_ACCOUNT secret (`wrangler secret put FIREBASE_SERVICE_ACCOUNT`).
+// Without it the worker still verifies codes, it just cannot sign anyone in.
+
+const IDENTITY_TOOLKIT_AUDIENCE =
+  "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_SCOPE =
+  "https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/cloud-platform";
+
+let serviceAccountCache = null;
+let privateKeyCache = null;
+let accessTokenCache = null;
+let accessTokenExpiry = 0;
+
+function base64UrlEncodeBytes(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function readServiceAccount(env) {
+  if (serviceAccountCache) return serviceAccountCache;
+
+  let account = null;
+  if (env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+    } catch {
+      account = null;
+    }
+  } else if (env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) {
+    account = {
+      client_email: env.FIREBASE_CLIENT_EMAIL,
+      private_key: env.FIREBASE_PRIVATE_KEY,
+      project_id: env.FIREBASE_PROJECT_ID,
+    };
+  }
+
+  if (!account || !account.client_email || !account.private_key) return null;
+  if (!account.project_id && env.FIREBASE_PROJECT_ID) {
+    account.project_id = env.FIREBASE_PROJECT_ID;
+  }
+
+  serviceAccountCache = account;
+  return account;
+}
+
+async function loadPrivateKey(pem) {
+  if (privateKeyCache) return privateKeyCache;
+
+  // Secrets pasted through the dashboard often keep literal "\n" escapes.
+  const normalized = String(pem).replaceAll("\\n", "\n");
+  const body = normalized
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  privateKeyCache = await crypto.subtle.importKey(
+    "pkcs8",
+    bytes,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return privateKeyCache;
+}
+
+async function signServiceJwt(account, claims) {
+  const header = base64UrlEncode(
+    JSON.stringify({ alg: "RS256", typ: "JWT" }),
+  );
+  const payload = base64UrlEncode(JSON.stringify(claims));
+  const unsigned = `${header}.${payload}`;
+  const key = await loadPrivateKey(account.private_key);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(unsigned),
+  );
+  return `${unsigned}.${base64UrlEncodeBytes(new Uint8Array(signature))}`;
+}
+
+async function getGoogleAccessToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (accessTokenCache && accessTokenExpiry > now + 60) {
+    return accessTokenCache;
+  }
+
+  const account = readServiceAccount(env);
+  if (!account) return null;
+
+  const assertion = await signServiceJwt(account, {
+    iss: account.client_email,
+    scope: GOOGLE_SCOPE,
+    aud: GOOGLE_TOKEN_URL,
+    iat: now,
+    exp: now + 3600,
+  });
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+  if (!response.ok) return null;
+
+  const payload = await response.json().catch(() => null);
+  if (!payload || !payload.access_token) return null;
+
+  accessTokenCache = payload.access_token;
+  accessTokenExpiry = now + Number(payload.expires_in || 3600);
+  return accessTokenCache;
+}
+
+/// Returns the Firebase Auth uid that already owns [email], or `null`.
+///
+/// Deliberately never creates accounts: sign-up verification runs through the
+/// same endpoint and then calls `createUserWithEmailAndPassword`, so creating a
+/// passwordless user here would make sign-up fail with `email-already-in-use`.
+async function findFirebaseUser(env, accessToken, email) {
+  const account = readServiceAccount(env);
+  if (!account || !account.project_id) return null;
+
+  const lookup = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${account.project_id}/accounts:lookup`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ email: [email] }),
+    },
+  );
+  if (!lookup.ok) return null;
+
+  const payload = await lookup.json().catch(() => null);
+  const user = Array.isArray(payload?.users) ? payload.users[0] : null;
+  return user?.localId || null;
+}
+
+async function createFirebaseCustomToken(env, uid) {
+  const account = readServiceAccount(env);
+  if (!account) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  return signServiceJwt(account, {
+    iss: account.client_email,
+    sub: account.client_email,
+    aud: IDENTITY_TOOLKIT_AUDIENCE,
+    iat: now,
+    exp: now + 3600,
+    uid,
+  });
+}
+
+async function mintFirebaseToken(env, email) {
+  try {
+    const accessToken = await getGoogleAccessToken(env);
+    if (!accessToken) return { token: null, reason: "not-configured" };
+
+    const uid = await findFirebaseUser(env, accessToken, email);
+    if (!uid) return { token: null, reason: "user-not-found" };
+
+    const token = await createFirebaseCustomToken(env, uid);
+    return { token, reason: token ? null : "not-configured" };
+  } catch {
+    return { token: null, reason: "error" };
+  }
+}
+
 async function requestOtp(request, env) {
   if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET || !env.OTP_PEPPER) {
     return json({ error: "OTP email service is not configured." }, 500);
@@ -231,8 +422,14 @@ async function verifyOtp(request, env) {
     payload,
   );
 
+  // Best effort: when no service account is configured the code still verifies,
+  // the app just cannot open a session from it. Accounts are never created here.
+  const minted = await mintFirebaseToken(env, email);
+
   return json({
     verified: true,
+    token: minted.token,
+    tokenReason: minted.reason,
     verificationToken: `${base64UrlEncode(payload)}.${signature}`,
   });
 }

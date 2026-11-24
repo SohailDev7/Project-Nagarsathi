@@ -64,6 +64,13 @@ Citizen sign-up, sign-in and password resets are wired to Firebase:
   timestamps) to Cloud Firestore.
 - Sign-in refreshes that profile document; password resets use
   `sendPasswordResetEmail`.
+- Email-code ("Try another way" → *Get OTP via email*) sign-in is handled by the
+  Cloudflare Worker in `otp-worker/`. It verifies the 6-digit code and returns a
+  Firebase custom token, so the app can open a real session for citizens who
+  never set a password (for example Google/Facebook sign-ups). See
+  [`otp-worker/README.md`](otp-worker/README.md) to deploy it with the
+  `FIREBASE_SERVICE_ACCOUNT` secret — without that secret codes still verify but
+  no session can be created.
 
 Configure a project once:
 

@@ -4,10 +4,12 @@ import 'package:material_ui/material_ui.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/staff_home_screen.dart';
 import 'screens/admin/ward_officer_management_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/session_service.dart';
+import 'services/staff_auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 import 'widgets/update_gate.dart';
@@ -21,7 +23,7 @@ Future<void> main() async {
   await ThemeController.instance.load();
 
   // Honour "Remember me on this device" before the first frame. Firebase keeps
-  // its session on disk; when the citizen opted out we clear it and start at
+  // its session on disk; when the user opted out we clear it and start at
   // the sign-in screen instead.
   final rememberMe = await const SessionService().loadRememberMe();
   User? sessionUser;
@@ -35,10 +37,17 @@ Future<void> main() async {
   final hasSession = sessionUser != null;
   if (hasSession && !rememberMe) {
     await const AuthService().signOut();
+    await const SessionService().clearStaffSession();
   }
   final startSignedIn = hasSession && rememberMe;
+  final staffSession = startSignedIn
+      ? await const SessionService().loadStaffSession()
+      : null;
 
-  runApp(NagarSathiApp(startSignedIn: startSignedIn));
+  runApp(NagarSathiApp(
+    startSignedIn: startSignedIn,
+    initialStaffSession: staffSession,
+  ));
 }
 
 class NagarSathiApp extends StatefulWidget {
@@ -46,6 +55,7 @@ class NagarSathiApp extends StatefulWidget {
     super.key,
     this.themeController,
     this.startSignedIn = false,
+    this.initialStaffSession,
   });
 
   /// Injectable for tests; defaults to the app-wide controller.
@@ -53,6 +63,9 @@ class NagarSathiApp extends StatefulWidget {
 
   /// Opens the citizen home when a remembered Firebase session already exists.
   final bool startSignedIn;
+
+  /// Restores a remembered staff/admin workspace if present.
+  final StaffSession? initialStaffSession;
 
   @override
   State<NagarSathiApp> createState() => _NagarSathiAppState();
@@ -87,9 +100,14 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
               child: child ?? const SizedBox.shrink(),
             ),
           ),
-          home: widget.startSignedIn
-              ? const HomeScreen()
-              : LoginScreen(themeController: _themeController),
+          home: widget.initialStaffSession != null
+              ? StaffHomeScreen(
+                  staffIdentifier: widget.initialStaffSession!.identifier,
+                  isPhone: widget.initialStaffSession!.isPhone,
+                )
+              : (widget.startSignedIn
+                  ? const HomeScreen()
+                  : LoginScreen(themeController: _themeController)),
         );
       },
     );

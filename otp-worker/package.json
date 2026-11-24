@@ -1,6 +1,7 @@
 {
   "name": "nagarsathi-otp-worker",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

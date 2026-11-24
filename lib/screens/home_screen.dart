@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/citizen_location.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../services/session_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
@@ -20,6 +21,7 @@ import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
 import '../widgets/ns_yeti_lines.dart';
 import '../widgets/update_dialog.dart';
@@ -34,6 +36,7 @@ class HomeScreen extends StatefulWidget {
     this.locationService = const LocationService(),
     this.initialName,
     this.initialEmail,
+    this.showRememberMePrompt = false,
   });
 
   /// Overridable for tests so the confirmation flow can run without the
@@ -41,6 +44,7 @@ class HomeScreen extends StatefulWidget {
   final LocationService locationService;
   final String? initialName;
   final String? initialEmail;
+  final bool showRememberMePrompt;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -65,6 +69,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadProfile();
     _loadVersion();
     _restoreLocation();
+    if (widget.showRememberMePrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybePromptRememberMe();
+      });
+    }
+  }
+
+  Future<void> _maybePromptRememberMe() async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    await showRememberMeNotification(context: context, isStaff: false);
   }
 
   @override
@@ -329,6 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _signOut() async {
     await const AuthService().signOut();
+    await const SessionService().saveRememberMe(false);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),

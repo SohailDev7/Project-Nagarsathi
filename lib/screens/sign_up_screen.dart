@@ -273,7 +273,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => const HomeScreen(showRememberMePrompt: true),
+      ),
       (route) => false,
     );
   }

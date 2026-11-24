@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../services/session_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
@@ -10,23 +11,54 @@ import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
+import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_staff_badge.dart';
 import 'admin/ward_officer_management_screen.dart';
 import 'staff_login_screen.dart';
 
 /// Landing page for the separate staff sign-in flow.
-class StaffHomeScreen extends StatelessWidget {
+class StaffHomeScreen extends StatefulWidget {
   const StaffHomeScreen({
     super.key,
     required this.staffIdentifier,
     this.isPhone = false,
+    this.showRememberMePrompt = false,
   });
 
   final String staffIdentifier;
   final bool isPhone;
+  final bool showRememberMePrompt;
+
+  @override
+  State<StaffHomeScreen> createState() => _StaffHomeScreenState();
+}
+
+class _StaffHomeScreenState extends State<StaffHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showRememberMePrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybePromptRememberMe();
+      });
+    }
+  }
+
+  Future<void> _maybePromptRememberMe() async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    await showRememberMeNotification(
+      context: context,
+      isStaff: true,
+      staffIdentifier: widget.staffIdentifier,
+      isPhone: widget.isPhone,
+    );
+  }
 
   Future<void> _signOut(BuildContext context) async {
     await StaffAuthService.signOut();
+    await const SessionService().clearStaffSession();
+    await const SessionService().saveRememberMe(false);
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
@@ -99,8 +131,8 @@ class StaffHomeScreen extends StatelessWidget {
                     NsEntrance(
                       delay: const Duration(milliseconds: 80),
                       child: _StaffHeroCard(
-                        staffIdentifier: staffIdentifier,
-                        isPhone: isPhone,
+                        staffIdentifier: widget.staffIdentifier,
+                        isPhone: widget.isPhone,
                       ),
                     ),
                     const SizedBox(height: 16),

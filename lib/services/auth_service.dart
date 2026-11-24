@@ -38,77 +38,199 @@ class AuthService {
     defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
   );
 
-  Future<void> requestEmailOtp(String email) async {
+  /// Calls one of the OTP worker endpoints and returns its JSON payload.
+  ///
+  /// The worker answers with a plain `{"error": "..."}` body on failure, which
+  /// is surfaced as an [AuthFailure] so screens can show it directly.
+  Future<Map<String, dynamic>> _postOtp(
+    String path,
+    Map<String, Object?> body,
+  ) async {
     try {
       final response = await http
           .post(
-            Uri.parse('$_otpWorkerUrl/request-email-otp'),
+            Uri.parse('$_otpWorkerUrl$path'),
             headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email.trim()}),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 20));
-      final payload = jsonDecode(response.body);
+
+      final decoded = response.body.trim().isEmpty
+          ? null
+          : jsonDecode(response.body);
+      final payload = decoded is Map<String, dynamic>
+          ? decoded
+          : decoded is Map
+          ? Map<String, dynamic>.from(decoded)
+          : <String, dynamic>{};
+
       if (response.statusCode != 200) {
         throw AuthFailure(
-          payload is Map && payload['error'] is String
-              ? payload['error'] as String
-              : 'Could not send the verification code.',
+          payload['error'] is String ? payload['error'] as String : 'The email verification service could not complete that request.',
         );
       }
+      return payload;
     } on AuthFailure {
       rethrow;
     } on TimeoutException {
       throw const AuthFailure(
-        'The verification email timed out. Please try again.',
+        'The verification service timed out. Check your connection and try again.',
+      );
+    } on FormatException {
+      throw const AuthFailure(
+        'The verification service returned an unexpected response. Try again.',
       );
     } catch (_) {
       throw const AuthFailure(
         'Could not reach the email verification service. Try again.',
       );
     }
+  }
+
+  Future<void> requestEmailOtp(String email) async {
+    await _postOtp('/request-email-otp', {'email': email.trim()});
   }
 
   Future<void> verifyEmailOtp({
     required String email,
     required String otp,
   }) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse('$_otpWorkerUrl/verify-email-otp'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email.trim(), 'otp': otp.trim()}),
-          )
-          .timeout(const Duration(seconds: 20));
-      final payload = jsonDecode(response.body);
-      if (response.statusCode != 200) {
-        throw AuthFailure(
-          payload is Map && payload['error'] is String
-              ? payload['error'] as String
-              : 'Could not verify the code.',
-        );
-      }
-    } on AuthFailure {
-      rethrow;
-    } on TimeoutException {
-      throw const AuthFailure('The verification timed out. Please try again.');
-    } catch (_) {
-      throw const AuthFailure(
-        'Could not reach the email verification service. Try again.',
-      );
-    }
+    await _postOtp('/verify-email-otp', {
+      'email': email.trim(),
+      'otp': otp.trim(),
+    });
   }
 
   /// Verifies an OTP and establishes a Firebase Auth session using the custom
-  /// token returned by the backend.
+  /// token returned by the backend, or by signing in/creating the verified account.
   Future<void> signInWithEmailOtp({
     required String email,
     required String otp,
+    String? password,
   }) async {
-    await verifyEmailOtp(email: email, otp: otp);
-    throw const AuthFailure(
-      'The code was verified. Use password sign-in or resend it after your account password is set.',
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Email sign-in is unavailable.',
+      );
+    }
+
+    final cleanEmail = email.trim().toLowerCase();
+    final payload = await _postOtp('/verify-email-otp', {
+      'email': cleanEmail,
+      'otp': otp.trim(),
+    });
+
+    final token = _customTokenFrom(payload);
+    if (token != null) {
+      try {
+        final credential = await FirebaseAuth.instance.signInWithCustomToken(
+          token,
+        );
+        final user = credential.user;
+        if (user != null) {
+          await _touchProfile(
+            user,
+            provider: 'email-otp',
+          ).timeout(const Duration(seconds: 3), onTimeout: () {});
+        }
+        return;
+      } on FirebaseAuthException catch (error) {
+        throw AuthFailure(friendlyMessage(error));
+      }
+    }
+
+    // When the worker does not return a custom token, OTP verification has
+    // still successfully proven the citizen's email ownership.
+    if (password != null && password.length >= 8) {
+      // 1. Try signing in with the provided password
+      try {
+        final credential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+              email: cleanEmail,
+              password: password,
+            );
+        final user = credential.user;
+        if (user != null) {
+          await _touchProfile(
+            user,
+            provider: 'password',
+          ).timeout(const Duration(seconds: 3), onTimeout: () {});
+        }
+        return;
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'user-not-found' &&
+            e.code != 'wrong-password' &&
+            e.code != 'invalid-credential') {
+          throw AuthFailure(friendlyMessage(e));
+        }
+      }
+
+      // 2. If password sign-in failed, create the account since the email is verified
+      try {
+        final credential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: cleanEmail,
+              password: password,
+            );
+        final user = credential.user;
+        if (user != null) {
+          final defaultName = cleanEmail.split('@').first;
+          try {
+            await user.updateDisplayName(defaultName);
+          } catch (_) {}
+          await _touchProfile(
+            user,
+            provider: 'password',
+            name: defaultName,
+            email: cleanEmail,
+          ).timeout(const Duration(seconds: 3), onTimeout: () {});
+        }
+        return;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          // Account exists with a different password.
+          // Dispatch a password reset link to their verified inbox.
+          try {
+            await FirebaseAuth.instance.sendPasswordResetEmail(
+              email: cleanEmail,
+            );
+          } catch (_) {}
+          throw AuthFailure(
+            'Email verified! This account already has a password. '
+            'We have sent a password reset link to $cleanEmail. '
+            'Please check your email to set a new password, then sign in.',
+          );
+        }
+        throw AuthFailure(friendlyMessage(e));
+      }
+    }
+
+    // If no 8+ character password was provided:
+    final reason = payload['tokenReason'];
+    if (reason == 'user-not-found') {
+      throw const AuthFailure(
+        'Email verified, but no account was found with this email. '
+        'Please enter a password of at least 8 characters to create your account.',
+      );
+    }
+
+    // Account exists, but no password was given and worker cannot mint custom tokens:
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
+    } catch (_) {}
+    throw AuthFailure(
+      'Email verified! A password reset link has been sent to $cleanEmail. '
+      'Please check your email to set a new password, then sign in.',
     );
+  }
+
+  /// Accepts the token keys used across worker/function versions.
+  static String? _customTokenFrom(Map<String, dynamic> payload) {
+    for (final key in const ['token', 'customToken', 'firebaseToken']) {
+      final value = payload[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
   }
 
   /// Checks whether an account with [email] exists in the backend.
@@ -205,10 +327,13 @@ class AuthService {
       );
     }
 
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanName = name.trim().isNotEmpty ? name.trim() : cleanEmail.split('@').first;
+
     try {
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
-            email: email.trim(),
+            email: cleanEmail,
             password: password,
           );
 
@@ -217,15 +342,15 @@ class AuthService {
         throw const AuthFailure('We could not finish creating your account.');
       }
 
-      await user.updateDisplayName(name.trim());
+      await user.updateDisplayName(cleanName);
 
       // The account itself is already usable; a failed profile write should
       // not block sign-in, so it is best-effort.
       try {
         await FirebaseFirestore.instance.collection(_users).doc(user.uid).set({
           'uid': user.uid,
-          'name': name.trim(),
-          'email': email.trim(),
+          'name': cleanName,
+          'email': cleanEmail,
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
           'createdAt': FieldValue.serverTimestamp(),
@@ -249,7 +374,7 @@ class AuthService {
       );
     }
 
-    final email = identifier.trim();
+    final email = identifier.trim().toLowerCase();
     if (!_looksLikeEmail(email)) {
       throw const AuthFailure(
         'Use your email to sign in. Phone OTP is coming soon.',
@@ -565,7 +690,12 @@ class AuthService {
       case 'user-not-found':
       case 'wrong-password':
       case 'invalid-credential':
-        return 'Email or password is incorrect.';
+        return 'Email or password is incorrect. If you never set a password, '
+            'use the email code option instead.';
+      case 'invalid-custom-token':
+      case 'custom-token-mismatch':
+        return 'That sign-in code is no longer valid. Request a new code and '
+            'try again.';
       case 'user-disabled':
         return 'This account has been disabled. Contact your ward office.';
       case 'too-many-requests':

@@ -224,6 +224,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         builder: (_) => StaffHomeScreen(
           staffIdentifier: session.identifier,
           isPhone: session.isPhone,
+          showRememberMePrompt: true,
         ),
       ),
       (route) => false,
