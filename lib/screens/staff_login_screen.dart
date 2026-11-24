@@ -207,6 +207,22 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   Future<void> _openStaffHome(StaffSession session) async {
     if (!mounted || !_isCurrentRoute) return;
+
+    if (session.mustChangePassword) {
+      final changed = await _promptPasswordChange();
+      if (!changed) {
+        await StaffAuthService.signOut();
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _celebrating = false;
+          });
+        }
+        return;
+      }
+    }
+
+    if (!mounted || !_isCurrentRoute) return;
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -230,6 +246,169 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       ),
       (route) => false,
     );
+  }
+
+  Future<bool> _promptPasswordChange() async {
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    var isSubmitting = false;
+    String? localError;
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final tokens = NsColors.of(context);
+            final viewInsets = MediaQuery.of(context).viewInsets;
+
+            return Container(
+              padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + viewInsets.bottom),
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: tokens.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Set Permanent Password',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'You are signing in with a temporary password. Please set your new permanent password to continue.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: tokens.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                    if (localError != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.error.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          localError!,
+                          style: const TextStyle(fontSize: 12, color: AppColors.error),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    NsTextField(
+                      controller: newPasswordController,
+                      label: 'New Password',
+                      hint: 'At least 6 characters',
+                      icon: Icons.lock_outline_rounded,
+                      obscureText: true,
+                      validator: (v) {
+                        if (v == null || v.trim().length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    NsTextField(
+                      controller: confirmPasswordController,
+                      label: 'Confirm Password',
+                      hint: 'Re-enter your new password',
+                      icon: Icons.lock_reset_rounded,
+                      obscureText: true,
+                      validator: (v) {
+                        if (v != newPasswordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    NsPrimaryButton(
+                      label: 'Update & Sign In',
+                      isLoading: isSubmitting,
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              setModalState(() {
+                                isSubmitting = true;
+                                localError = null;
+                              });
+                              try {
+                                await _staffAuth.updateStaffPassword(
+                                  newPasswordController.text.trim(),
+                                );
+                                if (bottomSheetContext.mounted) {
+                                  Navigator.of(bottomSheetContext).pop(true);
+                                }
+                              } on AuthFailure catch (e) {
+                                setModalState(() {
+                                  isSubmitting = false;
+                                  localError = e.message;
+                                });
+                              } catch (_) {
+                                setModalState(() {
+                                  isSubmitting = false;
+                                  localError =
+                                      'Failed to update password. Please try again.';
+                                });
+                              }
+                            },
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () => Navigator.of(bottomSheetContext).pop(false),
+                      child: Text(
+                        'Cancel & Sign Out',
+                        style: TextStyle(color: tokens.muted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
+    return result == true;
   }
 
   void _changeNumber() {

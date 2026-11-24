@@ -16,12 +16,12 @@ import '../../widgets/ns_text_field.dart';
 
 abstract final class _AdminColors {
   static const suspended = Color(0xFFB25E09);
-  static const reassigned = Color(0xFF2563A6);
+  static const deleted = Color(0xFFB91C1C);
 }
 
 /// US-08 – App Admin ward officer management.
 ///
-/// Lists officers, supports one-click suspend/reactivate, ward reassignment,
+/// Lists officers, supports one-click suspend/reactivate, officer deletion,
 /// officer creation and an audit trail of every admin action.
 class WardOfficerManagementScreen extends StatefulWidget {
   const WardOfficerManagementScreen({super.key, this.service});
@@ -251,41 +251,51 @@ class _WardOfficerManagementScreenState
     }
   }
 
-  Future<void> _openReassign(WardOfficer officer) async {
+  Future<void> _confirmDelete(WardOfficer officer) async {
     FocusScope.of(context).unfocus();
-    final request = await showModalBottomSheet<({int ward, String reason})>(
+
+    final confirmed = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      constraints: const BoxConstraints(maxWidth: 560),
-      builder: (_) => _ReassignWardSheet(officer: officer),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete officer?'),
+        content: Text(
+          'This will permanently remove ${officer.fullName} from Ward Officer '
+          'Management and delete their account from the system.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    if (request == null || !mounted) return;
+    if (confirmed != true || !mounted) return;
     setState(() => _busyOfficerIds.add(officer.id));
 
     try {
-      final result = await _service.reassignWard(
+      await _service.deleteOfficer(
         officer.id,
-        newWard: request.ward,
-        reason: request.reason,
+        reason: 'Officer account deleted by admin.',
       );
       await _refreshData();
       if (!mounted) return;
 
       final strings = context.l10n;
       _showToast(
-        strings.officerMovedMessage(
-          result.officer.fullName,
-          result.officer.wardLabel,
-          result.notification.message,
-        ),
-        actionLabel: strings.addReasonAction,
-        onAction: () => _promptAddReason(result.auditLog),
+        '${officer.fullName} has been permanently deleted.',
+        actionLabel: 'View audit',
+        onAction: () => setState(() => _tabIndex = 1),
       );
     } catch (error) {
-      if (mounted) _showError(error, context.l10n.couldNotReassignOfficer);
+      if (mounted) _showError(error, 'Could not delete the officer.');
     } finally {
       if (mounted) setState(() => _busyOfficerIds.remove(officer.id));
     }
@@ -523,7 +533,7 @@ class _WardOfficerManagementScreenState
                 officer: officer,
                 isBusy: _busyOfficerIds.contains(officer.id),
                 onToggle: () => _toggleStatus(officer),
-                onReassign: () => _openReassign(officer),
+                onDelete: () => _confirmDelete(officer),
               ),
               const SizedBox(height: 12),
             ],
@@ -597,9 +607,11 @@ class _WardOfficerManagementScreenState
           ),
           const SizedBox(height: 12),
           if (_auditLogs.isEmpty)
-            _EmptyState(
-              title: strings.noAuditEntriesTitle,
-              message: strings.noAuditEntriesBody,
+            const _EmptyState(
+              title: 'No audit entries yet',
+              message:
+                  'Create, suspend, reactivate or delete an officer and '
+                  'the action will appear here.',
             )
           else
             for (final log in _auditLogs) ...[
@@ -882,13 +894,13 @@ class _OfficerCard extends StatelessWidget {
     required this.officer,
     required this.isBusy,
     required this.onToggle,
-    required this.onReassign,
+    required this.onDelete,
   });
 
   final WardOfficer officer;
   final bool isBusy;
   final VoidCallback onToggle;
-  final VoidCallback onReassign;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1019,12 +1031,16 @@ class _OfficerCard extends StatelessWidget {
                   ),
                 ),
               OutlinedButton.icon(
-                onPressed: isBusy ? null : onReassign,
-                icon: const Icon(Icons.swap_horiz_rounded, size: 17),
-                label: Text(strings.reassign),
+                onPressed: isBusy ? null : onDelete,
+                icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                label: const Text('Delete'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: tokens.accentText,
-                  side: BorderSide(color: tokens.border),
+                  foregroundColor: AppColors.error,
+                  side: BorderSide(
+                    color: isBusy
+                        ? AppColors.border
+                        : AppColors.error.withValues(alpha: 0.45),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   minimumSize: const Size(0, 40),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1150,12 +1166,11 @@ class _AuditLogCard extends StatelessWidget {
     final strings = context.l10n;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final actionColor = switch (log.actionType) {
-      OfficerAuditAction.create => tokens.accentText,
-      OfficerAuditAction.suspend =>
-        isDark ? tokens.errorBorder : _AdminColors.suspended,
-      OfficerAuditAction.reactivate => tokens.accentText,
-      OfficerAuditAction.reassign =>
-        isDark ? tokens.accentBright : _AdminColors.reassigned,
+      OfficerAuditAction.create => AppColors.primary,
+      OfficerAuditAction.suspend => AppColors.error,
+      OfficerAuditAction.reactivate => AppColors.primary,
+      OfficerAuditAction.reassign => AppColors.muted,
+      OfficerAuditAction.delete => _AdminColors.deleted,
     };
 
     return Container(
@@ -1518,111 +1533,6 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
   }
 }
 
-class _ReassignWardSheet extends StatefulWidget {
-  const _ReassignWardSheet({required this.officer});
-
-  final WardOfficer officer;
-
-  @override
-  State<_ReassignWardSheet> createState() => _ReassignWardSheetState();
-}
-
-class _ReassignWardSheetState extends State<_ReassignWardSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _reasonController = TextEditingController();
-  late int _ward = widget.officer.assignedWard;
-  String? _error;
-
-  @override
-  void dispose() {
-    _reasonController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    FocusScope.of(context).unfocus();
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    if (_ward == widget.officer.assignedWard) {
-      setState(() => _error = context.l10n.chooseDifferentWard);
-      return;
-    }
-
-    Navigator.of(context)
-        .pop((ward: _ward, reason: _reasonController.text.trim()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-    final strings = context.l10n;
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: tokens.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _SheetGrabber(),
-                const SizedBox(height: 14),
-                _SheetHeader(
-                  title: strings.reassignWardTitle,
-                  subtitle: strings.reassignWardSubtitle(
-                    widget.officer.fullName,
-                    widget.officer.wardLabel,
-                  ),
-                  onClose: () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(height: 20),
-                _WardField(
-                  label: strings.newWardLabel,
-                  value: _ward,
-                  onChanged: (ward) => setState(() {
-                    _ward = ward;
-                    _error = null;
-                  }),
-                ),
-                const SizedBox(height: 16),
-                NsTextField(
-                  controller: _reasonController,
-                  label: strings.reasonLabel,
-                  hint: strings.reassignReasonHint,
-                  icon: Icons.notes_rounded,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.done,
-                  validator: (value) {
-                    if ((value ?? '').trim().isEmpty) {
-                      return strings.reassignReasonRequired;
-                    }
-                    return null;
-                  },
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
-                  _ErrorBanner(message: _error!),
-                ],
-                const SizedBox(height: 20),
-                NsPrimaryButton(
-                  label: strings.updateWardLabel,
-                  icon: Icons.swap_horiz_rounded,
-                  onPressed: _submit,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _ReasonSheet extends StatefulWidget {
   const _ReasonSheet({required this.log});

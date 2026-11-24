@@ -31,6 +31,8 @@ class WardOfficer {
     required this.assignedWard,
     required this.status,
     required this.createdAt,
+    this.mustChangePassword = false,
+    this.tempPassword,
   });
 
   /// Lowest ward number accepted by the app.
@@ -50,6 +52,12 @@ class WardOfficer {
   final OfficerStatus status;
   final DateTime createdAt;
 
+  /// Whether the officer must set a new permanent password on next login.
+  final bool mustChangePassword;
+
+  /// Temporary plaintext password assigned during creation (or null if permanent).
+  final String? tempPassword;
+
   bool get isActive => status == OfficerStatus.active;
 
   String get wardLabel => 'Ward $assignedWard';
@@ -64,6 +72,8 @@ class WardOfficer {
     int? assignedWard,
     OfficerStatus? status,
     DateTime? createdAt,
+    bool? mustChangePassword,
+    String? tempPassword,
   }) {
     return WardOfficer(
       id: id ?? this.id,
@@ -73,6 +83,8 @@ class WardOfficer {
       assignedWard: assignedWard ?? this.assignedWard,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      tempPassword: tempPassword ?? this.tempPassword,
     );
   }
 
@@ -85,6 +97,8 @@ class WardOfficer {
       'assignedWard': assignedWard,
       'status': status.value,
       'createdAt': createdAt.toIso8601String(),
+      'mustChangePassword': mustChangePassword,
+      if (tempPassword != null) 'tempPassword': tempPassword,
     };
   }
 
@@ -97,6 +111,8 @@ class WardOfficer {
       assignedWard: (json['assignedWard'] as num?)?.toInt() ?? minWard,
       status: OfficerStatus.fromValue(json['status']),
       createdAt: _parseDate(json['createdAt']),
+      mustChangePassword: json['mustChangePassword'] as bool? ?? false,
+      tempPassword: json['tempPassword'] as String?,
     );
   }
 
@@ -115,6 +131,8 @@ class WardOfficer {
       'assignedWard': assignedWard,
       'status': status.value,
       'createdAt': Timestamp.fromDate(createdAt),
+      'mustChangePassword': mustChangePassword,
+      if (tempPassword != null) 'tempPassword': tempPassword,
     };
   }
 
@@ -132,7 +150,11 @@ enum OfficerAuditAction {
   create('CREATE'),
   suspend('SUSPEND'),
   reactivate('REACTIVATE'),
-  reassign('REASSIGN');
+  /// Kept for backward-compatibility: existing Firestore audit documents
+  /// that pre-date the removal of the Reassign feature still deserialise
+  /// correctly via [fromValue].
+  reassign('REASSIGN'),
+  delete('DELETE');
 
   const OfficerAuditAction(this.value);
 
@@ -152,6 +174,7 @@ enum OfficerAuditAction {
     OfficerAuditAction.suspend => 'Suspended',
     OfficerAuditAction.reactivate => 'Reactivated',
     OfficerAuditAction.reassign => 'Reassigned',
+    OfficerAuditAction.delete => 'Deleted',
   };
 }
 
