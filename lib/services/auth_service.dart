@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/language_controller.dart';
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
 
@@ -38,13 +39,17 @@ class AuthService {
     defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
   );
 
-  Future<void> requestEmailOtp(String email) async {
+  Future<void> requestEmailOtp(String email, {String? locale}) async {
+    final activeLocale = locale ?? LanguageController.instance.value.code;
     try {
       final response = await http
           .post(
             Uri.parse('$_otpWorkerUrl/request-email-otp'),
             headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email.trim()}),
+            body: jsonEncode({
+              'email': email.trim(),
+              'locale': activeLocale,
+            }),
           )
           .timeout(const Duration(seconds: 20));
       final payload = jsonDecode(response.body);
@@ -228,6 +233,7 @@ class AuthService {
           'email': email.trim(),
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
+          'preferredLanguage': LanguageController.instance.value.code,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });

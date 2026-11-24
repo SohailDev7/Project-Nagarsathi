@@ -10,6 +10,7 @@ import '../widgets/ns_back_button.dart';
 import '../widgets/ns_card.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
+import '../widgets/ns_language_toggle.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
@@ -261,6 +262,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             children: [
               NsBackButton(onPressed: _backToCitizenSignIn),
               const Spacer(),
+              const NsLanguageToggle(compact: true),
+              const SizedBox(width: 8),
               const NsStaffBadge(compact: true),
             ],
           ),

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/ward_officer.dart';
 import '../../services/admin_officer_service.dart';
 import '../../theme/app_theme.dart';
@@ -10,6 +11,7 @@ import '../../widgets/ns_back_button.dart';
 import '../../widgets/ns_background.dart';
 import '../../widgets/ns_primary_button.dart';
 import '../../widgets/ns_segmented_control.dart';
+import '../../widgets/ns_settings_sheet.dart';
 import '../../widgets/ns_text_field.dart';
 
 abstract final class _AdminColors {
@@ -83,7 +85,7 @@ class _WardOfficerManagementScreenState
       });
     } catch (error) {
       if (!mounted) return;
-      _showError(error, 'Could not load ward officer data. Please try again.');
+      _showError(error, context.l10n.couldNotLoadOfficerData);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -101,7 +103,7 @@ class _WardOfficerManagementScreenState
       });
     } catch (error) {
       if (!mounted) return;
-      _showError(error, 'Could not refresh ward officer data.');
+      _showError(error, context.l10n.couldNotRefreshOfficerData);
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
@@ -200,10 +202,14 @@ class _WardOfficerManagementScreenState
     await _refreshData();
     if (!mounted) return;
 
+    final strings = context.l10n;
     _showToast(
-      '${result.officer.fullName} added to ${result.officer.wardLabel}. '
-      '${result.notification.message}',
-      actionLabel: 'View audit',
+      strings.officerAddedMessage(
+        result.officer.fullName,
+        result.officer.wardLabel,
+        result.notification.message,
+      ),
+      actionLabel: strings.viewAudit,
       onAction: () => setState(() => _tabIndex = 1),
     );
   }
@@ -226,14 +232,20 @@ class _WardOfficerManagementScreenState
       await _refreshData();
       if (!mounted) return;
 
+      final strings = context.l10n;
       _showToast(
-        '${result.officer.fullName} is now ${result.officer.status.value}. '
-        '${result.notification.message}',
-        actionLabel: 'Add reason',
+        strings.officerStatusChangedMessage(
+          result.officer.fullName,
+          result.officer.status.value,
+          result.notification.message,
+        ),
+        actionLabel: strings.addReasonAction,
         onAction: () => _promptAddReason(result.auditLog),
       );
     } catch (error) {
-      if (mounted) _showError(error, 'Could not update the officer status.');
+      if (mounted) {
+        _showError(error, context.l10n.couldNotUpdateOfficerStatus);
+      }
     } finally {
       if (mounted) setState(() => _busyOfficerIds.remove(officer.id));
     }
@@ -262,14 +274,18 @@ class _WardOfficerManagementScreenState
       await _refreshData();
       if (!mounted) return;
 
+      final strings = context.l10n;
       _showToast(
-        '${result.officer.fullName} moved to ${result.officer.wardLabel}. '
-        '${result.notification.message}',
-        actionLabel: 'Add reason',
+        strings.officerMovedMessage(
+          result.officer.fullName,
+          result.officer.wardLabel,
+          result.notification.message,
+        ),
+        actionLabel: strings.addReasonAction,
         onAction: () => _promptAddReason(result.auditLog),
       );
     } catch (error) {
-      if (mounted) _showError(error, 'Could not reassign the officer.');
+      if (mounted) _showError(error, context.l10n.couldNotReassignOfficer);
     } finally {
       if (mounted) setState(() => _busyOfficerIds.remove(officer.id));
     }
@@ -292,9 +308,9 @@ class _WardOfficerManagementScreenState
       await _service.updateAuditLogReason(log.id, reason: reason);
       await _refreshData();
       if (!mounted) return;
-      _showToast('Audit reason updated for ${log.targetOfficerName}.');
+      _showToast(context.l10n.auditReasonUpdated(log.targetOfficerName));
     } catch (error) {
-      if (mounted) _showError(error, 'Could not update the audit reason.');
+      if (mounted) _showError(error, context.l10n.couldNotUpdateAuditReason);
     } finally {
       if (mounted) setState(() => _isUpdatingReason = false);
     }
@@ -314,7 +330,10 @@ class _WardOfficerManagementScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: NsSegmentedControl(
-                  segments: const ['Officers', 'Audit trail'],
+                  segments: [
+                    context.l10n.officersTab,
+                    context.l10n.auditTrailTab,
+                  ],
                   selectedIndex: _tabIndex,
                   onChanged: (index) {
                     FocusScope.of(context).unfocus();
@@ -354,6 +373,7 @@ class _WardOfficerManagementScreenState
 
   Widget _buildHeader(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Row(
       children: [
         NsBackButton(onPressed: () => Navigator.of(context).maybePop()),
@@ -363,7 +383,7 @@ class _WardOfficerManagementScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Ward officers',
+                strings.wardOfficersTitle,
                 style: TextStyle(
                   fontSize: 24,
                   height: 1.15,
@@ -374,7 +394,7 @@ class _WardOfficerManagementScreenState
               ),
               const SizedBox(height: 3),
               Text(
-                'App admin · $_adminLabel',
+                strings.appAdminSubtitle(_adminLabel),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
@@ -385,9 +405,11 @@ class _WardOfficerManagementScreenState
           ),
         ),
         const SizedBox(width: 10),
+        const NsSettingsButton(),
+        const SizedBox(width: 8),
         _CircleAction(
           icon: Icons.person_add_alt_1_rounded,
-          tooltip: 'Add ward officer',
+          tooltip: strings.addOfficer,
           onPressed: _openAddOfficer,
         ),
       ],
@@ -396,9 +418,11 @@ class _WardOfficerManagementScreenState
 
   Widget _buildOfficersTab() {
     final officers = _filteredOfficers;
+    final strings = context.l10n;
+    final tokens = NsColors.of(context);
 
     return RefreshIndicator(
-      color: AppColors.primary,
+      color: tokens.primaryStrong,
       onRefresh: _refreshData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -412,23 +436,23 @@ class _WardOfficerManagementScreenState
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: NsColors.of(context).ink,
+              color: tokens.ink,
             ),
             decoration: InputDecoration(
-              hintText: 'Search name, email, phone or ward',
-              prefixIcon: const Icon(
+              hintText: strings.searchOfficersHint,
+              prefixIcon: Icon(
                 Icons.search_rounded,
                 size: 20,
-                color: AppColors.muted,
+                color: tokens.muted,
               ),
               suffixIcon: _query.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: 'Clear search',
-                      icon: const Icon(
+                      tooltip: strings.clearFilters,
+                      icon: Icon(
                         Icons.close_rounded,
                         size: 18,
-                        color: AppColors.muted,
+                        color: tokens.muted,
                       ),
                       onPressed: _searchController.clear,
                     ),
@@ -456,13 +480,11 @@ class _WardOfficerManagementScreenState
           Row(
             children: [
               Text(
-                officers.length == 1
-                    ? '1 officer'
-                    : '${officers.length} officers',
-                style: const TextStyle(
+                strings.officerCount(officers.length),
+                style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: tokens.ink,
                 ),
               ),
               const Spacer(),
@@ -474,9 +496,9 @@ class _WardOfficerManagementScreenState
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
-                    'Clear filters',
-                    style: TextStyle(fontSize: 12.5),
+                  child: Text(
+                    strings.clearFilters,
+                    style: const TextStyle(fontSize: 12.5),
                   ),
                 ),
             ],
@@ -485,14 +507,14 @@ class _WardOfficerManagementScreenState
           if (officers.isEmpty)
             _EmptyState(
               title: _officers.isEmpty
-                  ? 'No ward officers yet'
-                  : 'No officers match',
+                  ? strings.noWardOfficersTitle
+                  : strings.noOfficersMatchTitle,
               message: _officers.isEmpty
-                  ? 'Create the first officer account to start assigning '
-                        'wards and tracking admin actions.'
-                  : 'Try a different search or clear the ward and status '
-                        'filters.',
-              actionLabel: _officers.isEmpty ? 'Add officer' : 'Clear filters',
+                  ? strings.noWardOfficersBody
+                  : strings.noOfficersMatchBody,
+              actionLabel: _officers.isEmpty
+                  ? strings.addOfficer
+                  : strings.clearFilters,
               onAction: _officers.isEmpty ? _openAddOfficer : _clearFilters,
             )
           else
@@ -511,8 +533,11 @@ class _WardOfficerManagementScreenState
   }
 
   Widget _buildAuditTab() {
+    final strings = context.l10n;
+    final tokens = NsColors.of(context);
+
     return RefreshIndicator(
-      color: AppColors.primary,
+      color: tokens.primaryStrong,
       onRefresh: _refreshData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -521,30 +546,27 @@ class _WardOfficerManagementScreenState
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.07),
+              color: tokens.mint,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.14),
-              ),
+              border: Border.all(color: tokens.border),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.verified_user_outlined,
                   size: 20,
-                  color: AppColors.primary,
+                  color: tokens.accentText,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Every admin action is recorded with the acting admin ID, '
-                    'old and new values, a reason and a timestamp.',
+                    strings.auditInfo,
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.45,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.ink.withValues(alpha: 0.75),
+                      color: tokens.ink.withValues(alpha: 0.85),
                     ),
                   ),
                 ),
@@ -554,34 +576,30 @@ class _WardOfficerManagementScreenState
           const SizedBox(height: 18),
           Row(
             children: [
-              const Text(
-                'Recent activity',
+              Text(
+                strings.recentActivity,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: tokens.ink,
                 ),
               ),
               const Spacer(),
               Text(
-                _auditLogs.length == 1
-                    ? '1 entry'
-                    : '${_auditLogs.length} entries',
-                style: const TextStyle(
+                strings.auditEntryCount(_auditLogs.length),
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           if (_auditLogs.isEmpty)
-            const _EmptyState(
-              title: 'No audit entries yet',
-              message:
-                  'Create, suspend, reactivate or reassign an officer and '
-                  'the action will appear here.',
+            _EmptyState(
+              title: strings.noAuditEntriesTitle,
+              message: strings.noAuditEntriesBody,
             )
           else
             for (final log in _auditLogs) ...[
@@ -640,30 +658,34 @@ class _StatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = officers.where((officer) => officer.isActive).length;
     final suspended = officers.length - active;
+    final strings = context.l10n;
+    final tokens = NsColors.of(context);
 
     return Row(
       children: [
         Expanded(
           child: _StatCard(
-            label: 'Total',
+            label: strings.totalLabel,
             value: officers.length,
-            color: AppColors.primary,
+            color: tokens.accentText,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
-            label: 'Active',
+            label: strings.activeLabel,
             value: active,
-            color: AppColors.primary,
+            color: tokens.accentText,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
-            label: 'Suspended',
+            label: strings.suspendedLabel,
             value: suspended,
-            color: _AdminColors.suspended,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? tokens.errorBorder
+                : _AdminColors.suspended,
           ),
         ),
       ],
@@ -728,23 +750,22 @@ class _WardFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
+
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: value == null ? AppColors.border : AppColors.primary,
+          color: value == null ? tokens.border : tokens.accentText,
         ),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.location_on_outlined,
-            size: 17,
-            color: AppColors.muted,
-          ),
+          Icon(Icons.location_on_outlined, size: 17, color: tokens.muted),
           const SizedBox(width: 6),
           Expanded(
             child: DropdownButtonHideUnderline(
@@ -752,21 +773,22 @@ class _WardFilter extends StatelessWidget {
                 value: value,
                 isExpanded: true,
                 borderRadius: BorderRadius.circular(16),
-                hint: const Text('All wards'),
-                icon: const Icon(
+                hint: Text(strings.allWards),
+                icon: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 20,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+                  color: tokens.ink,
                 ),
+                dropdownColor: tokens.surface,
                 items: [
-                  const DropdownMenuItem<int?>(
+                  DropdownMenuItem<int?>(
                     value: null,
-                    child: Text('All wards'),
+                    child: Text(strings.allWards),
                   ),
                   for (
                     var ward = WardOfficer.minWard;
@@ -775,7 +797,7 @@ class _WardFilter extends StatelessWidget {
                   )
                     DropdownMenuItem<int?>(
                       value: ward,
-                      child: Text('Ward $ward'),
+                      child: Text(strings.wardLabel('$ward')),
                     ),
                 ],
                 onChanged: onChanged,
@@ -796,23 +818,22 @@ class _StatusFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
+
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: value == null ? AppColors.border : AppColors.primary,
+          color: value == null ? tokens.border : tokens.accentText,
         ),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.filter_alt_outlined,
-            size: 17,
-            color: AppColors.muted,
-          ),
+          Icon(Icons.filter_alt_outlined, size: 17, color: tokens.muted),
           const SizedBox(width: 6),
           Expanded(
             child: DropdownButtonHideUnderline(
@@ -820,29 +841,30 @@ class _StatusFilter extends StatelessWidget {
                 value: value,
                 isExpanded: true,
                 borderRadius: BorderRadius.circular(16),
-                hint: const Text('All statuses'),
-                icon: const Icon(
+                hint: Text(strings.allStatuses),
+                icon: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 20,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+                  color: tokens.ink,
                 ),
-                items: const [
+                dropdownColor: tokens.surface,
+                items: [
                   DropdownMenuItem<OfficerStatus?>(
                     value: null,
-                    child: Text('All statuses'),
+                    child: Text(strings.allStatuses),
                   ),
                   DropdownMenuItem<OfficerStatus?>(
                     value: OfficerStatus.active,
-                    child: Text('Active'),
+                    child: Text(strings.activeLabel),
                   ),
                   DropdownMenuItem<OfficerStatus?>(
                     value: OfficerStatus.suspended,
-                    child: Text('Suspended'),
+                    child: Text(strings.suspendedLabel),
                   ),
                 ],
                 onChanged: onChanged,
@@ -871,9 +893,11 @@ class _OfficerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = officer.isActive
-        ? AppColors.primary
-        : _AdminColors.suspended;
+        ? tokens.accentText
+        : (isDark ? tokens.errorBorder : _AdminColors.suspended);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -899,16 +923,16 @@ class _OfficerCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.10),
+                  color: tokens.mint,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   _initialsFor(officer.fullName),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark,
+                    color: tokens.accentText,
                   ),
                 ),
               ),
@@ -960,27 +984,25 @@ class _OfficerCard extends StatelessWidget {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
+                  color: tokens.mint,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.16),
-                  ),
+                  border: Border.all(color: tokens.border),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.place_outlined,
                       size: 14,
-                      color: AppColors.primaryDark,
+                      color: tokens.accentText,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       officer.wardLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primaryDark,
+                        color: tokens.accentText,
                       ),
                     ),
                   ],
@@ -999,10 +1021,10 @@ class _OfficerCard extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: isBusy ? null : onReassign,
                 icon: const Icon(Icons.swap_horiz_rounded, size: 17),
-                label: const Text('Reassign'),
+                label: Text(strings.reassign),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primaryDark,
-                  side: const BorderSide(color: AppColors.border),
+                  foregroundColor: tokens.accentText,
+                  side: BorderSide(color: tokens.border),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   minimumSize: const Size(0, 40),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1017,9 +1039,9 @@ class _OfficerCard extends StatelessWidget {
               ),
             ],
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: AppColors.border),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: tokens.hairline),
           ),
           Row(
             children: [
@@ -1032,7 +1054,9 @@ class _OfficerCard extends StatelessWidget {
               ),
               const SizedBox(width: 7),
               Text(
-                officer.isActive ? 'Account active' : 'Account suspended',
+                officer.isActive
+                    ? strings.accountActive
+                    : strings.accountSuspended,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1065,19 +1089,20 @@ class _ContactLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Row(
       children: [
-        Icon(icon, size: 13, color: AppColors.muted),
+        Icon(icon, size: 13, color: tokens.muted),
         const SizedBox(width: 5),
         Expanded(
           child: Text(
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w400,
-              color: AppColors.muted,
+              color: tokens.muted,
             ),
           ),
         ),
@@ -1121,19 +1146,24 @@ class _AuditLogCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final actionColor = switch (log.actionType) {
-      OfficerAuditAction.create => AppColors.primary,
-      OfficerAuditAction.suspend => AppColors.error,
-      OfficerAuditAction.reactivate => AppColors.primary,
-      OfficerAuditAction.reassign => _AdminColors.reassigned,
+      OfficerAuditAction.create => tokens.accentText,
+      OfficerAuditAction.suspend =>
+        isDark ? tokens.errorBorder : _AdminColors.suspended,
+      OfficerAuditAction.reactivate => tokens.accentText,
+      OfficerAuditAction.reassign =>
+        isDark ? tokens.accentBright : _AdminColors.reassigned,
     };
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: tokens.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1147,10 +1177,10 @@ class _AuditLogCard extends StatelessWidget {
                   log.targetOfficerName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
+                    color: tokens.ink,
                   ),
                 ),
               ),
@@ -1161,10 +1191,10 @@ class _AuditLogCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.muted,
+                    color: tokens.muted,
                   ),
                 ),
               ),
@@ -1182,23 +1212,19 @@ class _AuditLogCard extends StatelessWidget {
               ),
               Text(
                 log.previousValue ?? '—',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_rounded,
-                size: 14,
-                color: AppColors.muted,
-              ),
+              Icon(Icons.arrow_forward_rounded, size: 14, color: tokens.muted),
               Text(
                 log.newValue,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: tokens.ink,
                 ),
               ),
             ],
@@ -1208,16 +1234,16 @@ class _AuditLogCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: tokens.surfaceSoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              'Reason: ${log.reason}',
-              style: const TextStyle(
+              '${strings.reasonLabel}: ${log.reason}',
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
                 fontWeight: FontWeight.w500,
-                color: AppColors.ink,
+                color: tokens.ink,
               ),
             ),
           ),
@@ -1235,23 +1261,24 @@ class _MetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.07),
+        color: tokens.mint,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppColors.primaryDark),
+          Icon(icon, size: 12, color: tokens.accentText),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.primaryDark,
+              color: tokens.accentText,
             ),
           ),
         ],
@@ -1275,13 +1302,14 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: tokens.border),
       ),
       child: Column(
         children: [
@@ -1289,34 +1317,34 @@ class _EmptyState extends StatelessWidget {
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
+              color: tokens.mint,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.groups_outlined,
               size: 26,
-              color: AppColors.primary,
+              color: tokens.accentText,
             ),
           ),
           const SizedBox(height: 14),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: tokens.ink,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w400,
-              color: AppColors.muted,
+              color: tokens.muted,
             ),
           ),
           if (actionLabel != null && onAction != null) ...[
@@ -1366,7 +1394,7 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
     if (base != null) return base;
     final email = value!.trim().toLowerCase();
     if (widget.existingEmails.contains(email)) {
-      return 'An officer with this email already exists';
+      return context.l10n.officerEmailExists;
     }
     return null;
   }
@@ -1403,12 +1431,14 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          color: tokens.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
@@ -1421,17 +1451,15 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
                 const _SheetGrabber(),
                 const SizedBox(height: 14),
                 _SheetHeader(
-                  title: 'Add ward officer',
-                  subtitle:
-                      'Create an account and assign the officer to a ward. '
-                      'A confirmation email is sent automatically.',
+                  title: strings.addWardOfficerTitle,
+                  subtitle: strings.addWardOfficerSubtitle,
                   onClose: () => Navigator.of(context).pop(),
                 ),
                 const SizedBox(height: 20),
                 NsTextField(
                   controller: _nameController,
-                  label: 'Full name',
-                  hint: 'e.g. Anita Sharma',
+                  label: strings.fullName,
+                  hint: strings.fullNameExample,
                   icon: Icons.person_outline_rounded,
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
@@ -1440,8 +1468,8 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
                 const SizedBox(height: 16),
                 NsTextField(
                   controller: _emailController,
-                  label: 'Email address',
-                  hint: 'officer@nagarsathi.gov',
+                  label: strings.emailAddressLabel,
+                  hint: strings.emailExample,
                   icon: Icons.mail_outline_rounded,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
@@ -1454,8 +1482,8 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
                 const SizedBox(height: 16),
                 NsTextField(
                   controller: _phoneController,
-                  label: 'Phone number',
-                  hint: '+977 98XXXXXXXX',
+                  label: strings.phoneNumberLabel,
+                  hint: strings.phoneExample,
                   icon: Icons.phone_iphone_rounded,
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.done,
@@ -1466,7 +1494,7 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
                 ),
                 const SizedBox(height: 16),
                 _WardField(
-                  label: 'Assigned ward',
+                  label: strings.assignedWardLabel,
                   value: _ward,
                   onChanged: (ward) => setState(() => _ward = ward),
                 ),
@@ -1476,7 +1504,7 @@ class _AddOfficerSheetState extends State<_AddOfficerSheet> {
                 ],
                 const SizedBox(height: 20),
                 NsPrimaryButton(
-                  label: 'Create officer',
+                  label: strings.createOfficerLabel,
                   icon: Icons.person_add_alt_1_rounded,
                   isLoading: _isSubmitting,
                   onPressed: _submit,
@@ -1516,7 +1544,7 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     if (_ward == widget.officer.assignedWard) {
-      setState(() => _error = 'Choose a ward different from the current one.');
+      setState(() => _error = context.l10n.chooseDifferentWard);
       return;
     }
 
@@ -1526,12 +1554,14 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          color: tokens.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
@@ -1544,15 +1574,16 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
                 const _SheetGrabber(),
                 const SizedBox(height: 14),
                 _SheetHeader(
-                  title: 'Reassign ward',
-                  subtitle:
-                      'Move ${widget.officer.fullName} from '
-                      '${widget.officer.wardLabel} to a new ward.',
+                  title: strings.reassignWardTitle,
+                  subtitle: strings.reassignWardSubtitle(
+                    widget.officer.fullName,
+                    widget.officer.wardLabel,
+                  ),
                   onClose: () => Navigator.of(context).pop(),
                 ),
                 const SizedBox(height: 20),
                 _WardField(
-                  label: 'New ward',
+                  label: strings.newWardLabel,
                   value: _ward,
                   onChanged: (ward) => setState(() {
                     _ward = ward;
@@ -1562,14 +1593,14 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
                 const SizedBox(height: 16),
                 NsTextField(
                   controller: _reasonController,
-                  label: 'Reason',
-                  hint: 'e.g. Ward coverage rebalanced',
+                  label: strings.reasonLabel,
+                  hint: strings.reassignReasonHint,
                   icon: Icons.notes_rounded,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.done,
                   validator: (value) {
                     if ((value ?? '').trim().isEmpty) {
-                      return 'Enter a reason for reassignment';
+                      return strings.reassignReasonRequired;
                     }
                     return null;
                   },
@@ -1580,7 +1611,7 @@ class _ReassignWardSheetState extends State<_ReassignWardSheet> {
                 ],
                 const SizedBox(height: 20),
                 NsPrimaryButton(
-                  label: 'Update ward',
+                  label: strings.updateWardLabel,
                   icon: Icons.swap_horiz_rounded,
                   onPressed: _submit,
                 ),
@@ -1618,7 +1649,7 @@ class _ReasonSheetState extends State<_ReasonSheet> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final reason = _reasonController.text.trim();
     if (reason.isEmpty) {
-      setState(() => _error = 'Enter a reason for this action.');
+      setState(() => _error = context.l10n.reasonRequiredForAction);
       return;
     }
     Navigator.of(context).pop(reason);
@@ -1626,12 +1657,14 @@ class _ReasonSheetState extends State<_ReasonSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          color: tokens.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
@@ -1644,9 +1677,10 @@ class _ReasonSheetState extends State<_ReasonSheet> {
                 const _SheetGrabber(),
                 const SizedBox(height: 14),
                 _SheetHeader(
-                  title: 'Add a reason',
-                  subtitle:
-                      'Update the audit entry for ${widget.log.targetOfficerName}.',
+                  title: strings.addReasonTitle,
+                  subtitle: strings.addReasonSubtitle(
+                    widget.log.targetOfficerName,
+                  ),
                   onClose: () => Navigator.of(context).pop(),
                 ),
                 const SizedBox(height: 16),
@@ -1654,17 +1688,17 @@ class _ReasonSheetState extends State<_ReasonSheet> {
                   children: [
                     _Pill(
                       label: widget.log.actionType.value,
-                      color: AppColors.primary,
+                      color: tokens.accentText,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '${widget.log.previousValue ?? '—'} → '
                         '${widget.log.newValue}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.muted,
+                          color: tokens.muted,
                         ),
                       ),
                     ),
@@ -1673,14 +1707,14 @@ class _ReasonSheetState extends State<_ReasonSheet> {
                 const SizedBox(height: 18),
                 NsTextField(
                   controller: _reasonController,
-                  label: 'Reason',
-                  hint: 'Why did this action happen?',
+                  label: strings.reasonLabel,
+                  hint: strings.reasonHint,
                   icon: Icons.notes_rounded,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.done,
                   validator: (value) {
                     if ((value ?? '').trim().isEmpty) {
-                      return 'Enter a reason for this action';
+                      return strings.reasonRequiredForAction;
                     }
                     return null;
                   },
@@ -1691,7 +1725,7 @@ class _ReasonSheetState extends State<_ReasonSheet> {
                 ],
                 const SizedBox(height: 20),
                 NsPrimaryButton(
-                  label: 'Save reason',
+                  label: strings.saveReasonLabel,
                   icon: Icons.save_outlined,
                   onPressed: _submit,
                 ),
@@ -1717,6 +1751,8 @@ class _WardField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1727,7 +1763,7 @@ class _WardField extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.ink.withValues(alpha: 0.8),
+              color: tokens.ink.withValues(alpha: 0.8),
               letterSpacing: -0.1,
             ),
           ),
@@ -1736,17 +1772,13 @@ class _WardField extends StatelessWidget {
           height: 58,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
+            color: tokens.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: tokens.border),
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.location_on_outlined,
-                size: 20,
-                color: AppColors.muted,
-              ),
+              Icon(Icons.location_on_outlined, size: 20, color: tokens.muted),
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonHideUnderline(
@@ -1754,15 +1786,16 @@ class _WardField extends StatelessWidget {
                     value: value,
                     isExpanded: true,
                     borderRadius: BorderRadius.circular(16),
-                    icon: const Icon(
+                    dropdownColor: tokens.surface,
+                    icon: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: 20,
-                      color: AppColors.muted,
+                      color: tokens.muted,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.ink,
+                      color: tokens.ink,
                     ),
                     items: [
                       for (
@@ -1772,7 +1805,7 @@ class _WardField extends StatelessWidget {
                       )
                         DropdownMenuItem<int>(
                           value: ward,
-                          child: Text('Ward $ward'),
+                          child: Text(strings.wardLabel('$ward')),
                         ),
                     ],
                     onChanged: (ward) {
@@ -1802,6 +1835,7 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1811,22 +1845,22 @@ class _SheetHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 21,
                   height: 1.15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: tokens.heading,
                   letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   height: 1.45,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.muted,
+                  color: tokens.muted,
                 ),
               ),
             ],
@@ -1835,18 +1869,14 @@ class _SheetHeader extends StatelessWidget {
         const SizedBox(width: 12),
         Container(
           decoration: BoxDecoration(
-            color: AppColors.background,
+            color: tokens.surfaceSoft,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: tokens.border),
           ),
           child: IconButton(
             onPressed: onClose,
-            tooltip: 'Close',
-            icon: const Icon(
-              Icons.close_rounded,
-              size: 19,
-              color: AppColors.ink,
-            ),
+            tooltip: context.l10n.close,
+            icon: Icon(Icons.close_rounded, size: 19, color: tokens.ink),
           ),
         ),
       ],
@@ -1864,7 +1894,7 @@ class _SheetGrabber extends StatelessWidget {
         width: 42,
         height: 4,
         decoration: BoxDecoration(
-          color: AppColors.border,
+          color: NsColors.of(context).border,
           borderRadius: BorderRadius.circular(4),
         ),
       ),
@@ -1879,30 +1909,30 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final errorColor = Theme.of(context).brightness == Brightness.dark
+        ? tokens.errorBorder
+        : AppColors.error;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
+        color: errorColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.20)),
+        border: Border.all(color: errorColor.withValues(alpha: 0.20)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 17,
-            color: AppColors.error,
-          ),
+          Icon(Icons.error_outline_rounded, size: 17, color: errorColor),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
                 fontWeight: FontWeight.w500,
-                color: AppColors.error,
+                color: errorColor,
               ),
             ),
           ),
