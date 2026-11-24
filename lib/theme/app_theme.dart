@@ -290,6 +290,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   return ThemeData(
     useMaterial3: true,
     fontFamily: 'Nunito',
+    fontFamilyFallback: const ['NotoSansDevanagari', 'sans-serif'],
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: tokens.background,

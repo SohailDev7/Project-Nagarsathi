@@ -10,6 +10,7 @@ import '../widgets/ns_back_button.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_google_button.dart';
+import '../widgets/ns_language_toggle.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
@@ -368,7 +369,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
+        const NsLanguageToggle(compact: true),
+        const SizedBox(width: 8),
         _CloseButton(onPressed: () => Navigator.of(context).pop()),
       ],
     );

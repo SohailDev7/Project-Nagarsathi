@@ -11,6 +11,7 @@ import '../widgets/ns_card.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
+import '../widgets/ns_language_toggle.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_text_field.dart';
@@ -113,9 +114,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Stack(
       children: [
         NsAuthScaffold(
-          topBar: Align(
-            alignment: Alignment.centerLeft,
-            child: NsBackButton(onPressed: _backToSignIn),
+          topBar: Row(
+            children: [
+              NsBackButton(onPressed: _backToSignIn),
+              const Spacer(),
+              const NsLanguageToggle(compact: true),
+            ],
           ),
           child: NsEntrance(
             child: TweenAnimationBuilder<double>(

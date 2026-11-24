@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/citizen_location.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
@@ -23,7 +24,6 @@ import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
-import '../widgets/ns_yeti_lines.dart';
 import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
@@ -191,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } on TimeoutException {
       if (!mounted) return;
       setState(() => _locating = false);
-      _showMessage('Finding your ward took too long. Please try again.');
+      _showMessage(context.l10n.locationTimeout);
       return;
     } on LocationFailure catch (error) {
       if (!mounted) return;
@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted) return;
     if (confirmed != true) {
-      _showMessage('No problem. Tap the location pill to try again.');
+      _showMessage(context.l10n.wardNotConfirmed);
       return;
     }
 
@@ -226,12 +226,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final saved = await const AuthService().saveLocation(location);
     if (!mounted) return;
 
+    final strings = context.l10n;
     if (!AuthService.isConfigured) {
-      _showMessage('Ward saved for this session.');
+      _showMessage(strings.wardSavedSession);
     } else if (saved) {
-      _showMessage('Ward saved to your profile.');
+      _showMessage(strings.wardSavedProfile);
     } else {
-      _showMessage("Couldn't sync your ward. Tap the location pill to retry.");
+      _showMessage(strings.wardSyncFailed);
     }
   }
 
@@ -250,7 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       if (update == null) {
-        _showMessage('NagarSathi is up to date.');
+        _showMessage(context.l10n.upToDate);
         return;
       }
 
@@ -261,10 +262,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } on UpdateException catch (error) {
       if (mounted) {
-        _showMessage('Could not check for updates: ${error.message}');
+        _showMessage(context.l10n.updateCheckFailed(error.message));
       }
     } catch (error) {
-      if (mounted) _showMessage('Could not check for updates: $error');
+      if (mounted) {
+        _showMessage(context.l10n.updateCheckFailed('$error'));
+      }
     } finally {
       if (mounted) setState(() => _checkingForUpdate = false);
     }
@@ -272,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _firstName {
     final name = _name?.trim();
-    if (name == null || name.isEmpty) return 'neighbour';
+    if (name == null || name.isEmpty) return context.l10n.neighbour;
     return name.split(RegExp(r'\s+')).first;
   }
 
@@ -292,9 +295,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Feature coming soon.'),
-        duration: Duration(milliseconds: 1600),
+      SnackBar(
+        content: Text(context.l10n.comingSoon),
+        duration: const Duration(milliseconds: 1600),
       ),
     );
   }
@@ -304,7 +307,12 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadProfile();
     if (!mounted) return;
 
-    final user = FirebaseAuth.instance.currentUser;
+    User? user;
+    try {
+      user = FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      // Firebase Auth is not available in local/widget tests.
+    }
     final displayName = (_name != null && _name!.trim().isNotEmpty)
         ? _name!.trim()
         : (user?.displayName?.trim().isNotEmpty == true
@@ -320,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       builder: (sheetContext) => _AccountSheet(
         name: displayName,
-        email: 'citizen account',
+        email: context.l10n.citizenAccount,
         initials: _initials,
         version: _version,
         onSignOut: () {
@@ -354,10 +362,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.l10n;
     return Scaffold(
       bottomNavigationBar: _BottomNavBar(
         onHome: () {},
         onComingSoon: _comingSoon,
+        onProfile: _showAccountSheet,
       ),
       body: NsBackground(
         child: SafeArea(
@@ -378,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: _LocationPill(
-                          label: _location?.label ?? 'Set your location',
+                          label: _location?.label ?? strings.setYourLocation,
                           locating: _locating,
                           onTap: _locating ? null : _detectLocation,
                         ),
@@ -386,13 +396,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 20),
                       _ReportHero(onTap: _comingSoon),
                       const SizedBox(height: 26),
-                      const _SectionTitle('Report in one tap'),
+                      _SectionTitle(strings.reportInOneTap),
                       const SizedBox(height: 12),
                       _CategoryRow(onTap: _comingSoon),
                       const SizedBox(height: 26),
                       _SectionTitle(
-                        'Around you',
-                        action: 'See all',
+                        strings.aroundYou,
+                        action: strings.seeAll,
                         onAction: _comingSoon,
                       ),
                       const SizedBox(height: 12),
@@ -401,8 +411,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Center(
                         child: Text(
                           _version == null
-                              ? 'NagarSathi · your city, by your side'
-                              : 'NagarSathi · version $_version',
+                              ? strings.appTagline
+                              : strings.versionText(_version!),
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -456,6 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildGreeting() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -465,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Namaste, $_firstName',
+                strings.greeting(_firstName),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -478,7 +489,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 5),
               NsRotatingLine(
-                lines: NsYetiLines.home,
+                lines: strings.homeTips,
                 style: TextStyle(
                   fontSize: 13.5,
                   height: 1.4,
@@ -548,7 +559,7 @@ class _LocationPill extends StatelessWidget {
               ),
               const SizedBox(width: 5),
               Text(
-                locating ? 'Finding your ward…' : label,
+                locating ? context.l10n.findingYourWard : label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
@@ -577,6 +588,7 @@ class _ReportHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // The hero stays lime in both themes; the inner action flips to a dark
@@ -613,14 +625,18 @@ class _ReportHero extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.62),
               borderRadius: BorderRadius.circular(999),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.campaign_rounded, size: 13, color: AppColors.forest),
-                SizedBox(width: 5),
+                const Icon(
+                  Icons.campaign_rounded,
+                  size: 13,
+                  color: AppColors.forest,
+                ),
+                const SizedBox(width: 5),
                 Text(
-                  'COMMUNITY REPORTING',
-                  style: TextStyle(
+                  strings.communityReporting,
+                  style: const TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w900,
                     color: AppColors.forest,
@@ -631,9 +647,9 @@ class _ReportHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Something broken nearby?',
-            style: TextStyle(
+          Text(
+            strings.somethingBrokenNearby,
+            style: const TextStyle(
               fontSize: 22,
               height: 1.12,
               fontWeight: FontWeight.w900,
@@ -643,8 +659,7 @@ class _ReportHero extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            'Send a photo and a short note. It goes straight to the desk that '
-            'fixes it.',
+            strings.reportHeroPrompt,
             style: TextStyle(
               fontSize: 12.5,
               height: 1.45,
@@ -671,7 +686,7 @@ class _ReportHero extends StatelessWidget {
                     Icon(Icons.add_a_photo_rounded, size: 17, color: actionInk),
                     const SizedBox(width: 8),
                     Text(
-                      'Report an issue',
+                      strings.reportNow,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w900,
@@ -746,24 +761,29 @@ class _CategoryRow extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  static const _categories = [
-    (Icons.construction_rounded, 'Roads', AppColors.sun),
-    (Icons.delete_outline_rounded, 'Garbage', AppColors.primary),
-    (Icons.lightbulb_outline_rounded, 'Lights', AppColors.sky),
-    (Icons.water_drop_outlined, 'Water', AppColors.sky),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final strings = context.l10n;
+    final categories = [
+      (Icons.construction_rounded, strings.categoryRoads, AppColors.sun),
+      (
+        Icons.delete_outline_rounded,
+        strings.categoryGarbage,
+        AppColors.primary,
+      ),
+      (Icons.lightbulb_outline_rounded, strings.categoryLights, AppColors.sky),
+      (Icons.water_drop_outlined, strings.categoryWaterHero, AppColors.sky),
+    ];
+
     return Row(
       children: [
-        for (var index = 0; index < _categories.length; index++) ...[
+        for (var index = 0; index < categories.length; index++) ...[
           if (index > 0) const SizedBox(width: 9),
           Expanded(
             child: _CategoryTile(
-              icon: _categories[index].$1,
-              label: _categories[index].$2,
-              tint: _categories[index].$3,
+              icon: categories[index].$1,
+              label: categories[index].$2,
+              tint: categories[index].$3,
               onTap: onTap,
             ),
           ),
@@ -847,42 +867,43 @@ class _ReportList extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  static const _reports = [
-    (
-      Icons.delete_outline_rounded,
-      'Overflowing bin near the chowk',
-      'Baneshwor · 2h ago',
-      'In progress',
-      NsChipTone.sky,
-    ),
-    (
-      Icons.construction_rounded,
-      'Pothole on the main road',
-      'Maitighar · Yesterday',
-      'Reported',
-      NsChipTone.sun,
-    ),
-    (
-      Icons.lightbulb_outline_rounded,
-      'Streetlight out on the lane',
-      'Ward 12 · 2 days ago',
-      'Resolved',
-      NsChipTone.green,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final strings = context.l10n;
+    final reports = [
+      (
+        Icons.delete_outline_rounded,
+        strings.reportOverflowBin,
+        strings.reportOverflowBinMeta,
+        strings.statusInProgress,
+        NsChipTone.sky,
+      ),
+      (
+        Icons.construction_rounded,
+        strings.reportPotholeTitle,
+        strings.reportPotholeMeta,
+        strings.statusReported,
+        NsChipTone.sun,
+      ),
+      (
+        Icons.lightbulb_outline_rounded,
+        strings.reportStreetlightTitle,
+        strings.reportStreetlightMeta,
+        strings.statusResolved,
+        NsChipTone.green,
+      ),
+    ];
+
     return Column(
       children: [
-        for (var index = 0; index < _reports.length; index++) ...[
+        for (var index = 0; index < reports.length; index++) ...[
           if (index > 0) const SizedBox(height: 10),
           _ReportRow(
-            icon: _reports[index].$1,
-            title: _reports[index].$2,
-            subtitle: _reports[index].$3,
-            status: _reports[index].$4,
-            tone: _reports[index].$5,
+            icon: reports[index].$1,
+            title: reports[index].$2,
+            subtitle: reports[index].$3,
+            status: reports[index].$4,
+            tone: reports[index].$5,
             onTap: onTap,
           ),
         ],
@@ -1074,14 +1095,20 @@ class _AvatarButton extends StatelessWidget {
 }
 
 class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({required this.onHome, required this.onComingSoon});
+  const _BottomNavBar({
+    required this.onHome,
+    required this.onComingSoon,
+    required this.onProfile,
+  });
 
   final VoidCallback onHome;
   final VoidCallback onComingSoon;
+  final VoidCallback onProfile;
 
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Floating plate instead of a flat edge-to-edge strip: it picks up the
@@ -1110,30 +1137,30 @@ class _BottomNavBar extends StatelessWidget {
             children: [
               _NavItem(
                 icon: Icons.home_rounded,
-                label: 'Home',
+                label: strings.navHome,
                 active: true,
                 onTap: onHome,
               ),
               _NavItem(
                 icon: Icons.assignment_outlined,
                 activeIcon: Icons.assignment_rounded,
-                label: 'Reports',
+                label: strings.navReports,
                 active: false,
                 onTap: onComingSoon,
               ),
               _NavItem(
                 icon: Icons.map_outlined,
                 activeIcon: Icons.map_rounded,
-                label: 'Map',
+                label: strings.navMap,
                 active: false,
                 onTap: onComingSoon,
               ),
               _NavItem(
                 icon: Icons.person_outline_rounded,
                 activeIcon: Icons.person_rounded,
-                label: 'Profile',
+                label: strings.navProfile,
                 active: false,
-                onTap: onComingSoon,
+                onTap: onProfile,
               ),
             ],
           ),
@@ -1249,6 +1276,7 @@ class _AccountSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SafeArea(
@@ -1315,27 +1343,27 @@ class _AccountSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const NsChip(label: 'CITIZEN', compact: true),
+                NsChip(label: strings.citizenBadge, compact: true),
               ],
             ),
             const SizedBox(height: 18),
             NsOutlineButton(
               label: checkingForUpdate
-                  ? 'Checking for updates...'
-                  : 'Check for updates',
+                  ? '${strings.checkForUpdates}…'
+                  : strings.checkForUpdates,
               icon: Icons.system_update_rounded,
               onPressed: checkingForUpdate ? null : onCheckForUpdates,
             ),
             const SizedBox(height: 12),
             NsOutlineButton(
               key: const Key('open-settings'),
-              label: 'Appearance',
-              icon: Icons.palette_outlined,
+              label: strings.settings,
+              icon: Icons.tune_rounded,
               onPressed: onOpenSettings,
             ),
             const SizedBox(height: 12),
             NsOutlineButton(
-              label: 'Sign out',
+              label: strings.signOut,
               icon: Icons.logout_rounded,
               tone: NsOutlineTone.danger,
               onPressed: onSignOut,
@@ -1344,7 +1372,7 @@ class _AccountSheet extends StatelessWidget {
               const SizedBox(height: 12),
               Center(
                 child: Text(
-                  'Version $version',
+                  strings.versionText(version!),
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
@@ -1371,6 +1399,7 @@ class _ConfirmWardDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return Dialog(
       backgroundColor: tokens.surface,
@@ -1404,7 +1433,7 @@ class _ConfirmWardDialog extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              'Are you from',
+              strings.areYouFrom,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -1436,8 +1465,7 @@ class _ConfirmWardDialog extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              "We used your phone's location. Reports you send will be routed "
-              'to this ward office.',
+              strings.phoneLocationNotice,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12.5,
@@ -1448,13 +1476,13 @@ class _ConfirmWardDialog extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             NsPrimaryButton(
-              label: "Yes, that's me",
+              label: strings.yesThatsMe,
               icon: Icons.check_rounded,
               onPressed: () => Navigator.of(context).pop(true),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Not quite'),
+              child: Text(strings.notQuite),
             ),
           ],
         ),

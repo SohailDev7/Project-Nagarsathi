@@ -72,12 +72,23 @@ exports.requestEmailOtp = onCall(
       return resendCount + 1;
     });
 
+    const isNepali = String(request.data?.locale || "").toLowerCase() === "ne";
+    const subject = isNepali
+      ? "तपाईंको नगरसाथी प्रमाणीकरण कोड"
+      : "Your NagarSathi verification code";
+    const text = isNepali
+      ? `तपाईंको नगरसाथी प्रमाणीकरण कोड ${otp} हो। यो ५ मिनेटमा निष्क्रिय हुनेछ।`
+      : `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`;
+    const html = isNepali
+      ? `<p>तपाईंको नगरसाथी प्रमाणीकरण कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
+      : `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`;
+
     await mailer(gmailUser.value(), gmailAppPassword.value()).sendMail({
       from: `NagarSathi <${gmailUser.value()}>`,
       to: email,
-      subject: "Your NagarSathi verification code",
-      text: `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`,
-      html: `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`,
+      subject,
+      text,
+      html,
     });
     return { expiresInSeconds: OTP_TTL_MS / 1000, remainingThisHour: MAX_RESENDS - state };
   },

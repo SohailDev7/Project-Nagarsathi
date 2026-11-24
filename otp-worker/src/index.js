@@ -321,6 +321,17 @@ async function requestOtp(request, env) {
     )
     .run();
 
+  const isNepali = String(body?.locale || "").toLowerCase() === "ne";
+  const emailSubject = isNepali
+    ? "तपाईंको नगरसाथी प्रमाणीकरण कोड"
+    : "Your NagarSathi verification code";
+  const emailText = isNepali
+    ? `तपाईंको नगरसाथी प्रमाणीकरण कोड ${otp} हो। यो ५ मिनेटमा निष्क्रिय हुनेछ।`
+    : `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`;
+  const emailHtml = isNepali
+    ? `<p>तपाईंको नगरसाथी प्रमाणीकरण कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
+    : `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`;
+
   const mailResponse = await fetch(env.GMAIL_MAIL_ENDPOINT, {
     method: "POST",
     headers: {
@@ -329,14 +340,9 @@ async function requestOtp(request, env) {
     body: JSON.stringify({
       apiKey: env.GMAIL_MAIL_SECRET,
       to: email,
-      subject: "Your NagarSathi verification code",
-      text:
-        `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`,
-      html: `
-        <p>Your NagarSathi verification code is:</p>
-        <h2>${otp}</h2>
-        <p>This code expires in 5 minutes.</p>
-      `,
+      subject: emailSubject,
+      text: emailText,
+      html: emailHtml,
     }),
   });
 
