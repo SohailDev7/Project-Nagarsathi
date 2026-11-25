@@ -90,6 +90,24 @@ abstract class AppStrings {
   String verificationCodeSent(String email);
   String passwordResetLinkSent(String email);
   String passwordResetSentCheckInbox(String email);
+  String get emailLinkAction;
+  String get editEmail;
+  String resendIn(int seconds);
+  String stepOfTotal(int step, int total);
+  String otpSentNotice(String email);
+  String get pwdRuleLength;
+  String get pwdRuleNumber;
+  String get pwdRuleSymbolOrUpper;
+  String get pwdStrengthWeak;
+  String get pwdStrengthFair;
+  String get pwdStrengthGood;
+  String get pwdStrengthStrong;
+  String get signUpPhoneHelper;
+  String get acceptTermsNotice;
+  String get agreeToTermsPrefix;
+  String get termsOfServiceLabel;
+  String get andLabel;
+  String get privacyPolicyLabel;
 
   // ── Mascot Speeches & Guidance ────────────────────────────────────────────
   String get mascotDefaultLogin;
@@ -542,6 +560,43 @@ class EnglishStrings extends AppStrings {
   @override
   String passwordResetSentCheckInbox(String email) =>
       'Reset link sent to $email. Check your inbox.';
+  @override
+  String get emailLinkAction => 'Email link';
+  @override
+  String get editEmail => 'Edit';
+  @override
+  String resendIn(int seconds) => 'Resend in ${seconds}s';
+  @override
+  String stepOfTotal(int step, int total) => '$step of $total';
+  @override
+  String otpSentNotice(String email) =>
+      'We sent a 6-digit code to $email. It expires in 5 minutes.';
+  @override
+  String get pwdRuleLength => '8+ characters';
+  @override
+  String get pwdRuleNumber => 'Includes a number';
+  @override
+  String get pwdRuleSymbolOrUpper => 'Uppercase or symbol';
+  @override
+  String get pwdStrengthWeak => 'Too short';
+  @override
+  String get pwdStrengthFair => 'Fair';
+  @override
+  String get pwdStrengthGood => 'Good';
+  @override
+  String get pwdStrengthStrong => 'Strong';
+  @override
+  String get signUpPhoneHelper => 'Only used for urgent ward notices.';
+  @override
+  String get acceptTermsNotice => 'Accept the terms to continue.';
+  @override
+  String get agreeToTermsPrefix => 'I agree to the ';
+  @override
+  String get termsOfServiceLabel => 'Terms of Service';
+  @override
+  String get andLabel => ' and ';
+  @override
+  String get privacyPolicyLabel => 'Privacy Policy';
 
   @override
   String get mascotDefaultLogin =>
@@ -1252,6 +1307,46 @@ class NepaliStrings extends AppStrings {
   @override
   String passwordResetSentCheckInbox(String email) =>
       '$email मा रिसेट लिङ्क पठाइयो। इनबक्स हेर्नुहोस्।';
+  @override
+  String get emailLinkAction => 'इमेल लिङ्क';
+  @override
+  String get editEmail => 'बदल्नुहोस्';
+  @override
+  String resendIn(int seconds) =>
+      '${AppLocale.ne.formatDigits(seconds.toString())} सेकेन्डमा पुनः पठाउनुहोस्';
+  @override
+  String stepOfTotal(int step, int total) =>
+      '${AppLocale.ne.formatDigits(step.toString())} / ${AppLocale.ne.formatDigits(total.toString())}';
+  @override
+  String otpSentNotice(String email) =>
+      '$email मा ६-अंकको कोड पठाइएको छ। यो ५ मिनेटमा समाप्त हुन्छ।';
+  @override
+  String get pwdRuleLength => 'कम्तिमा ८ अक्षर';
+  @override
+  String get pwdRuleNumber => 'एउटा अंक (०–९)';
+  @override
+  String get pwdRuleSymbolOrUpper => 'ठूलो अक्षर वा चिन्ह';
+  @override
+  String get pwdStrengthWeak => 'धेरै छोटो';
+  @override
+  String get pwdStrengthFair => 'सामान्य';
+  @override
+  String get pwdStrengthGood => 'राम्रो';
+  @override
+  String get pwdStrengthStrong => 'बलियो';
+  @override
+  String get signUpPhoneHelper =>
+      'अत्यावश्यक वडा सूचनाका लागि मात्र प्रयोग गरिनेछ।';
+  @override
+  String get acceptTermsNotice => 'अगाडि बढ्न सर्तहरू स्वीकार गर्नुहोस्।';
+  @override
+  String get agreeToTermsPrefix => 'म ';
+  @override
+  String get termsOfServiceLabel => 'सेवाका सर्तहरू';
+  @override
+  String get andLabel => ' र ';
+  @override
+  String get privacyPolicyLabel => 'गोपनीयता नीति';
 
   @override
   String get mascotDefaultLogin =>

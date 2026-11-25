@@ -114,23 +114,22 @@ class _NsSpeechBubbleState extends State<NsSpeechBubble> {
     final content = _buildContent(context, tokens, style, message);
     if (!widget.animate || _reduceMotion) return content;
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value.clamp(0.0, 1.0),
-          child: Transform.scale(
-            scale: 0.9 + 0.1 * value,
+    return RepaintBoundary(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.94, end: 1.0),
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Transform.scale(
+            scale: value,
             alignment: widget.tailOnRight
                 ? Alignment.centerRight
                 : Alignment.centerLeft,
             child: child,
-          ),
-        );
-      },
-      child: content,
+          );
+        },
+        child: content,
+      ),
     );
   }
 
@@ -151,16 +150,16 @@ class _NsSpeechBubbleState extends State<NsSpeechBubble> {
       clipBehavior: Clip.none,
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          padding: const EdgeInsets.fromLTRB(13, 9, 13, 11),
           decoration: BoxDecoration(
             color: style.background,
             borderRadius: radius,
-            border: Border.all(color: style.border, width: 1.6),
+            border: Border.all(color: style.border, width: 1.3),
             boxShadow: [
               BoxShadow(
-                color: tokens.shadow,
-                offset: const Offset(0, 2),
-                blurRadius: 0,
+                color: Colors.black.withValues(alpha: 0.06),
+                offset: const Offset(0, 4),
+                blurRadius: 12,
               ),
             ],
           ),
@@ -230,9 +229,9 @@ class _NsSpeechBubbleState extends State<NsSpeechBubble> {
           ),
         ),
         Positioned(
-          right: widget.tailOnRight ? -5.5 : null,
-          left: widget.tailOnRight ? null : -5.5,
-          top: widget.speaker.isEmpty ? 9 : 14,
+          right: widget.tailOnRight ? -5 : null,
+          left: widget.tailOnRight ? null : -5,
+          top: widget.speaker.isEmpty ? 10 : 16,
           child: Transform.rotate(
             angle: 0.785,
             child: Container(
@@ -242,12 +241,12 @@ class _NsSpeechBubbleState extends State<NsSpeechBubble> {
                 color: style.background,
                 border: widget.tailOnRight
                     ? Border(
-                        top: BorderSide(color: style.border, width: 1.6),
-                        right: BorderSide(color: style.border, width: 1.6),
+                        top: BorderSide(color: style.border, width: 1.3),
+                        right: BorderSide(color: style.border, width: 1.3),
                       )
                     : Border(
-                        left: BorderSide(color: style.border, width: 1.6),
-                        bottom: BorderSide(color: style.border, width: 1.6),
+                        left: BorderSide(color: style.border, width: 1.3),
+                        bottom: BorderSide(color: style.border, width: 1.3),
                       ),
               ),
             ),

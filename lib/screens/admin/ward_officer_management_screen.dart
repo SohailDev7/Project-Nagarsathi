@@ -203,12 +203,17 @@ class _WardOfficerManagementScreenState
     if (!mounted) return;
 
     final strings = context.l10n;
+    final message = result.notification.isSent
+        ? strings.officerAddedMessage(
+            result.officer.fullName,
+            result.officer.wardLabel,
+            result.notification.message,
+          )
+        : '${result.officer.fullName} was added to ${result.officer.wardLabel}, '
+              'but the invitation email could not be sent. '
+              'Temporary password: ${result.officer.tempPassword ?? 'not available'}.';
     _showToast(
-      strings.officerAddedMessage(
-        result.officer.fullName,
-        result.officer.wardLabel,
-        result.notification.message,
-      ),
+      message,
       actionLabel: strings.viewAudit,
       onAction: () => setState(() => _tabIndex = 1),
     );

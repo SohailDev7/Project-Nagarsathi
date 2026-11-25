@@ -30,8 +30,8 @@ void main() {
     );
     expect(find.text('पुन: स्वागत छ'), findsOneWidget);
     expect(find.text('इमेल वा फोन नम्बर'), findsOneWidget);
-    expect(find.text('अगाडि बढ्नुहोस्'), findsOneWidget);
-    expect(find.text('गुगलबाट जारी राख्नुहोस्'), findsOneWidget);
+    expect(find.text('साइन इन गर्नुहोस्'), findsOneWidget);
+    expect(find.text('Google'), findsOneWidget);
     expect(find.text('नगरसाथीमा नयाँ हुनुहुन्छ?'), findsOneWidget);
     expect(find.text('Welcome back'), findsNothing);
     expect(find.text('Email or phone number'), findsNothing);

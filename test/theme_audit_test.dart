@@ -97,16 +97,15 @@ void _auditBothModes(
 
 Future<void> _typeLogin(WidgetTester tester) async {
   await tester.enterText(
-    find.byType(TextFormField).first,
+    find.byType(TextFormField).at(0),
     'citizen@nagarsathi.app',
   );
-  await tester.tap(find.text('Continue'));
-  await tester.pumpAndSettle();
-  await tester.enterText(find.byType(TextFormField).first, 'password123');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password123');
   await tester.pumpAndSettle();
 }
 
 Future<void> _signUpWithErrors(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Continue'));
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
 }
@@ -123,9 +122,10 @@ Future<void> _fillSignUpDetails(WidgetTester tester) async {
 
 Future<void> _reachPasswordStep(WidgetTester tester) async {
   await _fillSignUpDetails(tester);
+  await tester.ensureVisible(find.text('Continue'));
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
-  expect(find.text('2 of 2'), findsOneWidget);
+  expect(find.text('2 of 3'), findsOneWidget);
 
   await tester.enterText(find.byType(TextFormField).at(0), 'password123');
   await tester.enterText(find.byType(TextFormField).at(1), 'password123');
@@ -167,10 +167,10 @@ Future<void> _openMapComingSoon(WidgetTester tester) async {
   expect(find.text('Feature coming soon.'), findsOneWidget);
 }
 
-Future<void> _openProfileComingSoon(WidgetTester tester) async {
+Future<void> _openProfileSheet(WidgetTester tester) async {
   await tester.tap(find.text('Profile'));
-  await tester.pump(const Duration(milliseconds: 120));
-  expect(find.text('Feature coming soon.'), findsOneWidget);
+  await tester.pumpAndSettle();
+  expect(find.text('NagarSathi citizen'), findsOneWidget);
 }
 
 void main() {
@@ -260,8 +260,7 @@ void main() {
     _auditBothModes(
       'HomeScreen Profile tab',
       _homeScreen,
-      interact: _openProfileComingSoon,
-      settleAfterInteract: false,
+      interact: _openProfileSheet,
     );
   });
 

@@ -21,12 +21,12 @@ import 'widgets/update_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Authentication is disabled unless Firebase initializes successfully.
-  await FirebaseBootstrap.initialize();
-  // Guarded internally; falls back to ThemeMode.system if storage is
-  // unavailable.
-  await ThemeController.instance.load();
-  await LanguageController.instance.load();
+  // Initialize Firebase and load local preferences in parallel to reduce cold-start delay.
+  await Future.wait([
+    FirebaseBootstrap.initialize(),
+    ThemeController.instance.load(),
+    LanguageController.instance.load(),
+  ]);
 
   // Honour "Remember me on this device" before the first frame. Firebase keeps
   // its session on disk; when the user opted out we clear it and start at
@@ -42,20 +42,25 @@ Future<void> main() async {
   }
   final hasSession = sessionUser != null;
   if (hasSession && !rememberMe) {
-    await const AuthService().signOut();
-    await const SessionService().clearStaffSession();
+    await Future.wait([
+      const AuthService().signOut(),
+      const SessionService().clearStaffSession(),
+    ]);
   }
   final startSignedIn = hasSession && rememberMe;
+  StaffSession? staffSession;
+  var appLockEnabled = false;
   if (!startSignedIn) {
     // App Lock only protects an active remembered session.
     await const SessionService().saveAppLock(false);
+  } else {
+    final results = await Future.wait<Object?>([
+      const SessionService().loadStaffSession(),
+      const SessionService().loadAppLock(),
+    ]);
+    staffSession = results[0] as StaffSession?;
+    appLockEnabled = (results[1] as bool?) ?? false;
   }
-  final staffSession = startSignedIn
-      ? await const SessionService().loadStaffSession()
-      : null;
-  // App Lock only matters when there is a remembered session to protect.
-  final appLockEnabled =
-      startSignedIn && await const SessionService().loadAppLock();
 
   runApp(
     NagarSathiApp(
@@ -127,6 +132,8 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
                 theme: buildAppTheme(brightness: Brightness.light),
                 darkTheme: buildAppTheme(brightness: Brightness.dark),
                 themeMode: mode,
+                themeAnimationDuration: const Duration(milliseconds: 260),
+                themeAnimationCurve: Curves.easeOutCubic,
                 routes: {
                   WardOfficerManagementScreen.routeName: (_) =>
                       const WardOfficerManagementScreen(),

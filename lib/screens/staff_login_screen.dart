@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,16 +9,14 @@ import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/app_lock_gate.dart';
-import '../widgets/ns_auth_scaffold.dart';
+import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_back_button.dart';
-import '../widgets/ns_card.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_language_toggle.dart';
-import '../widgets/ns_outline_button.dart';
-import '../widgets/ns_pressable.dart';
+import '../widgets/ns_otp_input.dart';
 import '../widgets/ns_primary_button.dart';
-import '../widgets/ns_staff_badge.dart';
+import '../widgets/ns_route.dart';
+import '../widgets/ns_shake.dart';
 import '../widgets/ns_text_field.dart';
 import 'login_screen.dart';
 import 'staff_home_screen.dart';
@@ -33,11 +33,14 @@ class StaffLoginScreen extends StatefulWidget {
 }
 
 class _StaffLoginScreenState extends State<StaffLoginScreen> {
+  static const _resendCooldownSeconds = 45;
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
+  final _shakeController = NsShakeController();
   final _staffAuth = const StaffAuthService();
 
   _StaffMethod _method = _StaffMethod.email;
@@ -49,13 +52,35 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   bool _showError = false;
   String? _errorMessage;
 
+  Timer? _resendTimer;
+  int _resendRemaining = 0;
+
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _phoneController.dispose();
     _otpController.dispose();
+    _shakeController.dispose();
     super.dispose();
+  }
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendRemaining = _resendCooldownSeconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendRemaining <= 1) {
+        timer.cancel();
+        setState(() => _resendRemaining = 0);
+      } else {
+        setState(() => _resendRemaining -= 1);
+      }
+    });
   }
 
   bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? false;
@@ -70,6 +95,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   void _failValidation() {
     HapticFeedback.mediumImpact();
+    _shakeController.shake();
     setState(() {
       _isLoading = false;
       _showError = true;
@@ -80,6 +106,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   void _fail(String message) {
     if (!mounted) return;
     HapticFeedback.mediumImpact();
+    _shakeController.shake();
     setState(() {
       _isLoading = false;
       _showError = true;
@@ -90,11 +117,14 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   void _switchMethod(_StaffMethod method) {
     if (_isLoading || method == _method) return;
     FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
+    _resendTimer?.cancel();
     setState(() {
       _method = method;
       _phoneStep = _PhoneStep.phone;
       _challenge = null;
       _otpController.clear();
+      _resendRemaining = 0;
       _showError = false;
       _errorMessage = null;
     });
@@ -160,6 +190,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         return;
       }
 
+      _startResendCooldown();
       setState(() {
         _challenge = challenge;
         _phoneStep = _PhoneStep.code;
@@ -181,9 +212,15 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     if (challenge == null) return;
     FocusScope.of(context).unfocus();
 
-    if (!autoVerified && !(_formKey.currentState?.validate() ?? false)) {
-      _failValidation();
-      return;
+    if (!autoVerified) {
+      final otpErr = Validators.otp(
+        _otpController.text,
+        strings: context.l10n,
+      );
+      if (otpErr != null) {
+        _fail(otpErr);
+        return;
+      }
     }
 
     setState(() {
@@ -236,7 +273,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     });
     HapticFeedback.mediumImpact();
 
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    await Future<void>.delayed(const Duration(milliseconds: 520));
     if (!mounted || !_isCurrentRoute) {
       await StaffAuthService.signOut();
       return;
@@ -244,7 +281,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
     TextInput.finishAutofillContext();
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
+      NsPageRoute<void>(
+        style: NsTransitionStyle.fade,
         builder: (_) => AppLockGate(
           isStaff: true,
           child: StaffHomeScreen(
@@ -275,12 +313,13 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final tokens = NsColors.of(context);
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             final viewInsets = MediaQuery.of(context).viewInsets;
 
             return Container(
               padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + viewInsets.bottom),
               decoration: BoxDecoration(
-                color: tokens.surface,
+                color: isDark ? const Color(0xFF12201B) : Colors.white,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -306,7 +345,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       context.l10n.staffSetPermanentPassword,
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: tokens.ink,
                       ),
                     ),
@@ -325,7 +364,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: AppColors.error.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: AppColors.error.withValues(alpha: 0.3),
                           ),
@@ -371,6 +410,11 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     NsPrimaryButton(
                       label: context.l10n.staffUpdateAndSignIn,
                       isLoading: isSubmitting,
+                      gradientColors: isDark
+                          ? const [Color(0xFF36D395), Color(0xFF22B57A)]
+                          : const [Color(0xFF0E6B47), Color(0xFF095035)],
+                      foregroundColor:
+                          isDark ? const Color(0xFF072419) : Colors.white,
                       onPressed: isSubmitting
                           ? null
                           : () async {
@@ -394,7 +438,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                               } catch (_) {
                                 setModalState(() {
                                   isSubmitting = false;
-                                  localError = 'Failed to update password. Please try again.';
+                                  localError =
+                                      'Failed to update password. Please try again.';
                                 });
                               }
                             },
@@ -424,10 +469,12 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 
   void _changeNumber() {
+    _resendTimer?.cancel();
     setState(() {
       _phoneStep = _PhoneStep.phone;
       _challenge = null;
       _otpController.clear();
+      _resendRemaining = 0;
       _showError = false;
     });
   }
@@ -440,86 +487,315 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     }
 
     navigator.pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      NsPageRoute<void>(builder: (_) => const LoginScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        NsAuthScaffold(
-          staff: true,
-          topBar: Row(
-            children: [
-              NsBackButton(onPressed: _backToCitizenSignIn),
-              const Spacer(),
-              const NsLanguageToggle(compact: true),
-              const SizedBox(width: 8),
-              const NsStaffBadge(compact: true),
-            ],
-          ),
-          bottom: TextButton(
-            onPressed: _backToCitizenSignIn,
-            child: Text(context.l10n.citizenPortal),
-          ),
-          child: NsEntrance(child: _buildBody()),
-        ),
-        if (_celebrating)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = _StaffPalette.of(isDark);
+
+    return Scaffold(
+      backgroundColor: palette.bgBottom,
+      body: Stack(
+        children: [
+          // Distinct Light (Crisp Civic Slate) vs Dark (Obsidian Command) backdrop
           Positioned.fill(
-            child: NsConfetti(
-              onCompleted: () {
-                if (mounted) setState(() => _celebrating = false);
+            child: RepaintBoundary(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [palette.bgTop, palette.bgBottom],
+                  ),
+                ),
+                child: CustomPaint(
+                  painter: _BlueprintGridPainter(color: palette.gridColor),
+                ),
+              ),
+            ),
+          ),
+          // Soft ambient accent wash at top corner
+          Positioned(
+            top: -120,
+            right: -80,
+            width: 320,
+            height: 320,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      palette.ambientAccent,
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontal = constraints.maxWidth < 380 ? 16.0 : 22.0;
+                final maxW = constraints.maxWidth - horizontal * 2;
+                final contentWidth = maxW > 440 ? 440.0 : (maxW < 0 ? 0.0 : maxW);
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontal,
+                        10,
+                        horizontal,
+                        4,
+                      ),
+                      child: Center(
+                        child: SizedBox(
+                          width: contentWidth,
+                          child: _buildTopBar(palette),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        padding: EdgeInsets.fromLTRB(
+                          horizontal,
+                          12,
+                          horizontal,
+                          24,
+                        ),
+                        child: Center(
+                          child: SizedBox(
+                            width: contentWidth,
+                            child: NsEntrance(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _buildExecutiveHeader(palette),
+                                  const SizedBox(height: 18),
+                                  _buildCommandCard(palette),
+                                  const SizedBox(height: 18),
+                                  _buildFooter(palette),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
               },
             ),
           ),
+          if (_celebrating)
+            Positioned.fill(
+              child: NsConfetti(
+                onCompleted: () {
+                  if (mounted) setState(() => _celebrating = false);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar(_StaffPalette palette) {
+    final strings = context.l10n;
+    return Row(
+      children: [
+        NsBackButton(
+          onPressed: _backToCitizenSignIn,
+          onDarkHeader: palette.isDark,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: palette.goldBg,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: palette.goldBorder, width: 1.1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.verified_user_rounded,
+                  size: 13,
+                  color: palette.goldText,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    strings.staffBadgeShort.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: palette.goldText,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        NsAuthPreferencePills(onDarkHeader: palette.isDark),
       ],
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildExecutiveHeader(_StaffPalette palette) {
+    final strings = context.l10n;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: palette.bannerGradient,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: palette.bannerBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: palette.bannerShadow,
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: palette.crestBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: palette.crestBorder, width: 1.4),
+            ),
+            child: Icon(
+              Icons.account_balance_rounded,
+              size: 27,
+              color: palette.crestIcon,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.staffSignInTitle,
+                  style: TextStyle(
+                    fontSize: 23,
+                    height: 1.1,
+                    fontWeight: FontWeight.w900,
+                    color: palette.bannerTitle,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  strings.staffWorkspaceSubtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: palette.bannerSubtitle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommandCard(_StaffPalette palette) {
     final tokens = NsColors.of(context);
     final strings = context.l10n;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 16),
-        Text(
-          strings.staffSignInTitle,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-            color: tokens.heading,
-          ),
+    return NsShake(
+      controller: _shakeController,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+        decoration: BoxDecoration(
+          color: palette.cardBg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: palette.cardBorder, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: palette.cardShadow,
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        NsCard(
-          padding: const EdgeInsets.all(16),
-          child: AutofillGroup(
+        child: AutofillGroup(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildMethodTabs(),
+                  _buildMethodTabs(palette),
                   if (_showError && _errorMessage != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: tokens.errorBorder.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: AppColors.error.withValues(alpha: 0.3),
+                          color: tokens.errorBorder.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.error,
-                        ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 18,
+                            color: tokens.errorBorder,
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                                color: tokens.ink,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -532,7 +808,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       icon: Icons.mail_rounded,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      validator: Validators.email,
+                      validator: (v) => Validators.email(v, strings: strings),
                       autocorrect: false,
                       autofillHints: const [AutofillHints.username],
                       inputFormatters: [
@@ -540,7 +816,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       ],
                       onChanged: (_) => _clearError(),
                     ),
-                    const SizedBox(height: 13),
+                    const SizedBox(height: 14),
                     NsTextField(
                       controller: _passwordController,
                       label: strings.password,
@@ -555,12 +831,15 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       onFieldSubmitted: (_) => _signIn(),
                       onChanged: (_) => _clearError(),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 18),
                     NsPrimaryButton(
                       label: strings.signIn,
                       isLoading: _isLoading,
                       onPressed: _signIn,
                       icon: Icons.arrow_forward_rounded,
+                      color: palette.ctaColors.first,
+                      gradientColors: palette.ctaColors,
+                      foregroundColor: palette.ctaForeground,
                     ),
                   ] else ...[
                     NsTextField(
@@ -572,7 +851,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       textInputAction: _phoneStep == _PhoneStep.phone
                           ? TextInputAction.done
                           : TextInputAction.next,
-                      validator: Validators.nepaliPhone,
+                      validator: (v) =>
+                          Validators.nepaliPhone(v, strings: strings),
                       autocorrect: false,
                       enabled: _phoneStep == _PhoneStep.phone,
                       autofillHints: const [AutofillHints.telephoneNumber],
@@ -586,33 +866,58 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       onChanged: (_) => _clearError(),
                     ),
                     if (_phoneStep == _PhoneStep.code) ...[
-                      const SizedBox(height: 13),
-                      NsTextField(
+                      const SizedBox(height: 14),
+                      NsOtpInput(
                         controller: _otpController,
-                        label: strings.verificationCode,
-                        hint: strings.otpHint,
-                        icon: Icons.sms_rounded,
-                        keyboardType: TextInputType.number,
-                        textInputAction: TextInputAction.done,
-                        validator: Validators.otp,
-                        autocorrect: false,
-                        autofocus: true,
-                        maxLength: 6,
-                        autofillHints: const [AutofillHints.oneTimeCode],
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        onFieldSubmitted: (_) => _verifyCode(),
+                        enabled: !_isLoading,
+                        hasError: _showError,
                         onChanged: (_) => _clearError(),
+                        onCompleted: (_) => _verifyCode(),
+                      ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: _resendRemaining > 0
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: tokens.surfaceSoft,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: tokens.border),
+                                ),
+                                child: Text(
+                                  strings.resendIn(_resendRemaining),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: tokens.muted,
+                                  ),
+                                ),
+                              )
+                            : TextButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _sendCode(resending: true),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(strings.resendCode),
+                              ),
                       ),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 18),
                     if (_phoneStep == _PhoneStep.phone)
                       NsPrimaryButton(
                         label: strings.staffSendCode,
                         isLoading: _isLoading,
                         onPressed: _sendCode,
                         icon: Icons.send_rounded,
+                        color: palette.ctaColors.first,
+                        gradientColors: palette.ctaColors,
+                        foregroundColor: palette.ctaForeground,
                       )
                     else ...[
                       NsPrimaryButton(
@@ -620,18 +925,12 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         isLoading: _isLoading,
                         onPressed: _verifyCode,
                         icon: Icons.verified_user_rounded,
+                        color: palette.ctaColors.first,
+                        gradientColors: palette.ctaColors,
+                        foregroundColor: palette.ctaForeground,
                       ),
-                      const SizedBox(height: 10),
-                      NsOutlineButton(
-                        label: strings.resendCode,
-                        height: 46,
-                        icon: Icons.refresh_rounded,
-                        onPressed: _isLoading
-                            ? null
-                            : () => _sendCode(resending: true),
-                      ),
-                      Align(
-                        alignment: Alignment.center,
+                      const SizedBox(height: 8),
+                      Center(
                         child: TextButton(
                           onPressed: _isLoading ? null : _changeNumber,
                           child: Text(strings.changeIdentifier),
@@ -644,58 +943,127 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1.5),
-              child: Icon(
-                Icons.lock_outline_rounded,
-                size: 12,
-                color: tokens.muted,
-              ),
-            ),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                context.l10n.staffAccessIssued,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
-                  color: tokens.muted,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildMethodTabs() {
-    return Row(
+  Widget _buildMethodTabs(_StaffPalette palette) {
+    final strings = context.l10n;
+    final isPhone = _method == _StaffMethod.phone;
+
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: palette.tabTrackBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.cardBorder, width: 1.1),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / 2;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                left: isPhone ? tabWidth : 0,
+                top: 0,
+                bottom: 0,
+                width: tabWidth,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: palette.tabActiveBg,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: palette.tabActiveShadow,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SlidingMethodTab(
+                      icon: Icons.mail_outline_rounded,
+                      label: strings.email,
+                      selected: !isPhone,
+                      activeColor: palette.tabActiveFg,
+                      idleColor: palette.tabIdleFg,
+                      onTap: () => _switchMethod(_StaffMethod.email),
+                    ),
+                  ),
+                  Expanded(
+                    child: _SlidingMethodTab(
+                      icon: Icons.phone_iphone_rounded,
+                      label: strings.phone,
+                      selected: isPhone,
+                      activeColor: palette.tabActiveFg,
+                      idleColor: palette.tabIdleFg,
+                      onTap: () => _switchMethod(_StaffMethod.phone),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFooter(_StaffPalette palette) {
+    final strings = context.l10n;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: _MethodTab(
-            label: context.l10n.email,
-            icon: Icons.mail_outline_rounded,
-            selected: _method == _StaffMethod.email,
-            enabled: !_isLoading,
-            onTap: () => _switchMethod(_StaffMethod.email),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: palette.securityStripBg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: palette.cardBorder),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 15,
+                color: palette.securityIcon,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  strings.staffAccessIssued,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                    color: palette.securityText,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _MethodTab(
-            label: context.l10n.phone,
-            icon: Icons.phone_iphone_rounded,
-            selected: _method == _StaffMethod.phone,
-            enabled: !_isLoading,
-            onTap: () => _switchMethod(_StaffMethod.phone),
+        const SizedBox(height: 10),
+        Center(
+          child: TextButton(
+            onPressed: _backToCitizenSignIn,
+            child: Text(
+              strings.citizenPortal,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: palette.portalLinkColor,
+              ),
+            ),
           ),
         ),
       ],
@@ -703,53 +1071,209 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 }
 
-class _MethodTab extends StatelessWidget {
-  const _MethodTab({
-    required this.label,
+class _SlidingMethodTab extends StatelessWidget {
+  const _SlidingMethodTab({
     required this.icon,
+    required this.label,
     required this.selected,
-    required this.enabled,
+    required this.activeColor,
+    required this.idleColor,
     required this.onTap,
   });
 
-  final String label;
   final IconData icon;
+  final String label;
   final bool selected;
-  final bool enabled;
+  final Color activeColor;
+  final Color idleColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? AppColors.primaryDeep : AppColors.forest;
+    final fg = selected ? activeColor : idleColor;
 
-    return NsPressable(
-      onTap: enabled ? onTap : null,
-      color: selected ? AppColors.mint : AppColors.surface,
-      borderColor: selected ? AppColors.primaryDeep : AppColors.borderStrong,
-      shadowColor: selected ? AppColors.primaryDark : AppColors.borderStrong,
-      radius: 14,
-      depth: selected ? 3 : 2,
-      semanticLabel: label,
-      child: SizedBox(
-        height: 42,
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 17, color: foreground),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w900,
-                  color: foreground,
-                ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: fg,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _StaffPalette {
+  const _StaffPalette({
+    required this.isDark,
+    required this.bgTop,
+    required this.bgBottom,
+    required this.gridColor,
+    required this.ambientAccent,
+    required this.goldBg,
+    required this.goldBorder,
+    required this.goldText,
+    required this.bannerGradient,
+    required this.bannerBorder,
+    required this.bannerShadow,
+    required this.bannerTitle,
+    required this.bannerSubtitle,
+    required this.crestBg,
+    required this.crestBorder,
+    required this.crestIcon,
+    required this.cardBg,
+    required this.cardBorder,
+    required this.cardShadow,
+    required this.tabTrackBg,
+    required this.tabActiveBg,
+    required this.tabActiveShadow,
+    required this.tabActiveFg,
+    required this.tabIdleFg,
+    required this.ctaColors,
+    required this.ctaForeground,
+    required this.securityStripBg,
+    required this.securityIcon,
+    required this.securityText,
+    required this.portalLinkColor,
+  });
+
+  final bool isDark;
+  final Color bgTop;
+  final Color bgBottom;
+  final Color gridColor;
+  final Color ambientAccent;
+  final Color goldBg;
+  final Color goldBorder;
+  final Color goldText;
+  final List<Color> bannerGradient;
+  final Color bannerBorder;
+  final Color bannerShadow;
+  final Color bannerTitle;
+  final Color bannerSubtitle;
+  final Color crestBg;
+  final Color crestBorder;
+  final Color crestIcon;
+  final Color cardBg;
+  final Color cardBorder;
+  final Color cardShadow;
+  final Color tabTrackBg;
+  final Color tabActiveBg;
+  final Color tabActiveShadow;
+  final Color tabActiveFg;
+  final Color tabIdleFg;
+  final List<Color> ctaColors;
+  final Color ctaForeground;
+  final Color securityStripBg;
+  final Color securityIcon;
+  final Color securityText;
+  final Color portalLinkColor;
+
+  factory _StaffPalette.of(bool isDark) {
+    if (isDark) {
+      return _StaffPalette(
+        isDark: true,
+        bgTop: const Color(0xFF07110D),
+        bgBottom: const Color(0xFF0C1813),
+        gridColor: const Color(0xFF34D399).withValues(alpha: 0.045),
+        ambientAccent: const Color(0xFF1A7F55).withValues(alpha: 0.24),
+        goldBg: const Color(0xFFF5B731).withValues(alpha: 0.14),
+        goldBorder: const Color(0xFFF5B731).withValues(alpha: 0.45),
+        goldText: const Color(0xFFF7C95B),
+        bannerGradient: const [Color(0xFF10281F), Color(0xFF173A2C)],
+        bannerBorder: const Color(0xFF285542),
+        bannerShadow: Colors.black.withValues(alpha: 0.35),
+        bannerTitle: const Color(0xFFEFF8F3),
+        bannerSubtitle: const Color(0xFFA6C7B6),
+        crestBg: const Color(0xFF0A1D16),
+        crestBorder: const Color(0xFFF5B731).withValues(alpha: 0.6),
+        crestIcon: const Color(0xFFF7C95B),
+        cardBg: const Color(0xFF12211B),
+        cardBorder: const Color(0xFF233B31),
+        cardShadow: Colors.black.withValues(alpha: 0.4),
+        tabTrackBg: const Color(0xFF0B1612),
+        tabActiveBg: const Color(0xFF2EC285),
+        tabActiveShadow: const Color(0xFF2EC285).withValues(alpha: 0.25),
+        tabActiveFg: const Color(0xFF062016),
+        tabIdleFg: const Color(0xFF9AB5A8),
+        ctaColors: const [Color(0xFF36D395), Color(0xFF22B57A)],
+        ctaForeground: const Color(0xFF062016),
+        securityStripBg: const Color(0xFF101D18),
+        securityIcon: const Color(0xFF36D395),
+        securityText: const Color(0xFF9AB5A8),
+        portalLinkColor: const Color(0xFF5FE3AC),
+      );
+    }
+
+    return _StaffPalette(
+      isDark: false,
+      bgTop: const Color(0xFF96C7B7),
+      bgBottom: const Color(0xFFACD6C8),
+      gridColor: const Color(0xFF0E6B47).withValues(alpha: 0.08),
+      ambientAccent: const Color(0xFF148558).withValues(alpha: 0.20),
+      goldBg: const Color(0xFFF5D57A),
+      goldBorder: const Color(0xFFB9881E),
+      goldText: const Color(0xFF4A2B00),
+      bannerGradient: const [Color(0xFF0E5338), Color(0xFF17704D)],
+      bannerBorder: const Color(0xFF23865E),
+      bannerShadow: const Color(0xFF0F3B2A).withValues(alpha: 0.18),
+      bannerTitle: Colors.white,
+      bannerSubtitle: const Color(0xFFD5F2E4),
+      crestBg: Colors.white.withValues(alpha: 0.16),
+      crestBorder: const Color(0xFFF5B731).withValues(alpha: 0.65),
+      crestIcon: const Color(0xFFFFD166),
+      cardBg: const Color(0xFFB9DFD2),
+      cardBorder: const Color(0xFF7BB19E),
+      cardShadow: const Color(0xFF0F3B2A).withValues(alpha: 0.12),
+      tabTrackBg: const Color(0xFF9ECAC0),
+      tabActiveBg: const Color(0xFF0E6B47),
+      tabActiveShadow: const Color(0xFF0E6B47).withValues(alpha: 0.24),
+      tabActiveFg: Colors.white,
+      tabIdleFg: const Color(0xFF133629),
+      ctaColors: const [Color(0xFF0E6B47), Color(0xFF095035)],
+      ctaForeground: Colors.white,
+      securityStripBg: const Color(0xFFACD5C7),
+      securityIcon: const Color(0xFF0A4D33),
+      securityText: const Color(0xFF133629),
+      portalLinkColor: const Color(0xFF08422B),
+    );
+  }
+}
+
+class _BlueprintGridPainter extends CustomPainter {
+  const _BlueprintGridPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0;
+    const step = 28.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BlueprintGridPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

@@ -36,15 +36,15 @@ class NsMascot extends StatefulWidget {
 class _NsMascotState extends State<NsMascot> with TickerProviderStateMixin {
   late final AnimationController _intro = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 780),
+    duration: const Duration(milliseconds: 620),
   );
   late final AnimationController _react = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 560),
+    duration: const Duration(milliseconds: 520),
   );
   late final AnimationController _idle = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 4400),
+    duration: const Duration(milliseconds: 3200),
   );
 
   Timer? _idleTimer;
@@ -57,12 +57,14 @@ class _NsMascotState extends State<NsMascot> with TickerProviderStateMixin {
     super.initState();
     _intro.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _scheduleIdle(delay: const Duration(milliseconds: 2400));
+        _scheduleIdle(delay: const Duration(milliseconds: 1400));
       }
     });
     _idle.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _scheduleIdle(delay: const Duration(milliseconds: 1300));
+      // Run one gentle breath settle after intro/interaction instead of a
+      // continuous background repaint loop.
+      if (status == AnimationStatus.completed && _idleCycles < 1) {
+        _scheduleIdle(delay: const Duration(milliseconds: 2200));
       }
     });
   }
@@ -96,15 +98,18 @@ class _NsMascotState extends State<NsMascot> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant NsMascot oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.mood == widget.mood && oldWidget.wave == widget.wave) {
+    if (oldWidget.mood == widget.mood &&
+        oldWidget.wave == widget.wave &&
+        oldWidget.look == widget.look) {
       return;
     }
     if (_reduceMotion) return;
 
     if (widget.mood == NsMascotMood.celebrate) {
       _react.repeat(count: 2, reverse: true);
-    } else {
+    } else if (oldWidget.mood != widget.mood || oldWidget.wave != widget.wave) {
       _react.forward(from: 0);
+      _idle.forward(from: 0);
     }
   }
 
@@ -170,8 +175,8 @@ class _NsMascotState extends State<NsMascot> with TickerProviderStateMixin {
           final bounce = react * 3 + celebrate * 1.5;
           final scale = (0.82 + 0.18 * entrance) * (1 + react * 0.02);
 
-          return Opacity(
-            opacity: _intro.value.clamp(0.0, 1.0),
+          return FadeTransition(
+            opacity: _intro,
             child: Transform.translate(
               offset: Offset(0, (1 - entrance) * 14 - bounce),
               child: Transform.scale(
@@ -277,37 +282,15 @@ class _MascotPainter extends CustomPainter {
     canvas.restore();
   }
 
-  Path _bodyPath(double s) {
-    const center = Offset(0.5, 0.54);
-    const rx = 0.35;
-    const ry = 0.34;
-    const count = 16;
-    final path = Path();
+  static final Map<double, _MascotCache> _cache = <double, _MascotCache>{};
 
-    for (var i = 0; i <= count; i++) {
-      final angle = -math.pi / 2 + i * 2 * math.pi / count;
-      final point =
-          Offset(
-            center.dx + math.cos(angle) * rx,
-            center.dy + math.sin(angle) * ry,
-          ) *
-          s;
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        final mid = angle - math.pi / count;
-        final control =
-            Offset(
-              center.dx + math.cos(mid) * rx * 1.055,
-              center.dy + math.sin(mid) * ry * 1.055,
-            ) *
-            s;
-        path.quadraticBezierTo(control.dx, control.dy, point.dx, point.dy);
-      }
-    }
-
-    path.close();
-    return path;
+  static _MascotCache _cacheFor(double s) {
+    final existing = _cache[s];
+    if (existing != null) return existing;
+    if (_cache.length >= 6) _cache.clear();
+    final created = _MascotCache.build(s);
+    _cache[s] = created;
+    return created;
   }
 
   void _paintShadow(Canvas canvas, double s) {
@@ -407,19 +390,10 @@ class _MascotPainter extends CustomPainter {
   }
 
   void _paintBody(Canvas canvas, double s) {
-    final body = _bodyPath(s);
-    final rect = body.getBounds();
+    final cache = _cacheFor(s);
+    final body = cache.bodyPath;
 
-    canvas.drawPath(
-      body,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [_furLight, _furBase, _furShade],
-          stops: [0, 0.55, 1],
-        ).createShader(rect),
-    );
+    canvas.drawPath(body, cache.bodyFillPaint);
 
     canvas.save();
     canvas.clipPath(body);
@@ -949,5 +923,55 @@ class _MascotPainter extends CustomPainter {
         oldDelegate.sway != sway ||
         oldDelegate.earTwitch != earTwitch ||
         oldDelegate.scarfSway != scarfSway;
+  }
+}
+
+/// Cached size-invariant paths and gradient paints for [_MascotPainter].
+class _MascotCache {
+  _MascotCache({required this.bodyPath, required this.bodyFillPaint});
+
+  final Path bodyPath;
+  final Paint bodyFillPaint;
+
+  factory _MascotCache.build(double s) {
+    const center = Offset(0.5, 0.54);
+    const rx = 0.35;
+    const ry = 0.34;
+    const count = 16;
+    final body = Path();
+
+    for (var i = 0; i <= count; i++) {
+      final angle = -math.pi / 2 + i * 2 * math.pi / count;
+      final point =
+          Offset(
+            center.dx + math.cos(angle) * rx,
+            center.dy + math.sin(angle) * ry,
+          ) *
+          s;
+      if (i == 0) {
+        body.moveTo(point.dx, point.dy);
+      } else {
+        final mid = angle - math.pi / count;
+        final control =
+            Offset(
+              center.dx + math.cos(mid) * rx * 1.055,
+              center.dy + math.sin(mid) * ry * 1.055,
+            ) *
+            s;
+        body.quadraticBezierTo(control.dx, control.dy, point.dx, point.dy);
+      }
+    }
+    body.close();
+
+    final rect = body.getBounds();
+    final fillPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [_MascotPainter._furLight, _MascotPainter._furBase, _MascotPainter._furShade],
+        stops: [0, 0.55, 1],
+      ).createShader(rect);
+
+    return _MascotCache(bodyPath: body, bodyFillPaint: fillPaint);
   }
 }

@@ -9,8 +9,8 @@ enum NsChipTone { green, sun, sky, forest, muted }
 abstract final class _ChipPalette {
   static const forest = Color(0xFF163B2B);
   static const sky = Color(0xFF1CB0F6);
-  static const sunText = Color(0xFF866400);
-  static const skyText = Color(0xFF0B6C9E);
+  static const sunText = Color(0xFF4F3600);
+  static const skyText = Color(0xFF033B5E);
 
   static const greenDark = Color(0xFF24523C);
   static const sunDark = Color(0xFF453809);
@@ -75,14 +75,14 @@ class NsChip extends StatelessWidget {
               scheme.primary.withValues(alpha: 0.34),
             ),
             NsChipTone.sun => (
-              scheme.secondary.withValues(alpha: 0.2),
+              const Color(0xFFF2D46B),
               _ChipPalette.sunText,
               scheme.secondary,
             ),
             NsChipTone.sky => (
-              _ChipPalette.sky.withValues(alpha: 0.14),
+              const Color(0xFF9FD9F7),
               _ChipPalette.skyText,
-              _ChipPalette.sky.withValues(alpha: 0.4),
+              _ChipPalette.sky.withValues(alpha: 0.6),
             ),
             NsChipTone.forest => (
               _ChipPalette.forest,

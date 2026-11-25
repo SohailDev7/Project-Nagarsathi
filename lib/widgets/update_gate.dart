@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../models/app_update.dart';
@@ -23,6 +25,7 @@ class UpdateGate extends StatefulWidget {
 class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   final _service = UpdateService();
 
+  Timer? _startupDelay;
   bool _busy = false;
   bool _dialogVisible = false;
 
@@ -30,11 +33,16 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runChecks());
+    // Defer update checks slightly so initial route transitions never contend
+    // with network/storage startup work.
+    _startupDelay = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) _runChecks();
+    });
   }
 
   @override
   void dispose() {
+    _startupDelay?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _service.dispose();
     super.dispose();

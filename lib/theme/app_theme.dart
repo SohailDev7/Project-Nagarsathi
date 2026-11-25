@@ -1,6 +1,6 @@
-import 'package:cupertino_ui/cupertino_ui.dart'
-    show CupertinoPageTransitionsBuilder;
 import 'package:material_ui/material_ui.dart';
+
+import '../widgets/ns_route.dart';
 
 /// NagarSathi's playful civic palette.
 ///
@@ -18,14 +18,14 @@ abstract final class AppColors {
   static const forest = Color(0xFF163B2B);
   static const forestSoft = Color(0xFF24523C);
 
-  static const background = Color(0xFFFFFDF5);
-  static const surface = Color(0xFFFFFFFF);
-  static const surfaceSoft = Color(0xFFF7F8EE);
+  static const background = Color(0xFFA7D49A);
+  static const surface = Color(0xFFBEE2B2);
+  static const surfaceSoft = Color(0xFFA3D096);
 
-  static const border = Color(0xFFE3E7D9);
-  static const borderStrong = Color(0xFFD3DAC4);
-  static const ink = Color(0xFF1F3329);
-  static const muted = Color(0xFF5A6C60);
+  static const border = Color(0xFF72A767);
+  static const borderStrong = Color(0xFF5F9455);
+  static const ink = Color(0xFF0A2416);
+  static const muted = Color(0xFF1F422D);
 
   static const error = Color(0xFFE04B43);
   static const errorDark = Color(0xFFB2352F);
@@ -117,23 +117,23 @@ class NsColors extends ThemeExtension<NsColors> {
   final Color mint;
 
   static const light = NsColors(
-    background: Color(0xFFFFFDF5),
-    staffBackground: Color(0xFFF8FBF0),
-    surface: Color(0xFFFFFFFF),
-    surfaceSoft: Color(0xFFF7F8EE),
-    border: Color(0xFFD3DAC4),
-    hairline: Color(0xFFE3E7D9),
-    inputBorder: Color(0xFF84948A),
-    controlBorder: Color(0xFFD3DAC4),
-    ink: Color(0xFF1F3329),
-    heading: Color(0xFF163B2B),
-    muted: Color(0xFF5A6C60),
-    shadow: Color(0xFFE7EBD9),
-    accentText: Color(0xFF2E7D0B),
+    background: Color(0xFFA7D49A),
+    staffBackground: Color(0xFF9AC9BA),
+    surface: Color(0xFFBEE2B2),
+    surfaceSoft: Color(0xFFA3D096),
+    border: Color(0xFF72A767),
+    hairline: Color(0xFF8AB980),
+    inputBorder: Color(0xFF3E6B3C),
+    controlBorder: Color(0xFF6A9F60),
+    ink: Color(0xFF0A2416),
+    heading: Color(0xFF061B10),
+    muted: Color(0xFF1F422D),
+    shadow: Color(0xFF7CAD70),
+    accentText: Color(0xFF124A03),
     accentBright: Color(0xFF89E219),
-    primaryStrong: Color(0xFF3F9E00),
-    errorBorder: Color(0xFFE04B43),
-    mint: Color(0xFFE8F8D8),
+    primaryStrong: Color(0xFF2D7A00),
+    errorBorder: Color(0xFFB7241D),
+    mint: Color(0xFF97D87B),
   );
 
   static const dark = NsColors(
@@ -301,9 +301,11 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     extensions: [tokens],
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: NsSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.iOS: NsSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.macOS: NsSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.windows: NsSharedAxisPageTransitionsBuilder(),
+        TargetPlatform.linux: NsSharedAxisPageTransitionsBuilder(),
       },
     ),
     appBarTheme: AppBarTheme(

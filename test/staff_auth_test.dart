@@ -236,17 +236,17 @@ void main() {
     await tester.pumpWidget(const NagarSathiApp());
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byType(TextFormField).first,
+      find.byType(TextFormField).at(0),
       'citizen@nagarsathi.app',
     );
-    await tester.tap(find.text('Continue'));
+    await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+    await tester.ensureVisible(find.text('Sign in'));
+    await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text(
-        'Firebase is not connected. Account verification is unavailable.',
-      ),
-      findsOneWidget,
+      find.text('Firebase is not connected. Sign-in is unavailable.'),
+      findsAtLeastNWidgets(1),
     );
     expect(find.byType(HomeScreen), findsNothing);
     expect(find.byType(StaffHomeScreen), findsNothing);

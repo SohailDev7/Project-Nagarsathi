@@ -9,6 +9,15 @@ Firebase custom token so the app can call `signInWithCustomToken`.
 | --- | --- | --- |
 | `POST /request-email-otp` | `{ "email": "..." }` | `{ expiresInSeconds, remainingResends }` |
 | `POST /verify-email-otp` | `{ "email": "...", "otp": "123456" }` | `{ verified: true, token, verificationToken }` |
+| `POST /admin/delete-staff-account` | `{ "uid"?, "email"? }` | `{ deleted, uid }` |
+| `POST /admin/send-staff-invite` | `{ "email", "name", "ward", "tempPassword" }` | `{ sent: true }` |
+
+The two `/admin/*` endpoints require an `Authorization: Bearer <Firebase ID token>`
+header from a verified super-admin (or an active staff manager) and are used by
+the Ward Officer Management screen. `delete-staff-account` removes the Firebase
+Auth account so an email can be reused after an officer is deleted;
+`send-staff-invite` emails the officer their temporary password through the
+Gmail Apps Script endpoint.
 
 `token` is the Firebase custom token. It is `null` when the worker has no
 service account configured — the code is still verified, but the app cannot

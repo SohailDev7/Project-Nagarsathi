@@ -9,7 +9,7 @@ function json(body, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
     },
   });
@@ -440,6 +440,367 @@ async function verifyOtp(request, env) {
   });
 }
 
+// ─── Staff account administration ────────────────────────────────────────
+//
+// These endpoints let a signed-in staff manager delete a Firebase Auth account
+// (so the email can be reused after an officer is removed) and email a new
+// officer their temporary sign-in details. Both require the caller's Firebase
+// ID token and are restricted to verified super-admins or active staff
+// managers.
+
+const SUPER_ADMIN_EMAILS = new Set([
+  "admin@nagarsathi.app",
+  "freefuzxcoj2@gmail.com",
+  "sohail@nagarsathi.app",
+]);
+
+function readBearerToken(request) {
+  const header = request.headers.get("Authorization") || "";
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match ? match[1].trim() : "";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function firestoreGetDocument(env, accessToken, path) {
+  const account = readServiceAccount(env);
+  if (!account?.project_id) return null;
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${account.project_id}/databases/(default)/documents/${path}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
+async function firestoreHasDocument(env, accessToken, collection, field, value) {
+  const account = readServiceAccount(env);
+  // Fail safe: if the check cannot run, treat the document as present so we
+  // never delete an account we cannot verify is an orphaned staff account.
+  if (!account?.project_id) return true;
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${account.project_id}/databases/(default)/documents:runQuery`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: collection }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: field },
+              op: "EQUAL",
+              value: { stringValue: value },
+            },
+          },
+          limit: 1,
+        },
+      }),
+    },
+  );
+  if (!response.ok) return true;
+
+  const rows = await response.json().catch(() => null);
+  return Array.isArray(rows) && rows.some((row) => row?.document);
+}
+
+async function verifyStaffManager(request, env, accessToken) {
+  const idToken = readBearerToken(request);
+  if (!idToken) {
+    return {
+      error: json(
+        { error: "Sign in as a staff manager to continue." },
+        401,
+      ),
+    };
+  }
+
+  const account = readServiceAccount(env);
+  if (!account?.project_id) {
+    return { error: json({ error: "Server is not configured." }, 500) };
+  }
+
+  const lookup = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${account.project_id}/accounts:lookup`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ idToken }),
+    },
+  );
+  if (!lookup.ok) {
+    return {
+      error: json(
+        { error: "Your session has expired. Sign in again." },
+        401,
+      ),
+    };
+  }
+
+  const payload = await lookup.json().catch(() => null);
+  const user = Array.isArray(payload?.users) ? payload.users[0] : null;
+  const email = String(user?.email || "").trim().toLowerCase();
+  const uid = String(user?.localId || "").trim();
+  if (!user || !email) {
+    return {
+      error: json(
+        { error: "Sign in as a staff manager to continue." },
+        401,
+      ),
+    };
+  }
+
+  // Super-admins must have a verified email, matching the Firestore rules.
+  // Active staff managers are checked through their staff document.
+  let allowed = SUPER_ADMIN_EMAILS.has(email) && user.emailVerified === true;
+  if (!allowed && uid) {
+    const staffDoc = await firestoreGetDocument(
+      env,
+      accessToken,
+      `staff/${uid}`,
+    );
+    const fields = staffDoc?.fields || {};
+    const isStaff = fields.role?.stringValue === "staff";
+    const isActive = fields.active?.booleanValue === true;
+    const isManager =
+      fields.admin?.booleanValue === true ||
+      fields.accountType?.stringValue === "ward_creator";
+    allowed = isStaff && isActive && isManager;
+  }
+
+  if (!allowed) {
+    return {
+      error: json(
+        {
+          error:
+            "Only a verified super-admin or an active staff manager can perform this action.",
+        },
+        403,
+      ),
+    };
+  }
+
+  return { user, email, uid };
+}
+
+async function deleteFirebaseUser(env, accessToken, uid) {
+  const account = readServiceAccount(env);
+  if (!account?.project_id) return { deleted: false, reason: "not-configured" };
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${account.project_id}/accounts:delete`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ localId: uid }),
+    },
+  );
+
+  if (response.ok) return { deleted: true };
+  const detail = await response.text().catch(() => "");
+  if (detail.includes("USER_NOT_FOUND")) {
+    return { deleted: true, reason: "user-not-found" };
+  }
+  return { deleted: false, detail };
+}
+
+async function deleteStaffAccount(request, env) {
+  const accessToken = await getGoogleAccessToken(env);
+  if (!accessToken) {
+    return json({ error: "Server is not configured." }, 500);
+  }
+
+  const caller = await verifyStaffManager(request, env, accessToken);
+  if (caller.error) return caller.error;
+
+  const body = await parseJson(request);
+  const requestedUid = String(body?.uid || "").trim();
+  const email = String(body?.email || "").trim().toLowerCase();
+  if (!requestedUid && !isValidEmail(email)) {
+    return json({ error: "Provide the staff uid or email." }, 400);
+  }
+
+  // When only an email is supplied (cleaning up an orphaned account left by an
+  // older delete), refuse to remove a real citizen profile or a live officer.
+  if (!requestedUid && email) {
+    const hasCitizen = await firestoreHasDocument(
+      env,
+      accessToken,
+      "users",
+      "email",
+      email,
+    );
+    if (hasCitizen) {
+      return json(
+        {
+          error:
+            "That email belongs to a citizen account and cannot be reused for staff.",
+        },
+        409,
+      );
+    }
+
+    const hasOfficer = await firestoreHasDocument(
+      env,
+      accessToken,
+      "ward_officers",
+      "emailLower",
+      email,
+    );
+    if (hasOfficer) {
+      return json(
+        { error: "Remove the existing ward officer record first." },
+        409,
+      );
+    }
+
+    const hasStaff = await firestoreHasDocument(
+      env,
+      accessToken,
+      "staff",
+      "email",
+      email,
+    );
+    if (hasStaff) {
+      return json(
+        { error: "A staff account with this email already exists." },
+        409,
+      );
+    }
+  }
+
+  let targetUid = requestedUid;
+  if (!targetUid) {
+    targetUid = await findFirebaseUser(env, accessToken, email);
+  }
+  if (!targetUid) {
+    return json({ deleted: false, reason: "user-not-found" });
+  }
+
+  let result = await deleteFirebaseUser(env, accessToken, targetUid);
+
+  // A fallback officer id is not a real Firebase uid; retry by email.
+  if (!result.deleted && !requestedUid && email) {
+    const byEmailUid = await findFirebaseUser(env, accessToken, email);
+    if (byEmailUid && byEmailUid !== targetUid) {
+      targetUid = byEmailUid;
+      result = await deleteFirebaseUser(env, accessToken, targetUid);
+    }
+  }
+
+  if (!result.deleted) {
+    return json(
+      {
+        error: "Could not delete the staff sign-in account.",
+        detail: result.detail,
+      },
+      502,
+    );
+  }
+
+  return json({ deleted: true, uid: targetUid, reason: result.reason });
+}
+
+async function sendStaffInvite(request, env) {
+  const accessToken = await getGoogleAccessToken(env);
+  if (!accessToken) {
+    return json({ error: "Server is not configured." }, 500);
+  }
+
+  const caller = await verifyStaffManager(request, env, accessToken);
+  if (caller.error) return caller.error;
+
+  if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET) {
+    return json({ error: "The email service is not configured." }, 500);
+  }
+
+  const body = await parseJson(request);
+  const email = String(body?.email || "").trim().toLowerCase();
+  const name = String(body?.name || "").trim();
+  const ward = String(body?.ward || "").trim();
+  const tempPassword = String(body?.tempPassword || "").trim();
+
+  if (!isValidEmail(email)) {
+    return json({ error: "Enter a valid email address." }, 400);
+  }
+  if (!name || !tempPassword) {
+    return json({ error: "Missing staff name or temporary password." }, 400);
+  }
+
+  const wardLabel = ward ? `Ward ${ward}` : "your assigned ward";
+  const subject = "Your NagarSathi ward officer account is ready";
+  const text =
+    `Hello ${name},\n\n` +
+    `Your NagarSathi ward officer account for ${wardLabel} has been created.\n\n` +
+    `Sign-in details:\n` +
+    `• Email: ${email}\n` +
+    `• Temporary Password: ${tempPassword}\n\n` +
+    `Please sign in via the Staff Login screen using this temporary 8-digit ` +
+    `password. You will be prompted to set your new permanent password ` +
+    `immediately upon first sign-in.`;
+  const html =
+    `<p>Hello ${escapeHtml(name)},</p>` +
+    `<p>Your NagarSathi ward officer account for ${escapeHtml(wardLabel)} ` +
+    `has been created.</p>` +
+    `<p><strong>Sign-in details</strong></p>` +
+    `<ul><li>Email: ${escapeHtml(email)}</li>` +
+    `<li>Temporary Password: <strong>${escapeHtml(tempPassword)}</strong></li></ul>` +
+    `<p>Please sign in via the Staff Login screen using this temporary ` +
+    `8-digit password. You will be prompted to set your new permanent ` +
+    `password immediately upon first sign-in.</p>`;
+
+  const mailResponse = await fetch(env.GMAIL_MAIL_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      apiKey: env.GMAIL_MAIL_SECRET,
+      to: email,
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!mailResponse.ok) {
+    const detail = await mailResponse.text().catch(() => "");
+    return json(
+      { error: "The staff invitation email could not be sent.", detail },
+      502,
+    );
+  }
+
+  const mailPayload = await mailResponse.json().catch(() => null);
+  if (!mailPayload || mailPayload.sent !== true) {
+    return json(
+      {
+        error:
+          mailPayload?.error || "The staff invitation email could not be sent.",
+      },
+      502,
+    );
+  }
+
+  return json({ sent: true });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -455,6 +816,12 @@ export default {
     }
     if (url.pathname === "/verify-email-otp") {
       return verifyOtp(request, env);
+    }
+    if (url.pathname === "/admin/delete-staff-account") {
+      return deleteStaffAccount(request, env);
+    }
+    if (url.pathname === "/admin/send-staff-invite") {
+      return sendStaffInvite(request, env);
     }
     return json({ error: "Not found." }, 404);
   },

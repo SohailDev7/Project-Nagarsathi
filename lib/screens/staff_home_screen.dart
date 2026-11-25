@@ -14,6 +14,7 @@ import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
 import '../widgets/ns_remember_me_notification.dart';
+import '../widgets/ns_route.dart';
 import '../widgets/ns_settings_sheet.dart';
 import 'admin/ward_officer_management_screen.dart';
 import 'settings_screen.dart';
@@ -70,7 +71,10 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
     await const SessionService().saveAppLock(false);
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
+      NsPageRoute<void>(
+        style: NsTransitionStyle.fade,
+        builder: (_) => const StaffLoginScreen(),
+      ),
       (route) => false,
     );
   }
@@ -255,7 +259,7 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
                         icon: Icons.tune_rounded,
                         onPressed: () {
                           Navigator.of(context).push(
-                            MaterialPageRoute<void>(
+                            NsPageRoute<void>(
                               builder: (_) => const SettingsScreen(),
                             ),
                           );

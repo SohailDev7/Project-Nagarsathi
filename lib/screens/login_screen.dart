@@ -14,20 +14,19 @@ import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import '../utils/validators.dart';
 import '../widgets/app_lock_gate.dart';
-import '../widgets/ns_auth_heading.dart';
-import '../widgets/ns_auth_scaffold.dart';
-import '../widgets/ns_back_button.dart';
+import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_facebook_button.dart';
 import '../widgets/ns_google_button.dart';
-import '../widgets/ns_language_toggle.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
-import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_route.dart';
+import '../widgets/ns_shake.dart';
+import '../widgets/ns_speech_bubble.dart';
+import '../widgets/ns_split_hero_scaffold.dart';
 import '../widgets/ns_text_field.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
@@ -48,10 +47,11 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   static const _authChannel = MethodChannel('com.softwarica.nagarsathi/auth');
 
-  final _formKeyStep0 = GlobalKey<FormState>();
-  final _formKeyStep1 = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocusNode = FocusNode();
+  final _shakeController = NsShakeController();
   StreamSubscription<Uri>? _emailLinkSubscription;
 
   ThemeController get _themeController =>
@@ -60,8 +60,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   LanguageController get _languageController =>
       widget.languageController ?? LanguageController.instance;
 
-  int _step = 0;
-  int _direction = 1;
   bool _isEmailLinkMode = false;
   bool _isLoading = false;
   bool _celebrating = false;
@@ -80,26 +78,33 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _emailLinkSubscription = AppLinks().uriLinkStream.listen(
-      (uri) => _handleIncomingEmailSignInLink(uri.toString()),
-      onError: (Object error) {
-        if (error is MissingPluginException) return;
-        if (!mounted) return;
-        setState(() {
-          _showError = true;
-          _errorMessage = context.l10n.signInFailure;
-        });
-      },
-    );
-    unawaited(_handleInitialEmailSignInLink());
+    if (AuthService.isConfigured) {
+      _emailLinkSubscription = AppLinks().uriLinkStream.listen(
+        (uri) => _handleIncomingEmailSignInLink(uri.toString()),
+        onError: (Object error) {
+          if (error is MissingPluginException) return;
+          if (!mounted) return;
+          setState(() {
+            _showError = true;
+            _errorMessage = context.l10n.signInFailure;
+          });
+        },
+      );
+      unawaited(_handleInitialEmailSignInLink());
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_emailLinkSubscription?.cancel());
+    final sub = _emailLinkSubscription;
+    if (sub != null) {
+      unawaited(sub.cancel().catchError((Object _) {}));
+    }
     _identifierController.dispose();
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
+    _shakeController.dispose();
     super.dispose();
   }
 
@@ -131,14 +136,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (_googleLoading) return s.mascotOpeningGoogle;
     if (_facebookLoading) return s.mascotOpeningFacebook;
     if (_isLoading) {
-      if (_step == 0) return s.mascotCheckingAccount;
       return _isEmailLinkMode ? s.emailSignInLink : s.mascotCheckingDetails;
     }
-    if (_step == 1) {
-      if (_isEmailLinkMode) return s.emailSignInLink;
-      if (_passwordFocused) return s.mascotPasswordPrivate;
-      return s.mascotEnterPassword;
-    }
+    if (_isEmailLinkMode) return s.emailSignInLink;
+    if (_passwordFocused) return s.mascotPasswordPrivate;
     switch (_kind) {
       case IdentifierKind.email:
         return s.mascotEmailSpotted;
@@ -160,6 +161,22 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         message.contains(context.l10n.noAccountFoundBanner.toLowerCase());
   }
 
+  bool get _isNotFoundError {
+    if (!_showError || _errorMessage == null) return false;
+    return _errorMessage!.contains('No account found') ||
+        _errorMessage == context.l10n.noAccountFoundBanner;
+  }
+
+  void _triggerValidationError([String? message]) {
+    HapticFeedback.mediumImpact();
+    _shakeController.shake();
+    setState(() {
+      _isLoading = false;
+      _showError = true;
+      if (message != null) _errorMessage = message;
+    });
+  }
+
   void _onIdentifierChanged(String value) {
     final kind = Validators.identifierKind(value);
     if (kind != _kind || _showError) {
@@ -171,93 +188,34 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkIdentifierAndContinue() async {
+  Future<void> _submitPrimary() async {
     if (_isLoading) return;
     FocusScope.of(context).unfocus();
+
     if (_pendingEmailLink != null) {
       await _completePendingEmailSignInLink();
       return;
     }
-    if (!(_formKeyStep0.currentState?.validate() ?? false)) {
-      HapticFeedback.mediumImpact();
-      setState(() => _showError = true);
+
+    if (_isEmailLinkMode) {
+      await _requestEmailSignInLink();
       return;
     }
 
-    final identifier = _identifierController.text.trim();
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      _triggerValidationError();
+      return;
+    }
+
     if (_kind == IdentifierKind.phone) {
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _showError = true;
-        _errorMessage = context.l10n.phoneOtpSoon;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _showError = false;
-    });
-
-    try {
-      final exists = await const AuthService().checkEmailExists(identifier);
-      if (!mounted) return;
-
-      if (!exists) {
-        HapticFeedback.mediumImpact();
-        setState(() {
-          _isLoading = false;
-          _showError = true;
-          _errorMessage = context.l10n.noAccountFoundBanner;
-        });
-        return;
-      }
-
-      HapticFeedback.selectionClick();
-      setState(() {
-        _isLoading = false;
-        _direction = 1;
-        _step = 1;
-        _isEmailLinkMode = false;
-        _showError = false;
-        _errorMessage = null;
-      });
-    } on AuthFailure catch (error) {
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
-    }
-  }
-
-  void _backToIdentifier() {
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _direction = -1;
-      _step = 0;
-      _isEmailLinkMode = false;
-      _showError = false;
-      _errorMessage = null;
-      _passwordController.clear();
-    });
-  }
-
-  Future<void> _signInWithPassword() async {
-    if (_isLoading) return;
-    FocusScope.of(context).unfocus();
-    if (!(_formKeyStep1.currentState?.validate() ?? false)) {
-      HapticFeedback.mediumImpact();
-      setState(() => _showError = true);
+      _triggerValidationError(context.l10n.phoneOtpSoon);
       return;
     }
 
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
+      _showError = false;
       _errorMessage = null;
     });
 
@@ -270,30 +228,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           .timeout(const Duration(seconds: 15));
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerValidationError(error.message);
       return;
     } on TimeoutException {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = context.l10n.firebaseNoResponse;
-      });
+      _triggerValidationError(context.l10n.firebaseNoResponse);
       return;
     } catch (_) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = context.l10n.signInFailure;
-      });
+      _triggerValidationError(context.l10n.signInFailure);
       return;
     }
 
@@ -320,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Future<void> _handleIncomingEmailSignInLink(String link) async {
     if (_handlingEmailLink || _lastHandledEmailLink == link) return;
-    final service = const AuthService();
+    const service = AuthService();
     if (!service.isEmailSignInLink(link)) return;
 
     _lastHandledEmailLink = link;
@@ -340,7 +283,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (savedEmail == null) {
       setState(() {
         _pendingEmailLink = link;
-        _step = 0;
         _isEmailLinkMode = true;
         _showError = false;
         _errorMessage = null;
@@ -375,21 +317,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerValidationError(error.message);
       _lastHandledEmailLink = null;
       _handlingEmailLink = false;
       return;
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = context.l10n.signInFailure;
-      });
+      _triggerValidationError(context.l10n.signInFailure);
       _lastHandledEmailLink = null;
       _handlingEmailLink = false;
       return;
@@ -405,16 +339,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final email = _identifierController.text.trim();
     final link = _pendingEmailLink;
     if (link == null) return;
-    if (!(_formKeyStep0.currentState?.validate() ?? false)) {
-      HapticFeedback.mediumImpact();
-      setState(() => _showError = true);
+    final emailErr = Validators.identifier(email, strings: context.l10n);
+    if (emailErr != null) {
+      _triggerValidationError(emailErr);
       return;
     }
     if (_kind != IdentifierKind.email) {
-      setState(() {
-        _showError = true;
-        _errorMessage = context.l10n.emailSignInLinkEnterEmail;
-      });
+      _triggerValidationError(context.l10n.emailSignInLinkEnterEmail);
       return;
     }
     await _completeEmailSignInLink(email: email, link: link);
@@ -429,11 +360,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
     HapticFeedback.mediumImpact();
 
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    await Future<void>.delayed(const Duration(milliseconds: 520));
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
+      NsPageRoute<void>(
+        style: NsTransitionStyle.fade,
         builder: (_) => AppLockGate(
           child: HomeScreen(
             initialName: name,
@@ -447,7 +379,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _signInWithGoogle() async {
-    if (_isLoading || _googleLoading) return;
+    if (_isLoading || _googleLoading || _facebookLoading) return;
     FocusScope.of(context).unfocus();
     HapticFeedback.selectionClick();
     setState(() {
@@ -499,15 +431,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
 
     try {
-      // ── 1. Native Facebook login via flutter_facebook_auth ────────────────
-      // The SDK opens a Chrome Custom Tab, handles the OAuth, and returns
-      // the real Facebook name + email directly to Dart code.
       final result = await const AuthService().signInWithFacebook();
 
       if (!mounted) return;
 
       if (result == null) {
-        // User cancelled the Facebook login dialog
         setState(() => _facebookLoading = false);
         return;
       }
@@ -515,7 +443,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       final String resolvedName = result['name'] ?? '';
       final String resolvedEmail = result['email'] ?? '';
 
-      // ── 2. Show confirmation sheet with the REAL Facebook name ────────────
       final bool? confirmed = await _showFacebookConfirmationSheet(
         name: resolvedName.isNotEmpty ? resolvedName : context.l10n.neighbour,
         email: resolvedEmail,
@@ -524,7 +451,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       if (!mounted) return;
 
       if (confirmed != true) {
-        // User cancelled — sign out of Firebase and return to login
         try {
           await FirebaseAuth.instance.signOut();
         } catch (_) {}
@@ -532,7 +458,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // ── 3. Navigate to Home with the real name ────────────────────────────
       _finishSignIn(
         name: resolvedName.isNotEmpty ? resolvedName : null,
         email: resolvedEmail.isNotEmpty ? resolvedEmail : null,
@@ -570,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           decoration: BoxDecoration(
             color: tokens.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: tokens.border, width: 2),
+            border: Border.all(color: tokens.border, width: 1.5),
           ),
           padding: const EdgeInsets.fromLTRB(22, 14, 22, 28),
           child: SafeArea(
@@ -596,7 +521,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1877F2),
+                        color: const Color(0xFF1466D8),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -658,6 +583,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Future<void> _requestEmailSignInLink() async {
     if (_isLoading) return;
+    final identifier = _identifierController.text.trim();
+    final emailErr = Validators.email(identifier, strings: context.l10n);
+    if (emailErr != null) {
+      _triggerValidationError(emailErr);
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _showError = false;
@@ -665,37 +597,26 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
     try {
       await const AuthService().sendEmailSignInLink(
-        _identifierController.text.trim(),
+        identifier,
         locale: _languageController.value.code,
       );
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _isEmailLinkMode = true;
-        _direction = 1;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            context.l10n.emailSignInLinkSent(_identifierController.text.trim()),
-          ),
+          content: Text(context.l10n.emailSignInLinkSent(identifier)),
           duration: const Duration(seconds: 6),
         ),
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerValidationError(error.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = context.l10n.emailSignInLinkFailure;
-      });
+      _triggerValidationError(context.l10n.emailSignInLinkFailure);
     }
   }
 
@@ -705,6 +626,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final strings = context.l10n;
     final tokens = NsColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final identifier = _identifierController.text.trim();
 
     showModalBottomSheet<void>(
       context: context,
@@ -714,7 +636,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           decoration: BoxDecoration(
             color: tokens.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: tokens.border, width: 2),
+            border: Border.all(color: tokens.border, width: 1.5),
           ),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
           child: SafeArea(
@@ -742,17 +664,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     color: tokens.ink,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  strings.chooseSignInMethodFor(
-                    _identifierController.text.trim(),
+                if (identifier.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    strings.chooseSignInMethodFor(identifier),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.muted,
+                    ),
                   ),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.muted,
-                  ),
-                ),
+                ],
                 const SizedBox(height: 16),
                 _OptionTile(
                   icon: Icons.lock_rounded,
@@ -778,7 +700,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
-                    _requestEmailSignInLink();
+                    setState(() {
+                      _isEmailLinkMode = true;
+                      _showError = false;
+                      _errorMessage = null;
+                    });
+                    if (Validators.email(identifier) == null) {
+                      _requestEmailSignInLink();
+                    }
                   },
                 ),
                 const SizedBox(height: 10),
@@ -814,258 +743,347 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   void _openSignUp() {
-    Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const SignUpScreen()));
+    Navigator.of(context).push(
+      NsPageRoute<void>(builder: (_) => const SignUpScreen()),
+    );
   }
 
   void _openForgotPassword() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ForgotPasswordScreen()),
+      NsPageRoute<void>(builder: (_) => const ForgotPasswordScreen()),
     );
   }
 
   void _openStaffSignIn() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()));
+    Navigator.of(context).push(
+      NsPageRoute<void>(builder: (_) => const StaffLoginScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: _step == 0,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        _backToIdentifier();
-      },
-      child: Stack(
-        children: [
-          NsAuthScaffold(
-            centerContent: true,
-            topBar: _buildTopBar(),
-            child: NsEntrance(
-              child: TweenAnimationBuilder<double>(
-                key: ValueKey('step-$_step'),
-                tween: Tween<double>(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                builder: (context, value, child) {
-                  return Opacity(
-                    opacity: value,
-                    child: Transform.translate(
-                      offset: Offset(14 * (1 - value) * _direction, 0),
-                      child: child,
-                    ),
-                  );
-                },
-                child: _buildBody(),
-              ),
+    return Stack(
+      children: [
+        NsSplitHeroScaffold(
+          topBar: _buildTopBar(),
+          hero: _buildHero(),
+          sheetChild: NsEntrance(child: _buildSheetContent()),
+        ),
+        if (_celebrating)
+          Positioned.fill(
+            child: NsConfetti(
+              onCompleted: () {
+                if (mounted) setState(() => _celebrating = false);
+              },
             ),
           ),
-          if (_celebrating)
-            Positioned.fill(
-              child: NsConfetti(
-                onCompleted: () {
-                  if (mounted) setState(() => _celebrating = false);
-                },
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 
   Widget _buildTopBar() {
-    final tokens = NsColors.of(context);
-
     return Row(
       children: [
-        if (_step == 1) ...[
-          NsBackButton(onPressed: _backToIdentifier),
-          const SizedBox(width: 8),
-        ],
-        const NsLogo(size: 34, depth: 2),
-        const SizedBox(width: 10),
-        Expanded(
+        const NsLogo(size: 30, depth: 0),
+        const SizedBox(width: 9),
+        const Expanded(
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
               'NagarSathi',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 16.5,
                 height: 1.05,
                 fontWeight: FontWeight.w900,
-                color: tokens.heading,
+                color: Colors.white,
                 letterSpacing: -0.5,
               ),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        NsLanguageToggle(controller: _languageController, compact: true),
-        const SizedBox(width: 8),
-        _buildThemeToggle(),
+        NsAuthPreferencePills(
+          onDarkHeader: true,
+          themeController: _themeController,
+          languageController: _languageController,
+        ),
       ],
     );
   }
 
-  Widget _buildThemeToggle() {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: _themeController,
-      builder: (context, mode, _) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final strings = context.l10n;
-        return NsPressable(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            final nextMode = isDark ? ThemeMode.light : ThemeMode.dark;
-            _themeController.setMode(nextMode);
-          },
-          color: isDark ? const Color(0xFF243B30) : AppColors.mint,
-          borderColor: isDark ? const Color(0xFF325444) : AppColors.primary,
-          shadowColor: isDark ? const Color(0xFF0F1A14) : AppColors.primaryDark,
-          depth: 2,
-          radius: 999,
-          expand: false,
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          semanticLabel: isDark
-              ? context.l10n.switchToLightMode
-              : context.l10n.switchToDarkMode,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                size: 15,
-                color: isDark ? AppColors.sun : AppColors.forest,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                isDark ? strings.lightShort : strings.darkShort,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  height: 1.1,
-                  fontWeight: FontWeight.w900,
-                  color: isDark ? Colors.white : AppColors.forest,
-                  letterSpacing: 0.1,
+  Widget _buildHero() {
+    final strings = context.l10n;
+    final msg = _message(strings);
+    final tone = switch (_mood) {
+      NsMascotMood.sad => NsSpeechTone.error,
+      NsMascotMood.celebrate => NsSpeechTone.success,
+      NsMascotMood.curious => NsSpeechTone.info,
+      _ => NsSpeechTone.neutral,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: NsSpeechBubble(
+                  messages: [msg],
+                  speaker: 'Sathi',
+                  tailOnRight: true,
+                  tone: tone,
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+          const SizedBox(width: 12),
+          NsMascot(
+            size: 88,
+            mood: _mood,
+            look: _look,
+            wave: _celebrating,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildSheetContent() {
     final strings = context.l10n;
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        NsAuthHeading(
-          title: strings.welcomeBack,
-          message: _message(strings),
-          mood: _mood,
-          look: _look,
-          wave: _celebrating,
+        Text(
+          strings.welcomeBack,
+          style: TextStyle(
+            fontSize: 26,
+            height: 1.1,
+            fontWeight: FontWeight.w900,
+            color: tokens.heading,
+            letterSpacing: -0.8,
+          ),
         ),
-        const SizedBox(height: 16),
-        if (_step == 0) _buildStep0() else _buildStep1(),
-        if (_step == 0) ...[
-          const SizedBox(height: 14),
-          NsAuthDivider(label: strings.orContinueWith),
-          const SizedBox(height: 8),
-          NsGoogleButton(
-            onPressed: _signInWithGoogle,
-            isLoading: _googleLoading,
-            label: strings.continueWithGoogle,
+        const SizedBox(height: 14),
+        NsShake(
+          controller: _shakeController,
+          child: AutofillGroup(
+            child: Form(
+              key: _formKey,
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_showError && _errorMessage != null) ...[
+                      if (_isNotFoundError)
+                        _buildNotFoundBanner()
+                      else if (_showCredentialHelp)
+                        _buildCredentialHelp()
+                      else
+                        _buildInlineErrorBanner(),
+                      const SizedBox(height: 14),
+                    ],
+                    NsTextField(
+                      controller: _identifierController,
+                      label: strings.emailOrPhone,
+                      hint: strings.emailOrPhoneHint,
+                      icon: _kind == IdentifierKind.phone
+                          ? Icons.phone_iphone_rounded
+                          : Icons.alternate_email_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: _isEmailLinkMode
+                          ? TextInputAction.done
+                          : TextInputAction.next,
+                      validator: Validators.identifier,
+                      autocorrect: false,
+                      autofillHints: const [AutofillHints.username],
+                      onChanged: _onIdentifierChanged,
+                      onFieldSubmitted: (_) {
+                        if (_isEmailLinkMode) {
+                          _submitPrimary();
+                        } else {
+                          _passwordFocusNode.requestFocus();
+                        }
+                      },
+                      onFocusChange: (focused) {
+                        setState(() => _identifierFocused = focused);
+                      },
+                      labelTrailing: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 160),
+                        child: _kind == IdentifierKind.email
+                            ? NsChip(
+                                key: const ValueKey('email'),
+                                label: strings.email,
+                                icon: Icons.mail_rounded,
+                                compact: true,
+                              )
+                            : _kind == IdentifierKind.phone
+                            ? NsChip(
+                                key: const ValueKey('phone'),
+                                label: strings.phone,
+                                icon: Icons.smartphone_rounded,
+                                tone: NsChipTone.sky,
+                                compact: true,
+                              )
+                            : const SizedBox.shrink(key: ValueKey('empty')),
+                      ),
+                    ),
+                    if (!_isEmailLinkMode) ...[
+                      const SizedBox(height: 14),
+                      NsTextField(
+                        controller: _passwordController,
+                        focusNode: _passwordFocusNode,
+                        label: strings.password,
+                        hint: strings.passwordHint,
+                        icon: Icons.lock_rounded,
+                        obscureText: true,
+                        textInputAction: TextInputAction.done,
+                        validator: Validators.loginPassword,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) => _submitPrimary(),
+                        onChanged: (_) {
+                          if (_showError) {
+                            setState(() {
+                              _showError = false;
+                              _errorMessage = null;
+                            });
+                          }
+                        },
+                        onFocusChange: (focused) {
+                          setState(() => _passwordFocused = focused);
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        children: [
+                          _AuthLink(
+                            label: strings.emailLinkAction,
+                            onPressed: _openTryAnotherWaySheet,
+                          ),
+                          _AuthLink(
+                            label: strings.forgotPassword,
+                            onPressed: _openForgotPassword,
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: tokens.surfaceSoft,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: tokens.border),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.mark_email_read_rounded,
+                              size: 18,
+                              color: tokens.accentText,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _pendingEmailLink != null
+                                    ? strings.emailSignInLinkEnterEmail
+                                    : strings.emailSignInLinkSubtitle,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w700,
+                                  color: tokens.ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _AuthLink(
+                          label: strings.usePassword,
+                          onPressed: () {
+                            setState(() {
+                              _isEmailLinkMode = false;
+                              _pendingEmailLink = null;
+                              _showError = false;
+                              _errorMessage = null;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    NsPrimaryButton(
+                      label: _isEmailLinkMode
+                          ? strings.emailSignInLink
+                          : strings.signIn,
+                      isLoading: _isLoading,
+                      onPressed: _submitPrimary,
+                      icon: _isEmailLinkMode
+                          ? Icons.mark_email_read_rounded
+                          : Icons.arrow_forward_rounded,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          NsFacebookButton(
-            onPressed: _signInWithFacebook,
-            isLoading: _facebookLoading,
-            label: strings.continueWithFacebook,
-          ),
-          const SizedBox(height: 2),
-        ],
+        ),
+        const SizedBox(height: 18),
+        NsAuthDivider(label: strings.orContinueWith),
+        const SizedBox(height: 12),
+        NsSocialAuthRow(
+          onGooglePressed: _signInWithGoogle,
+          onFacebookPressed: _signInWithFacebook,
+          googleLoading: _googleLoading,
+          facebookLoading: _facebookLoading,
+        ),
+        const SizedBox(height: 18),
         _buildFooter(),
       ],
     );
   }
 
-  Widget _buildStep0() {
-    final strings = context.l10n;
-    return AutofillGroup(
-      child: Form(
-        key: _formKeyStep0,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            NsTextField(
-              controller: _identifierController,
-              label: strings.emailOrPhone,
-              hint: strings.emailOrPhoneHint,
-              icon: _kind == IdentifierKind.phone
-                  ? Icons.phone_iphone_rounded
-                  : Icons.alternate_email_rounded,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              validator: Validators.identifier,
-              autocorrect: false,
-              autofillHints: const [AutofillHints.username],
-              onChanged: _onIdentifierChanged,
-              onFieldSubmitted: (_) => _checkIdentifierAndContinue(),
-              onFocusChange: (focused) {
-                setState(() => _identifierFocused = focused);
-              },
-              labelTrailing: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                child: _kind == IdentifierKind.email
-                    ? NsChip(
-                        key: ValueKey('email'),
-                        label: strings.email,
-                        icon: Icons.mail_rounded,
-                        compact: true,
-                      )
-                    : _kind == IdentifierKind.phone
-                    ? NsChip(
-                        key: ValueKey('phone'),
-                        label: strings.phone,
-                        icon: Icons.smartphone_rounded,
-                        tone: NsChipTone.sky,
-                        compact: true,
-                      )
-                    : const SizedBox.shrink(key: ValueKey('empty')),
+  Widget _buildInlineErrorBanner() {
+    final tokens = NsColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: tokens.errorBorder.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tokens.errorBorder.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, size: 18, color: tokens.errorBorder),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              _errorMessage ?? '',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: tokens.ink,
               ),
             ),
-            if (_pendingEmailLink != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                strings.emailSignInLinkEnterEmail,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: NsColors.of(context).muted,
-                ),
-              ),
-            ],
-            if (_showError &&
-                _errorMessage != null &&
-                (_errorMessage!.contains('No account found') ||
-                    _errorMessage == strings.noAccountFoundBanner)) ...[
-              const SizedBox(height: 10),
-              _buildNotFoundBanner(),
-            ],
-            const SizedBox(height: 18),
-            NsPrimaryButton(
-              label: strings.continueText,
-              isLoading: _isLoading,
-              onPressed: _checkIdentifierAndContinue,
-              icon: Icons.arrow_forward_rounded,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1076,13 +1094,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: tokens.errorBorder.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tokens.errorBorder.withValues(alpha: 0.3)),
+        color: tokens.errorBorder.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tokens.errorBorder.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline_rounded, size: 16, color: tokens.errorBorder),
+          Icon(Icons.info_outline_rounded, size: 17, color: tokens.errorBorder),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1139,7 +1157,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  strings.credentialHelp,
+                  _errorMessage ?? strings.credentialHelp,
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.32,
@@ -1151,8 +1169,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
             children: [
               _AuthLink(
                 label: strings.sendResetLink,
@@ -1182,164 +1201,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                         }
                       },
               ),
-              const SizedBox(width: 8),
               _AuthLink(
-                label: strings.emailSignInLink,
+                label: strings.emailLinkAction,
                 onPressed: _isLoading ? null : _requestEmailSignInLink,
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStep1() {
-    final tokens = NsColors.of(context);
-    final strings = context.l10n;
-
-    return AutofillGroup(
-      child: Form(
-        key: _formKeyStep1,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: tokens.surfaceSoft,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: tokens.border),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.account_circle_rounded,
-                    size: 20,
-                    color: tokens.ink,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _identifierController.text.trim(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.ink,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _backToIdentifier,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      strings.changeIdentifier,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.accentText,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!_isEmailLinkMode) ...[
-              NsTextField(
-                controller: _passwordController,
-                label: strings.password,
-                hint: strings.passwordHint,
-                icon: Icons.lock_rounded,
-                obscureText: true,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                validator: Validators.loginPassword,
-                autofillHints: const [AutofillHints.password],
-                onFieldSubmitted: (_) => _signInWithPassword(),
-                onChanged: (_) {
-                  if (_showError) {
-                    setState(() {
-                      _showError = false;
-                      _errorMessage = null;
-                    });
-                  }
-                },
-                onFocusChange: (focused) {
-                  setState(() => _passwordFocused = focused);
-                },
-              ),
-              if (_showCredentialHelp) ...[
-                const SizedBox(height: 10),
-                _buildCredentialHelp(),
-              ],
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _AuthLink(
-                  label: strings.forgotPassword,
-                  onPressed: _openForgotPassword,
-                ),
-              ),
-              const SizedBox(height: 16),
-              NsPrimaryButton(
-                label: strings.signIn,
-                isLoading: _isLoading,
-                onPressed: _signInWithPassword,
-                icon: Icons.arrow_forward_rounded,
-              ),
-              const SizedBox(height: 2),
-              Center(
-                child: _AuthLink(
-                  label: strings.tryAnotherWay,
-                  onPressed: _openTryAnotherWaySheet,
-                ),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: tokens.surfaceSoft,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: tokens.border),
-                ),
-                child: Text(
-                  strings.emailSignInLinkSent(
-                    _identifierController.text.trim(),
-                  ),
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.ink,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              NsPrimaryButton(
-                label: strings.emailSignInLink,
-                isLoading: _isLoading,
-                onPressed: _requestEmailSignInLink,
-                icon: Icons.mark_email_read_rounded,
-              ),
-              const SizedBox(height: 2),
-              Center(
-                child: _AuthLink(
-                  label: strings.tryAnotherWay,
-                  onPressed: _openTryAnotherWaySheet,
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -1366,14 +1234,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             TextButton(
               onPressed: _openSignUp,
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
                 strings.signUp,
                 style: TextStyle(
-                  fontSize: 14.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w900,
                   color: tokens.accentText,
                 ),
@@ -1381,37 +1249,55 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              strings.areYouStaff,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: tokens.muted,
+        const SizedBox(height: 10),
+        Center(
+          child: InkWell(
+            key: const Key('staff-portal-pill'),
+            onTap: _openStaffSignIn,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: tokens.surfaceSoft,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: tokens.border, width: 1.2),
+              ),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                runSpacing: 2,
+                children: [
+                  Icon(
+                    Icons.badge_outlined,
+                    size: 14.5,
+                    color: tokens.muted,
+                  ),
+                  Text(
+                    strings.areYouStaff,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.muted,
+                    ),
+                  ),
+                  Text(
+                    strings.staffPortal,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: tokens.accentText,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 13.5,
+                    color: tokens.accentText,
+                  ),
+                ],
               ),
             ),
-            TextButton(
-              onPressed: _openStaffSignIn,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                strings.staffPortal,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: tokens.accentText,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
@@ -1480,7 +1366,7 @@ class _OptionTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? AppColors.primary : tokens.border,
-            width: selected ? 2 : 1.5,
+            width: selected ? 1.8 : 1.2,
           ),
         ),
         child: Row(

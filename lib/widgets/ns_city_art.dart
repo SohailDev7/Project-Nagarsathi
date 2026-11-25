@@ -6,7 +6,8 @@ import '../theme/app_theme.dart';
 
 /// Gently animated line-art skyline used to fill empty space in the wizard.
 ///
-/// Drawn in Flutter so there is no asset to load and it scales to any width.
+/// Wrapped in a [RepaintBoundary] so the subtle loop never dirties parent
+/// widgets or form inputs.
 class NsCityArt extends StatefulWidget {
   const NsCityArt({super.key, this.height = 128});
 
@@ -48,8 +49,6 @@ class _NsCityArtState extends State<NsCityArt>
     final tokens = NsColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Light art keeps the original paper tones; dark art sits just above the
-    // page background with a slightly lighter outline.
     final palette = isDark
         ? _CityPalette(
             fill: const Color(0xFF20332A),
@@ -67,19 +66,21 @@ class _NsCityArtState extends State<NsCityArt>
           );
 
     return ExcludeSemantics(
-      child: SizedBox(
-        height: widget.height,
-        width: double.infinity,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            return CustomPaint(
-              painter: _CityPainter(
-                progress: _controller.value,
-                palette: palette,
-              ),
-            );
-          },
+      child: RepaintBoundary(
+        child: SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return CustomPaint(
+                painter: _CityPainter(
+                  progress: _controller.value,
+                  palette: palette,
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -120,7 +121,6 @@ class _CityPalette {
 class _CityPainter extends CustomPainter {
   const _CityPainter({required this.progress, required this.palette});
 
-  /// 0 → 1 → 0 over the animation's lifetime.
   final double progress;
   final _CityPalette palette;
 
@@ -165,7 +165,6 @@ class _CityPainter extends CustomPainter {
         ..color = palette.sun.withValues(alpha: 0.32),
     );
 
-    // Slow drifting motes above the skyline.
     final drift = (progress - 0.5) * 14;
     final mote = Paint()..color = palette.mote.withValues(alpha: 0.22);
     canvas.drawCircle(
@@ -179,6 +178,7 @@ class _CityPainter extends CustomPainter {
       mote,
     );
 
+    final windowPaint = Paint();
     for (var index = 0; index < _buildings.length; index++) {
       final (xFactor, widthFactor, heightFactor) = _buildings[index];
       final rect = Rect.fromLTWH(
@@ -191,26 +191,28 @@ class _CityPainter extends CustomPainter {
       canvas.drawRRect(body, buildingFill);
       canvas.drawRRect(body, buildingLine);
 
-      _paintWindows(canvas, rect, index);
+      _paintWindows(canvas, rect, index, windowPaint);
     }
 
     canvas.drawLine(
       Offset(0, baseY),
       Offset(width, baseY),
-      Paint()
-        ..strokeWidth = 1.0
-        ..color = palette.line,
+      buildingLine,
     );
   }
 
-  void _paintWindows(Canvas canvas, Rect building, int seed) {
+  void _paintWindows(
+    Canvas canvas,
+    Rect building,
+    int seed,
+    Paint windowPaint,
+  ) {
     final columns = building.width > 40 ? 2 : 1;
     final spacing = building.width / (columns + 1);
     final rows = math.max(1, (building.height / 22).floor());
 
     for (var row = 0; row < rows; row++) {
       for (var column = 0; column < columns; column++) {
-        // Deterministic pattern keeps the drawing calm rather than busy.
         if ((row * 3 + column + seed) % 4 == 1) continue;
 
         final center = Offset(
@@ -221,12 +223,13 @@ class _CityPainter extends CustomPainter {
 
         final pulse =
             0.16 + 0.14 * math.sin((progress * math.pi * 2) + row + seed);
+        windowPaint.color = palette.window.withValues(alpha: pulse);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromCenter(center: center, width: 4.5, height: 4.5),
             const Radius.circular(1.4),
           ),
-          Paint()..color = palette.window.withValues(alpha: pulse),
+          windowPaint,
         );
       }
     }
