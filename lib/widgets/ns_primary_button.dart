@@ -41,38 +41,44 @@ class NsPrimaryButton extends StatelessWidget {
       semanticLabel: label,
       child: SizedBox(
         height: height,
-        child: Center(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 160),
-            child: isLoading
-                ? SizedBox(
-                    key: const ValueKey('loader'),
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.6,
-                      valueColor: AlwaysStoppedAnimation<Color>(onPrimary),
-                    ),
-                  )
-                : Row(
-                    key: const ValueKey('label'),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w900,
-                          color: onPrimary,
-                          letterSpacing: 0.2,
-                        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: isLoading
+                  ? SizedBox(
+                      key: const ValueKey('loader'),
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.6,
+                        valueColor: AlwaysStoppedAnimation<Color>(onPrimary),
                       ),
-                      if (icon != null) ...[
-                        const SizedBox(width: 10),
-                        Icon(icon, size: 20, color: onPrimary),
-                      ],
-                    ],
-                  ),
+                    )
+                  : FittedBox(
+                      key: const ValueKey('label'),
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w900,
+                              color: onPrimary,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          if (icon != null) ...[
+                            const SizedBox(width: 10),
+                            Icon(icon, size: 20, color: onPrimary),
+                          ],
+                        ],
+                      ),
+                    ),
+            ),
           ),
         ),
       ),

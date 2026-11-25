@@ -35,10 +35,7 @@ class NsRememberMeNotification extends StatelessWidget {
         decoration: BoxDecoration(
           color: tokens.surface,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: tokens.border,
-            width: NsTokens.borderWidth,
-          ),
+          border: Border.all(color: tokens.border, width: NsTokens.borderWidth),
           boxShadow: [
             BoxShadow(
               color: tokens.shadow,
@@ -62,10 +59,7 @@ class NsRememberMeNotification extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: tokens.mint,
                     borderRadius: BorderRadius.circular(11),
-                    border: Border.all(
-                      color: tokens.border,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: tokens.border, width: 1.5),
                   ),
                   child: Center(
                     child: Icon(
@@ -262,11 +256,15 @@ Future<bool?> showRememberMeNotification({
                   isStaff: isStaff,
                   onDismiss: () async {
                     await sessionService.saveRememberMe(false);
+                    await sessionService.saveAppLock(false);
                     if (isStaff) {
                       await sessionService.clearStaffSession();
                     }
                     if (dialogContext.mounted) {
-                      Navigator.of(dialogContext, rootNavigator: true).pop(false);
+                      Navigator.of(
+                        dialogContext,
+                        rootNavigator: true,
+                      ).pop(false);
                     }
                   },
                   onRemember: () async {
@@ -278,7 +276,10 @@ Future<bool?> showRememberMeNotification({
                       );
                     }
                     if (dialogContext.mounted) {
-                      Navigator.of(dialogContext, rootNavigator: true).pop(true);
+                      Navigator.of(
+                        dialogContext,
+                        rootNavigator: true,
+                      ).pop(true);
                     }
                     if (context.mounted) {
                       _showRememberConfirmation(context);
@@ -302,10 +303,7 @@ Future<bool?> showRememberMeNotification({
           end: Offset.zero,
         ).animate(curved),
         child: FadeTransition(
-          opacity: CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOut,
-          ),
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
           child: child,
         ),
       );
@@ -316,6 +314,7 @@ Future<bool?> showRememberMeNotification({
     // If the notification was dismissed by tapping outside or swiping up,
     // do not keep the session remembered.
     await sessionService.saveRememberMe(false);
+    await sessionService.saveAppLock(false);
     if (isStaff) {
       await sessionService.clearStaffSession();
     }
