@@ -45,6 +45,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   bool _isLoading = false;
   bool _celebrating = false;
   bool _showError = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -58,9 +59,10 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? false;
 
   void _clearError() {
-    if (!_showError) return;
+    if (!_showError && _errorMessage == null) return;
     setState(() {
       _showError = false;
+      _errorMessage = null;
     });
   }
 
@@ -69,6 +71,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
+      _errorMessage = null;
     });
   }
 
@@ -78,6 +81,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
+      _errorMessage = message;
     });
   }
 
@@ -90,6 +94,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _challenge = null;
       _otpController.clear();
       _showError = false;
+      _errorMessage = null;
     });
   }
 
@@ -106,6 +111,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
+      _errorMessage = null;
     });
 
     try {
@@ -140,6 +146,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
+      _errorMessage = null;
     });
 
     try {
@@ -182,6 +189,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = true;
       _showError = false;
+      _errorMessage = null;
     });
 
     try {
@@ -406,8 +414,12 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       },
     );
 
-    newPasswordController.dispose();
-    confirmPasswordController.dispose();
+    // Wait for the modal sheet's exit animation to finish before disposing
+    // controllers so the closing frame doesn't flash a disposed-controller error.
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      newPasswordController.dispose();
+      confirmPasswordController.dispose();
+    });
     return result == true;
   }
 
@@ -417,6 +429,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _challenge = null;
       _otpController.clear();
       _showError = false;
+      _errorMessage = null;
     });
   }
 
@@ -481,6 +494,43 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildMethodTabs(),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 18,
+                            color: AppColors.error,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.error,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   if (_method == _StaffMethod.email) ...[
                     NsTextField(
