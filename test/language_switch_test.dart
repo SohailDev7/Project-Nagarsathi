@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:projectnagarsathi/l10n/app_locale.dart';
 import 'package:projectnagarsathi/l10n/app_strings.dart';
 import 'package:projectnagarsathi/l10n/language_controller.dart';
+import 'package:projectnagarsathi/main.dart';
+import 'package:projectnagarsathi/screens/login_screen.dart';
 import 'package:projectnagarsathi/screens/settings_screen.dart';
 import 'package:projectnagarsathi/theme/theme_controller.dart';
 import 'package:projectnagarsathi/widgets/ns_language_toggle.dart';
@@ -10,6 +12,30 @@ import 'package:projectnagarsathi/widgets/ns_settings_sheet.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('Material localizations exist after switching to Nepali', (
+    tester,
+  ) async {
+    final controller = LanguageController(AppLocale.en);
+    await tester.pumpWidget(NagarSathiApp(languageController: controller));
+    await tester.pumpAndSettle();
+
+    controller.value = AppLocale.ne;
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(LoginScreen));
+    expect(
+      MaterialLocalizations.of(context).refreshIndicatorSemanticLabel,
+      isNotEmpty,
+    );
+    expect(find.text('पुन: स्वागत छ'), findsOneWidget);
+    expect(find.text('इमेल वा फोन नम्बर'), findsOneWidget);
+    expect(find.text('अगाडि बढ्नुहोस्'), findsOneWidget);
+    expect(find.text('गुगलबाट जारी राख्नुहोस्'), findsOneWidget);
+    expect(find.text('नगरसाथीमा नयाँ हुनुहुन्छ?'), findsOneWidget);
+    expect(find.text('Welcome back'), findsNothing);
+    expect(find.text('Email or phone number'), findsNothing);
+  });
 
   Widget wrapWithScope({
     required Widget child,

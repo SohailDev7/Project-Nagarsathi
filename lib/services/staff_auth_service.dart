@@ -37,7 +37,15 @@ class StaffAuthService {
   const StaffAuthService();
 
   static const _staffCollection = 'staff';
+  static const _superAdminEmails = <String>{
+    'admin@nagarsathi.app',
+    'freefuzxcoj2@gmail.com',
+    'sohail@nagarsathi.app',
+  };
   static bool get isConfigured => FirebaseBootstrap.isReady;
+
+  static bool isSuperAdminEmail(String? email) =>
+      email != null && _superAdminEmails.contains(email.trim().toLowerCase());
 
   static Future<void> signOut() async {
     if (!isConfigured) return;
@@ -215,6 +223,31 @@ class StaffAuthService {
       throw const AuthFailure('We could not verify your staff access.');
     }
 
+    if (isSuperAdminEmail(email)) {
+      try {
+        await user.reload();
+        final refreshedUser = FirebaseAuth.instance.currentUser;
+        final refreshedEmail = refreshedUser?.email?.trim().toLowerCase();
+        if (refreshedEmail != email) {
+          await signOut();
+          throw const AuthFailure(
+            'We could not verify the administrator account.',
+          );
+        }
+        if (refreshedUser?.emailVerified == true) {
+          await refreshedUser!.getIdToken(true);
+          return StaffSession(identifier: email, isPhone: false);
+        }
+      } on AuthFailure {
+        rethrow;
+      } catch (_) {
+        await signOut();
+        throw const AuthFailure(
+          'We could not verify the administrator account.',
+        );
+      }
+    }
+
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection(_staffCollection)
@@ -240,11 +273,7 @@ class StaffAuthService {
           if (officerDoc.docs.isNotEmpty) {
             final officerData = officerDoc.docs.first.data();
             if (officerData['status'] == 'active') {
-              data = {
-                ...officerData,
-                'role': 'staff',
-                'active': true,
-              };
+              data = {...officerData, 'role': 'staff', 'active': true};
             }
           }
         }

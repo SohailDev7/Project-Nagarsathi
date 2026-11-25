@@ -1,10 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:projectnagarsathi/l10n/app_locale.dart';
+import 'package:projectnagarsathi/l10n/language_controller.dart';
 import 'package:projectnagarsathi/main.dart';
 import 'package:projectnagarsathi/screens/home_screen.dart';
 import 'package:projectnagarsathi/screens/login_screen.dart';
 import 'package:projectnagarsathi/screens/staff_home_screen.dart';
 import 'package:projectnagarsathi/screens/staff_login_screen.dart';
+import 'package:projectnagarsathi/services/staff_auth_service.dart';
 import 'package:projectnagarsathi/utils/validators.dart';
 
 Future<void> _openStaffPortal(WidgetTester tester) async {
@@ -17,6 +20,43 @@ Future<void> _openStaffPortal(WidgetTester tester) async {
 }
 
 void main() {
+  test('super-admin allowlist accepts only normalized configured emails', () {
+    expect(
+      StaffAuthService.isSuperAdminEmail(' FREEFUZXCOJ2@gmail.com '),
+      isTrue,
+    );
+    expect(StaffAuthService.isSuperAdminEmail('admin@nagarsathi.app'), isTrue);
+    expect(StaffAuthService.isSuperAdminEmail('sohail@nagarsathi.app'), isTrue);
+    expect(StaffAuthService.isSuperAdminEmail('someone@example.com'), isFalse);
+    expect(StaffAuthService.isSuperAdminEmail(null), isFalse);
+  });
+
+  testWidgets('staff login labels update when switching to Nepali', (
+    tester,
+  ) async {
+    final languageController = LanguageController(AppLocale.en);
+    await tester.pumpWidget(
+      NagarSathiApp(languageController: languageController),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Staff portal'));
+    await tester.tap(find.text('Staff portal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Work email address'), findsOneWidget);
+    expect(find.text('Phone'), findsOneWidget);
+    expect(find.text('Access is issued by your municipality.'), findsOneWidget);
+
+    languageController.value = AppLocale.ne;
+    await tester.pumpAndSettle();
+
+    expect(find.text('कार्यालयको इमेल ठेगाना'), findsOneWidget);
+    expect(find.text('फोन'), findsOneWidget);
+    expect(find.text('पहुँच तपाईंको नगरपालिकाले प्रदान गर्छ।'), findsOneWidget);
+    expect(find.text('Work email address'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'staff portal entry stays visible and returns to citizen sign-in',
     (tester) async {

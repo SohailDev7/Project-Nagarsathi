@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'ns_pressable.dart';
 
@@ -81,7 +82,7 @@ class NsStaffBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'STAFF PORTAL',
+            AppStrings.of(context).staffBadgeShort,
             style: TextStyle(
               fontSize: compact ? 9.5 : 11,
               fontWeight: FontWeight.w900,

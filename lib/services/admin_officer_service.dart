@@ -329,10 +329,7 @@ class AdminOfficerService {
   /// All audit log entries that reference the officer are deleted as well.
   /// A final audit entry and notification are written first so the action
   /// remains traceable in reporting dashboards.
-  Future<void> deleteOfficer(
-    String officerId, {
-    String reason = '',
-  }) {
+  Future<void> deleteOfficer(String officerId, {String reason = ''}) {
     return _guard('Could not delete the officer.', () async {
       final existing = await _requireOfficer(officerId);
 
@@ -346,8 +343,9 @@ class AdminOfficerService {
         actionType: OfficerAuditAction.delete,
         previousValue: '${existing.wardLabel}, ${existing.status.value}',
         newValue: 'deleted',
-        reason:
-            trimmedReason.isEmpty ? 'Officer account deleted by admin.' : trimmedReason,
+        reason: trimmedReason.isEmpty
+            ? 'Officer account deleted by admin.'
+            : trimmedReason,
         timestamp: now,
       );
 
@@ -384,9 +382,14 @@ class AdminOfficerService {
       }
 
       try {
-        await _notifications.doc('notification_${auditLog.id}').set(
-          _notificationRecord(notification: notification, auditLog: auditLog),
-        );
+        await _notifications
+            .doc('notification_${auditLog.id}')
+            .set(
+              _notificationRecord(
+                notification: notification,
+                auditLog: auditLog,
+              ),
+            );
       } catch (_) {
         // Notification write is best-effort.
       }
@@ -477,9 +480,11 @@ class AdminOfficerService {
     await batch.commit();
 
     try {
-      await _notifications.doc('notification_${auditLog.id}').set(
-        _notificationRecord(notification: notification, auditLog: auditLog),
-      );
+      await _notifications
+          .doc('notification_${auditLog.id}')
+          .set(
+            _notificationRecord(notification: notification, auditLog: auditLog),
+          );
     } catch (_) {
       // The UI still reports the simulated email confirmation.
     }
@@ -588,9 +593,7 @@ class AdminOfficerService {
     return WardOfficer.fromFirestore({...data, 'id': doc.id});
   }
 
-  OfficerAuditLog _auditLogFromDoc(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+  OfficerAuditLog _auditLogFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return OfficerAuditLog.fromFirestore({...data, 'id': doc.id});
   }
@@ -600,6 +603,9 @@ class AdminOfficerService {
     Future<T> Function() action,
   ) async {
     try {
+      if (_adminIdOverride == null && FirebaseBootstrap.isReady) {
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      }
       return await action();
     } on AdminOfficerException {
       rethrow;

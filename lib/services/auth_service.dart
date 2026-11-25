@@ -38,6 +38,9 @@ class AuthService {
     'OTP_WORKER_URL',
     defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
   );
+  static const _pendingEmailLinkKey = 'pending_email_sign_in_link_email';
+  static const _emailLinkContinueUrl =
+      'https://nagar-sathi-23080.firebaseapp.com/finishSignIn';
 
   /// Calls one of the OTP worker endpoints and returns its JSON payload.
   ///
@@ -93,6 +96,90 @@ class AuthService {
       'email': email.trim(),
       'locale': locale ?? LanguageController.instance.value.code,
     });
+  }
+
+  Future<void> sendEmailSignInLink(String email, {String? locale}) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!_looksLikeEmail(cleanEmail)) {
+      throw const AuthFailure('Enter a valid email address.');
+    }
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Email sign-in is unavailable.',
+      );
+    }
+
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_pendingEmailLinkKey, cleanEmail);
+    try {
+      final auth = FirebaseAuth.instance;
+      await auth.setLanguageCode(
+        locale ?? LanguageController.instance.value.code,
+      );
+      await auth.sendSignInLinkToEmail(
+        email: cleanEmail,
+        actionCodeSettings: ActionCodeSettings(
+          url: _emailLinkContinueUrl,
+          handleCodeInApp: true,
+          androidPackageName: 'com.softwarica.nagarsathi.projectnagarsathi',
+          androidInstallApp: true,
+        ),
+      );
+    } on FirebaseAuthException catch (error) {
+      await preferences.remove(_pendingEmailLinkKey);
+      throw AuthFailure(friendlyMessage(error));
+    } catch (_) {
+      await preferences.remove(_pendingEmailLinkKey);
+      rethrow;
+    }
+  }
+
+  bool isEmailSignInLink(String link) =>
+      isConfigured && FirebaseAuth.instance.isSignInWithEmailLink(link);
+
+  Future<String?> pendingEmailSignInLinkEmail() async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getString(_pendingEmailLinkKey);
+  }
+
+  Future<void> signInWithEmailLink({
+    required String email,
+    required String emailLink,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!_looksLikeEmail(cleanEmail)) {
+      throw const AuthFailure('Enter a valid email address.');
+    }
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Email sign-in is unavailable.',
+      );
+    }
+    if (!FirebaseAuth.instance.isSignInWithEmailLink(emailLink)) {
+      throw const AuthFailure('This sign-in link is invalid or has expired.');
+    }
+
+    final preferences = await SharedPreferences.getInstance();
+    final pendingEmail = preferences.getString(_pendingEmailLinkKey);
+    if (pendingEmail != null && pendingEmail != cleanEmail) {
+      throw const AuthFailure(
+        'Use the same email address that received this sign-in link.',
+      );
+    }
+
+    try {
+      final result = await FirebaseAuth.instance.signInWithEmailLink(
+        email: cleanEmail,
+        emailLink: emailLink,
+      );
+      final user = result.user;
+      if (user != null) {
+        await _touchProfile(user, provider: 'email-link');
+      }
+      await preferences.remove(_pendingEmailLinkKey);
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    }
   }
 
   Future<void> verifyEmailOtp({

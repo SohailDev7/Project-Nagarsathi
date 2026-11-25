@@ -56,7 +56,6 @@ abstract class AppStrings {
   String get staffBadge;
   String get tryAnotherWay;
   String get usePassword;
-  String get getOtpEmail;
   String get termsDisclaimer;
   String get resetPasswordTitle;
   String get sendResetLink;
@@ -69,6 +68,28 @@ abstract class AppStrings {
   String get otpHint;
   String get noAccountFoundBanner;
   String get phoneOtpSoon;
+  String get verificationCode;
+  String get passwordMethodSubtitle;
+  String get googleSignInSubtitle;
+  String get facebookSignInSubtitle;
+  String get emailSignInLink;
+  String get emailSignInLinkSubtitle;
+  String get emailSignInLinkFailure;
+  String emailSignInLinkSent(String email);
+  String get emailSignInLinkEnterEmail;
+  String get credentialHelp;
+  String get orContinueWith;
+  String get firebaseNoResponse;
+  String get signInFailure;
+  String get sendCodeFailure;
+  String get facebookSignInFailure;
+  String get switchToLightMode;
+  String get switchToDarkMode;
+  String continueAs(String name);
+  String chooseSignInMethodFor(String identifier);
+  String verificationCodeSent(String email);
+  String passwordResetLinkSent(String email);
+  String passwordResetSentCheckInbox(String email);
 
   // ── Mascot Speeches & Guidance ────────────────────────────────────────────
   String get mascotDefaultLogin;
@@ -221,6 +242,24 @@ abstract class AppStrings {
   String get statusNew;
   String get statusOpen;
   String get signOutOfStaff;
+  String get staffSignInTitle;
+  String get staffBadgeShort;
+  String get staffEnterPassword;
+  String get staffSendCode;
+  String get staffWorkEmail;
+  String get staffWorkEmailHint;
+  String get staffMobileNumberHint;
+  String get staffNepaliMobileOnly;
+  String get staffAccessIssued;
+  String get staffSetPermanentPassword;
+  String get staffTemporaryPasswordInstructions;
+  String get staffNewPassword;
+  String get staffPasswordLengthHint;
+  String get staffPasswordLengthError;
+  String get staffConfirmNewPassword;
+  String get staffReenterPassword;
+  String get staffUpdateAndSignIn;
+  String get staffCancelAndSignOut;
 
   // ── Admin ward officers ───────────────────────────────────────────────────
   String get wardOfficersTitle;
@@ -421,7 +460,6 @@ class EnglishStrings extends AppStrings {
   @override
   String get usePassword => 'Use password';
   @override
-  String get getOtpEmail => 'Get OTP via email';
   @override
   String get termsDisclaimer =>
       'By continuing you agree to NagarSathi terms and privacy policy.';
@@ -448,6 +486,62 @@ class EnglishStrings extends AppStrings {
   @override
   String get phoneOtpSoon =>
       'Use your email to sign in. Phone OTP is coming soon.';
+  @override
+  String get verificationCode => 'Verification code';
+  @override
+  @override
+  String get passwordMethodSubtitle => 'Enter your account password';
+  @override
+  String get googleSignInSubtitle => 'Sign in with your Google account';
+  @override
+  String get facebookSignInSubtitle => 'Sign in with your Facebook account';
+  @override
+  String get emailSignInLink => 'Sign in with an email link';
+  @override
+  String get emailSignInLinkSubtitle =>
+      'Send a secure sign-in link to your inbox';
+  @override
+  String get emailSignInLinkFailure =>
+      'Could not send a sign-in link. Please try again.';
+  @override
+  String emailSignInLinkSent(String email) =>
+      'A sign-in link was sent to $email. Open it on this device to sign in.';
+  @override
+  String get emailSignInLinkEnterEmail =>
+      'Enter the email address that received this sign-in link.';
+  @override
+  String get credentialHelp =>
+      'Wrong password, or signed up with Google/Facebook? Use "Try another way" below, or send a password reset link.';
+  @override
+  String get orContinueWith => 'or continue with';
+  @override
+  String get firebaseNoResponse =>
+      'Firebase did not respond. Check your internet and try again.';
+  @override
+  String get signInFailure => 'Sign-in could not finish. Please try again.';
+  @override
+  String get sendCodeFailure => 'Could not send the code. Please try again.';
+  @override
+  String get facebookSignInFailure =>
+      'Facebook sign-in failed. Please try again.';
+  @override
+  String get switchToLightMode => 'Switch to light mode';
+  @override
+  String get switchToDarkMode => 'Switch to dark mode';
+  @override
+  String continueAs(String name) => 'Continue as $name';
+  @override
+  String chooseSignInMethodFor(String identifier) =>
+      'Choose how you would like to sign in to $identifier:';
+  @override
+  String verificationCodeSent(String email) =>
+      'Verification code sent to $email';
+  @override
+  String passwordResetLinkSent(String email) =>
+      'Password reset link sent to $email';
+  @override
+  String passwordResetSentCheckInbox(String email) =>
+      'Reset link sent to $email. Check your inbox.';
 
   @override
   String get mascotDefaultLogin =>
@@ -756,6 +850,45 @@ class EnglishStrings extends AppStrings {
   String get statusOpen => 'Open';
   @override
   String get signOutOfStaff => 'Sign out';
+  @override
+  String get staffSignInTitle => 'Staff sign in';
+  @override
+  String get staffBadgeShort => 'STAFF';
+  @override
+  String get staffEnterPassword => 'Enter your password';
+  @override
+  String get staffSendCode => 'Send code';
+  @override
+  String get staffWorkEmail => 'Work email address';
+  @override
+  String get staffWorkEmailHint => 'you@municipality.gov.np';
+  @override
+  String get staffMobileNumberHint => '98XXXXXXXX or +977 98XXXXXXXX';
+  @override
+  String get staffNepaliMobileOnly => 'Nepali mobile numbers only (+977).';
+  @override
+  String get staffAccessIssued => 'Access is issued by your municipality.';
+  @override
+  String get staffSetPermanentPassword => 'Set a permanent password';
+  @override
+  String get staffTemporaryPasswordInstructions =>
+      'You are signing in with a temporary password. Please set your new '
+      'permanent password to continue.';
+  @override
+  String get staffNewPassword => 'New password';
+  @override
+  String get staffPasswordLengthHint => 'At least 6 characters';
+  @override
+  String get staffPasswordLengthError =>
+      'Password must be at least 6 characters';
+  @override
+  String get staffConfirmNewPassword => 'Confirm new password';
+  @override
+  String get staffReenterPassword => 'Re-enter your new password';
+  @override
+  String get staffUpdateAndSignIn => 'Update & sign in';
+  @override
+  String get staffCancelAndSignOut => 'Cancel & sign out';
 
   @override
   String get wardOfficersTitle => 'Ward officers';
@@ -1036,7 +1169,6 @@ class NepaliStrings extends AppStrings {
   @override
   String get usePassword => 'पासवर्ड प्रयोग गर्नुहोस्';
   @override
-  String get getOtpEmail => 'इमेलमा OTP प्राप्त गर्नुहोस्';
   @override
   String get termsDisclaimer =>
       'अगाडि बढेर तपाईं नगरसाथीका सर्तहरू र गोपनीयता नीतिमा सहमत हुनुहुन्छ।';
@@ -1063,6 +1195,63 @@ class NepaliStrings extends AppStrings {
   @override
   String get phoneOtpSoon =>
       'साइन इन गर्न इमेल प्रयोग गर्नुहोस्। फोन OTP छिट्टै आउनेछ।';
+  @override
+  String get verificationCode => 'प्रमाणीकरण कोड';
+  @override
+  @override
+  String get passwordMethodSubtitle => 'आफ्नो खाताको पासवर्ड राख्नुहोस्';
+  @override
+  String get googleSignInSubtitle => 'आफ्नो Google खाताबाट साइन इन गर्नुहोस्';
+  @override
+  String get facebookSignInSubtitle =>
+      'आफ्नो Facebook खाताबाट साइन इन गर्नुहोस्';
+  @override
+  String get emailSignInLink => 'इमेल लिङ्कबाट साइन इन गर्नुहोस्';
+  @override
+  String get emailSignInLinkSubtitle =>
+      'तपाईंको इनबक्समा सुरक्षित साइन-इन लिङ्क पठाउनुहोस्';
+  @override
+  String get emailSignInLinkFailure =>
+      'साइन-इन लिङ्क पठाउन सकिएन। कृपया फेरि प्रयास गर्नुहोस्।';
+  @override
+  String emailSignInLinkSent(String email) =>
+      '$email मा साइन-इन लिङ्क पठाइयो। साइन इन गर्न यही डिभाइसमा खोल्नुहोस्।';
+  @override
+  String get emailSignInLinkEnterEmail =>
+      'यो साइन-इन लिङ्क प्राप्त गर्ने इमेल ठेगाना राख्नुहोस्।';
+  @override
+  String get credentialHelp =>
+      'पासवर्ड गलत छ वा Google/Facebook बाट खाता खोल्नुभएको हो? तलको “अर्को तरिकाबाट साइन इन गर्नुहोस्” छान्नुहोस् वा पासवर्ड रिसेट लिङ्क पठाउनुहोस्।';
+  @override
+  String get orContinueWith => 'वा यसबाट जारी राख्नुहोस्';
+  @override
+  String get firebaseNoResponse =>
+      'Firebase बाट जवाफ आएन। इन्टरनेट जाँचेर फेरि प्रयास गर्नुहोस्।';
+  @override
+  String get signInFailure => 'साइन इन पूरा भएन। कृपया फेरि प्रयास गर्नुहोस्।';
+  @override
+  String get sendCodeFailure => 'कोड पठाउन सकिएन। कृपया फेरि प्रयास गर्नुहोस्।';
+  @override
+  String get facebookSignInFailure =>
+      'Facebook साइन इन असफल भयो। कृपया फेरि प्रयास गर्नुहोस्।';
+  @override
+  String get switchToLightMode => 'उज्यालो मोडमा बदल्नुहोस्';
+  @override
+  String get switchToDarkMode => 'गाढा मोडमा बदल्नुहोस्';
+  @override
+  String continueAs(String name) => '$name को रूपमा जारी राख्नुहोस्';
+  @override
+  String chooseSignInMethodFor(String identifier) =>
+      '$identifier मा साइन इन गर्ने तरिका छान्नुहोस्:';
+  @override
+  String verificationCodeSent(String email) =>
+      '$email मा प्रमाणीकरण कोड पठाइयो';
+  @override
+  String passwordResetLinkSent(String email) =>
+      '$email मा पासवर्ड रिसेट लिङ्क पठाइयो';
+  @override
+  String passwordResetSentCheckInbox(String email) =>
+      '$email मा रिसेट लिङ्क पठाइयो। इनबक्स हेर्नुहोस्।';
 
   @override
   String get mascotDefaultLogin =>
@@ -1374,6 +1563,44 @@ class NepaliStrings extends AppStrings {
   String get statusOpen => 'खुला';
   @override
   String get signOutOfStaff => 'साइन आउट';
+  @override
+  String get staffSignInTitle => 'कर्मचारी साइन इन';
+  @override
+  String get staffBadgeShort => 'कर्मचारी';
+  @override
+  String get staffEnterPassword => 'पासवर्ड राख्नुहोस्';
+  @override
+  String get staffSendCode => 'कोड पठाउनुहोस्';
+  @override
+  String get staffWorkEmail => 'कार्यालयको इमेल ठेगाना';
+  @override
+  String get staffWorkEmailHint => 'you@municipality.gov.np';
+  @override
+  String get staffMobileNumberHint => '९८XXXXXXXX वा +९७७ ९८XXXXXXXX';
+  @override
+  String get staffNepaliMobileOnly => 'नेपालका मोबाइल नम्बर मात्र (+९७७)।';
+  @override
+  String get staffAccessIssued => 'पहुँच तपाईंको नगरपालिकाले प्रदान गर्छ।';
+  @override
+  String get staffSetPermanentPassword => 'स्थायी पासवर्ड राख्नुहोस्';
+  @override
+  String get staffTemporaryPasswordInstructions =>
+      'तपाईं अस्थायी पासवर्डबाट साइन इन गर्दै हुनुहुन्छ। जारी राख्न नयाँ '
+      'स्थायी पासवर्ड राख्नुहोस्।';
+  @override
+  String get staffNewPassword => 'नयाँ पासवर्ड';
+  @override
+  String get staffPasswordLengthHint => 'कम्तीमा ६ अक्षर';
+  @override
+  String get staffPasswordLengthError => 'पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ';
+  @override
+  String get staffConfirmNewPassword => 'नयाँ पासवर्ड पुष्टि गर्नुहोस्';
+  @override
+  String get staffReenterPassword => 'नयाँ पासवर्ड फेरि राख्नुहोस्';
+  @override
+  String get staffUpdateAndSignIn => 'अपडेट गरी साइन इन गर्नुहोस्';
+  @override
+  String get staffCancelAndSignOut => 'रद्द गरी साइन आउट गर्नुहोस्';
 
   @override
   String get wardOfficersTitle => 'वडा अधिकृतहरू';

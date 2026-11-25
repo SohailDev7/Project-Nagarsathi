@@ -24,7 +24,11 @@ void main() {
       for (final (e, n) in pairs) {
         expect(e.isNotEmpty, isTrue);
         expect(n.isNotEmpty, isTrue);
-        expect(e != n, isTrue, reason: 'Nepali string should differ from English: $e');
+        expect(
+          e != n,
+          isTrue,
+          reason: 'Nepali string should differ from English: $e',
+        );
       }
     });
 
@@ -44,6 +48,34 @@ void main() {
         (en.continueWithGoogle, ne.continueWithGoogle),
         (en.continueWithFacebook, ne.continueWithFacebook),
         (en.staffPortal, ne.staffPortal),
+        (en.emailSignInLink, ne.emailSignInLink),
+        (en.emailSignInLinkSubtitle, ne.emailSignInLinkSubtitle),
+        (en.emailSignInLinkFailure, ne.emailSignInLinkFailure),
+        (
+          en.emailSignInLinkSent('test@example.com'),
+          ne.emailSignInLinkSent('test@example.com'),
+        ),
+        (en.emailSignInLinkEnterEmail, ne.emailSignInLinkEnterEmail),
+        (en.staffSignInTitle, ne.staffSignInTitle),
+        (en.staffBadgeShort, ne.staffBadgeShort),
+        (en.staffEnterPassword, ne.staffEnterPassword),
+        (en.staffSendCode, ne.staffSendCode),
+        (en.staffWorkEmail, ne.staffWorkEmail),
+        (en.staffMobileNumberHint, ne.staffMobileNumberHint),
+        (en.staffNepaliMobileOnly, ne.staffNepaliMobileOnly),
+        (en.staffAccessIssued, ne.staffAccessIssued),
+        (en.staffSetPermanentPassword, ne.staffSetPermanentPassword),
+        (
+          en.staffTemporaryPasswordInstructions,
+          ne.staffTemporaryPasswordInstructions,
+        ),
+        (en.staffNewPassword, ne.staffNewPassword),
+        (en.staffPasswordLengthHint, ne.staffPasswordLengthHint),
+        (en.staffPasswordLengthError, ne.staffPasswordLengthError),
+        (en.staffConfirmNewPassword, ne.staffConfirmNewPassword),
+        (en.staffReenterPassword, ne.staffReenterPassword),
+        (en.staffUpdateAndSignIn, ne.staffUpdateAndSignIn),
+        (en.staffCancelAndSignOut, ne.staffCancelAndSignOut),
       ];
 
       for (final (e, n) in pairs) {
@@ -51,6 +83,8 @@ void main() {
         expect(n.isNotEmpty, isTrue);
         expect(e != n, isTrue);
       }
+      expect(en.staffWorkEmailHint, isNotEmpty);
+      expect(ne.staffWorkEmailHint, isNotEmpty);
     });
 
     test('all error and validation strings are localized in Nepali', () {

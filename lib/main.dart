@@ -108,6 +108,7 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
                   Locale('en', 'US'),
                   Locale('ne', 'NP'),
                 ],
+                localizationsDelegates: GlobalMaterialLocalizations.delegates,
                 theme: buildAppTheme(brightness: Brightness.light),
                 darkTheme: buildAppTheme(brightness: Brightness.dark),
                 themeMode: mode,

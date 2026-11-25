@@ -64,13 +64,11 @@ Citizen sign-up, sign-in and password resets are wired to Firebase:
   timestamps) to Cloud Firestore.
 - Sign-in refreshes that profile document; password resets use
   `sendPasswordResetEmail`.
-- Email-code ("Try another way" → *Get OTP via email*) sign-in is handled by the
-  Cloudflare Worker in `otp-worker/`. It verifies the 6-digit code and returns a
-  Firebase custom token, so the app can open a real session for citizens who
-  never set a password (for example Google/Facebook sign-ups). See
-  [`otp-worker/README.md`](otp-worker/README.md) to deploy it with the
-  `FIREBASE_SERVICE_ACCOUNT` secret — without that secret codes still verify but
-  no session can be created.
+- Citizen passwordless sign-in ("Try another way" → **Sign in with an email
+  link**) uses Firebase Authentication email links. The app stores the requested
+  email locally and completes the link when it opens on Android.
+- Sign-up email verification still uses the Cloudflare Worker in `otp-worker/`.
+  See [`otp-worker/README.md`](otp-worker/README.md) for deployment details.
 
 Configure a project once:
 
@@ -99,9 +97,14 @@ flutter run \
 > package `com.softwarica.nagarsathi.projectnagarsathi` plus your signing
 > SHA-1/SHA-256, and limit the allowed APIs. Purge the old commits separately if
 > you want the string gone from history.
-In the Firebase console, enable **Email/Password** and **Phone** under
-Authentication, add the Android app's SHA-1 and SHA-256 fingerprints, and
-create a Cloud Firestore database. Deploy the included rules with
+In the Firebase console, enable **Email/Password**, **Email link (passwordless
+sign-in)**, and **Phone** under Authentication. Add the Android app's SHA-1 and
+SHA-256 fingerprints, and create a Cloud Firestore database. The email-link
+flow uses the project's default Firebase Hosting domain
+(`nagar-sathi-23080.firebaseapp.com`) and an Android App Link for
+`/__/auth/links`; configure the fingerprints for every signing certificate
+(debug and release) so Android can verify the link and open the installed app.
+Deploy the included rules with
 `firebase deploy --only firestore:rules`.
 
 Provision each staff member in the `staff` collection:
@@ -118,6 +121,12 @@ The document ID must be the Firebase Auth UID for email/password staff. Phone
 OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
 country code. Staff documents are read-only from the app; create and update
 them only from a trusted admin environment.
+
+The verified Firebase accounts `admin@nagarsathi.app` and
+`freefuzxcoj2@gmail.com` and `sohail@nagarsathi.app` are granted super-admin
+access to ward-officer management by both the staff sign-in flow and Firestore
+rules. Their Firebase Auth emails must be verified; the rules do not trust a
+client-side email check alone.
 ### Google sign-in
 
 Across Authentication → Sign-in method, enable **Google**. It opens the built-in

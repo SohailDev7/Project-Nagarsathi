@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_strings.dart';
 import '../services/auth_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
@@ -45,6 +46,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   bool _isLoading = false;
   bool _celebrating = false;
   bool _showError = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -61,6 +63,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     if (!_showError) return;
     setState(() {
       _showError = false;
+      _errorMessage = null;
     });
   }
 
@@ -69,6 +72,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
+      _errorMessage = null;
     });
   }
 
@@ -78,6 +82,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() {
       _isLoading = false;
       _showError = true;
+      _errorMessage = message;
     });
   }
 
@@ -90,6 +95,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _challenge = null;
       _otpController.clear();
       _showError = false;
+      _errorMessage = null;
     });
   }
 
@@ -293,7 +299,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Set Permanent Password',
+                      context.l10n.staffSetPermanentPassword,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -302,7 +308,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'You are signing in with a temporary password. Please set your new permanent password to continue.',
+                      context.l10n.staffTemporaryPasswordInstructions,
                       style: TextStyle(
                         fontSize: 13,
                         color: tokens.muted,
@@ -322,20 +328,23 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         ),
                         child: Text(
                           localError!,
-                          style: const TextStyle(fontSize: 12, color: AppColors.error),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
                         ),
                       ),
                     ],
                     const SizedBox(height: 16),
                     NsTextField(
                       controller: newPasswordController,
-                      label: 'New Password',
-                      hint: 'At least 6 characters',
+                      label: context.l10n.staffNewPassword,
+                      hint: context.l10n.staffPasswordLengthHint,
                       icon: Icons.lock_outline_rounded,
                       obscureText: true,
                       validator: (v) {
                         if (v == null || v.trim().length < 6) {
-                          return 'Password must be at least 6 characters';
+                          return context.l10n.staffPasswordLengthError;
                         }
                         return null;
                       },
@@ -343,20 +352,20 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     const SizedBox(height: 12),
                     NsTextField(
                       controller: confirmPasswordController,
-                      label: 'Confirm Password',
-                      hint: 'Re-enter your new password',
+                      label: context.l10n.staffConfirmNewPassword,
+                      hint: context.l10n.staffReenterPassword,
                       icon: Icons.lock_reset_rounded,
                       obscureText: true,
                       validator: (v) {
                         if (v != newPasswordController.text) {
-                          return 'Passwords do not match';
+                          return context.l10n.errPasswordMatch;
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 20),
                     NsPrimaryButton(
-                      label: 'Update & Sign In',
+                      label: context.l10n.staffUpdateAndSignIn,
                       isLoading: isSubmitting,
                       onPressed: isSubmitting
                           ? null
@@ -381,8 +390,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                               } catch (_) {
                                 setModalState(() {
                                   isSubmitting = false;
-                                  localError =
-                                      'Failed to update password. Please try again.';
+                                  localError = 'Failed to update password. Please try again.';
                                 });
                               }
                             },
@@ -393,7 +401,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                           ? null
                           : () => Navigator.of(bottomSheetContext).pop(false),
                       child: Text(
-                        'Cancel & Sign Out',
+                        context.l10n.staffCancelAndSignOut,
                         style: TextStyle(color: tokens.muted),
                       ),
                     ),
@@ -449,7 +457,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
           ),
           bottom: TextButton(
             onPressed: _backToCitizenSignIn,
-            child: const Text('Back to citizen sign in'),
+            child: Text(context.l10n.citizenPortal),
           ),
           child: NsEntrance(child: _buildBody()),
         ),
@@ -467,11 +475,21 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   Widget _buildBody() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 16),
+        Text(
+          strings.staffSignInTitle,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: tokens.heading,
+          ),
+        ),
+        const SizedBox(height: 12),
         NsCard(
           padding: const EdgeInsets.all(16),
           child: AutofillGroup(
@@ -481,12 +499,32 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildMethodTabs(),
+                  if (_showError && _errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   if (_method == _StaffMethod.email) ...[
                     NsTextField(
                       controller: _emailController,
-                      label: 'Work email address',
-                      hint: 'you@municipality.gov.np',
+                      label: strings.staffWorkEmail,
+                      hint: strings.staffWorkEmailHint,
                       icon: Icons.mail_rounded,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
@@ -501,19 +539,21 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     const SizedBox(height: 13),
                     NsTextField(
                       controller: _passwordController,
-                      label: 'Password',
-                      hint: 'Enter your password',
+                      label: strings.password,
+                      hint: strings.passwordHint,
                       icon: Icons.lock_rounded,
                       obscureText: true,
                       textInputAction: TextInputAction.done,
-                      validator: Validators.loginPassword,
+                      validator: (value) => value == null || value.isEmpty
+                          ? strings.staffEnterPassword
+                          : null,
                       autofillHints: const [AutofillHints.password],
                       onFieldSubmitted: (_) => _signIn(),
                       onChanged: (_) => _clearError(),
                     ),
                     const SizedBox(height: 16),
                     NsPrimaryButton(
-                      label: 'Sign in',
+                      label: strings.signIn,
                       isLoading: _isLoading,
                       onPressed: _signIn,
                       icon: Icons.arrow_forward_rounded,
@@ -521,8 +561,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                   ] else ...[
                     NsTextField(
                       controller: _phoneController,
-                      label: 'Mobile number',
-                      hint: '98XXXXXXXX or +977 98XXXXXXXX',
+                      label: strings.phone,
+                      hint: strings.staffMobileNumberHint,
                       icon: Icons.phone_android_rounded,
                       keyboardType: TextInputType.phone,
                       textInputAction: _phoneStep == _PhoneStep.phone
@@ -537,7 +577,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                           RegExp(r'[0-9०-९+\s()\-]'),
                         ),
                       ],
-                      helper: 'Nepali mobile numbers only (+977).',
+                      helper: strings.staffNepaliMobileOnly,
                       onFieldSubmitted: (_) => _sendCode(),
                       onChanged: (_) => _clearError(),
                     ),
@@ -545,8 +585,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       const SizedBox(height: 13),
                       NsTextField(
                         controller: _otpController,
-                        label: '6-digit code',
-                        hint: 'Enter the SMS code',
+                        label: strings.verificationCode,
+                        hint: strings.otpHint,
                         icon: Icons.sms_rounded,
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.done,
@@ -565,21 +605,21 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     const SizedBox(height: 16),
                     if (_phoneStep == _PhoneStep.phone)
                       NsPrimaryButton(
-                        label: 'Send code',
+                        label: strings.staffSendCode,
                         isLoading: _isLoading,
                         onPressed: _sendCode,
                         icon: Icons.send_rounded,
                       )
                     else ...[
                       NsPrimaryButton(
-                        label: 'Verify & sign in',
+                        label: strings.verifyAndSignIn,
                         isLoading: _isLoading,
                         onPressed: _verifyCode,
                         icon: Icons.verified_user_rounded,
                       ),
                       const SizedBox(height: 10),
                       NsOutlineButton(
-                        label: 'Resend code',
+                        label: strings.resendCode,
                         height: 46,
                         icon: Icons.refresh_rounded,
                         onPressed: _isLoading
@@ -590,7 +630,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                         alignment: Alignment.center,
                         child: TextButton(
                           onPressed: _isLoading ? null : _changeNumber,
-                          child: const Text('Change number'),
+                          child: Text(strings.changeIdentifier),
                         ),
                       ),
                     ],
@@ -616,7 +656,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             const SizedBox(width: 5),
             Flexible(
               child: Text(
-                'Access is issued by your municipality.',
+                context.l10n.staffAccessIssued,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11.5,
@@ -637,7 +677,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       children: [
         Expanded(
           child: _MethodTab(
-            label: 'Email',
+            label: context.l10n.email,
             icon: Icons.mail_outline_rounded,
             selected: _method == _StaffMethod.email,
             enabled: !_isLoading,
@@ -647,7 +687,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _MethodTab(
-            label: 'Phone',
+            label: context.l10n.phone,
             icon: Icons.phone_iphone_rounded,
             selected: _method == _StaffMethod.phone,
             enabled: !_isLoading,

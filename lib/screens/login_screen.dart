@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -50,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   final _formKeyStep1 = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _otpController = TextEditingController();
+  StreamSubscription<Uri>? _emailLinkSubscription;
 
   ThemeController get _themeController =>
       widget.themeController ?? ThemeController.instance;
@@ -60,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   int _step = 0;
   int _direction = 1;
-  bool _isOtpMode = false;
+  bool _isEmailLinkMode = false;
   bool _isLoading = false;
   bool _celebrating = false;
   bool _showError = false;
@@ -68,36 +69,50 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   bool _facebookLoading = false;
   bool _identifierFocused = false;
   bool _passwordFocused = false;
-  bool _otpFocused = false;
   String? _errorMessage;
   IdentifierKind _kind = IdentifierKind.empty;
+  String? _pendingEmailLink;
+  String? _lastHandledEmailLink;
+  bool _handlingEmailLink = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _emailLinkSubscription = AppLinks().uriLinkStream.listen(
+      (uri) => _handleIncomingEmailSignInLink(uri.toString()),
+      onError: (Object error) {
+        if (error is MissingPluginException) return;
+        if (!mounted) return;
+        setState(() {
+          _showError = true;
+          _errorMessage = context.l10n.signInFailure;
+        });
+      },
+    );
+    unawaited(_handleInitialEmailSignInLink());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_emailLinkSubscription?.cancel());
     _identifierController.dispose();
     _passwordController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
   NsMascotMood get _mood {
     if (_celebrating) return NsMascotMood.celebrate;
     if (_showError) return NsMascotMood.sad;
-    if (_identifierFocused || _passwordFocused || _otpFocused) {
+    if (_identifierFocused || _passwordFocused) {
       return NsMascotMood.curious;
     }
     return NsMascotMood.happy;
   }
 
   Offset get _look {
-    if (_passwordFocused || _otpFocused) return const Offset(0, 0.9);
+    if (_passwordFocused) return const Offset(0, 0.9);
     if (_identifierFocused) return const Offset(0.1, 0.7);
     return const Offset(0.2, 0.1);
   }
@@ -106,7 +121,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (_celebrating) return s.mascotOpeningCity;
     if (_showError) {
       if (_errorMessage != null &&
-          _errorMessage!.contains('No account found')) {
+          (_errorMessage!.contains('No account found') ||
+              _errorMessage == s.noAccountFoundBanner)) {
         return s.mascotAccountNotFound;
       }
       return _errorMessage ?? s.mascotTryAgain;
@@ -115,12 +131,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (_facebookLoading) return s.mascotOpeningFacebook;
     if (_isLoading) {
       if (_step == 0) return s.mascotCheckingAccount;
-      return _isOtpMode ? s.mascotVerifyingCode : s.mascotCheckingDetails;
+      return _isEmailLinkMode ? s.emailSignInLink : s.mascotCheckingDetails;
     }
     if (_step == 1) {
-      if (_isOtpMode) {
-        return s.mascotStepVerify;
-      }
+      if (_isEmailLinkMode) return s.emailSignInLink;
       if (_passwordFocused) return s.mascotPasswordPrivate;
       return s.mascotEnterPassword;
     }
@@ -141,7 +155,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final message = _errorMessage!.toLowerCase();
     return message.contains('incorrect') ||
         message.contains('never set a password') ||
-        message.contains('no account found');
+        message.contains('no account found') ||
+        message.contains(context.l10n.noAccountFoundBanner.toLowerCase());
   }
 
   void _onIdentifierChanged(String value) {
@@ -158,6 +173,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<void> _checkIdentifierAndContinue() async {
     if (_isLoading) return;
     FocusScope.of(context).unfocus();
+    if (_pendingEmailLink != null) {
+      await _completePendingEmailSignInLink();
+      return;
+    }
     if (!(_formKeyStep0.currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
       setState(() => _showError = true);
@@ -169,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       HapticFeedback.mediumImpact();
       setState(() {
         _showError = true;
-        _errorMessage = 'Use your email to sign in. Phone OTP is coming soon.';
+        _errorMessage = context.l10n.phoneOtpSoon;
       });
       return;
     }
@@ -189,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         setState(() {
           _isLoading = false;
           _showError = true;
-          _errorMessage = 'No account found with this email.';
+          _errorMessage = context.l10n.noAccountFoundBanner;
         });
         return;
       }
@@ -199,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         _isLoading = false;
         _direction = 1;
         _step = 1;
-        _isOtpMode = false;
+        _isEmailLinkMode = false;
         _showError = false;
         _errorMessage = null;
       });
@@ -219,11 +238,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     setState(() {
       _direction = -1;
       _step = 0;
-      _isOtpMode = false;
+      _isEmailLinkMode = false;
       _showError = false;
       _errorMessage = null;
       _passwordController.clear();
-      _otpController.clear();
     });
   }
 
@@ -264,8 +282,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       setState(() {
         _isLoading = false;
         _showError = true;
-        _errorMessage =
-            'Firebase did not respond. Check your internet and try again.';
+        _errorMessage = context.l10n.firebaseNoResponse;
       });
       return;
     } catch (_) {
@@ -274,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       setState(() {
         _isLoading = false;
         _showError = true;
-        _errorMessage = 'Sign-in could not finish. Please try again.';
+        _errorMessage = context.l10n.signInFailure;
       });
       return;
     }
@@ -283,83 +300,123 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     _finishSignIn();
   }
 
-  Future<void> _signInWithOtp() async {
-    if (_isLoading) return;
-    FocusScope.of(context).unfocus();
-    final otp = _otpController.text.trim();
-    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
-      HapticFeedback.mediumImpact();
+  Future<void> _handleInitialEmailSignInLink() async {
+    try {
+      final link = await AppLinks().getInitialLink();
+      if (link != null) {
+        await _handleIncomingEmailSignInLink(link.toString());
+      }
+    } on MissingPluginException {
+      // App-link delivery is unavailable in widget tests and unsupported hosts.
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _showError = true;
-        _errorMessage = 'Enter the 6-digit verification code.';
+        _errorMessage = context.l10n.signInFailure;
+      });
+    }
+  }
+
+  Future<void> _handleIncomingEmailSignInLink(String link) async {
+    if (_handlingEmailLink || _lastHandledEmailLink == link) return;
+    final service = const AuthService();
+    if (!service.isEmailSignInLink(link)) return;
+
+    _lastHandledEmailLink = link;
+    final String? savedEmail;
+    try {
+      savedEmail = await service.pendingEmailSignInLinkEmail();
+    } catch (_) {
+      _lastHandledEmailLink = null;
+      if (!mounted) return;
+      setState(() {
+        _showError = true;
+        _errorMessage = context.l10n.signInFailure;
       });
       return;
     }
+    if (!mounted) return;
+    if (savedEmail == null) {
+      setState(() {
+        _pendingEmailLink = link;
+        _step = 0;
+        _isEmailLinkMode = true;
+        _showError = false;
+        _errorMessage = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.emailSignInLinkEnterEmail)),
+      );
+      return;
+    }
 
+    await _completeEmailSignInLink(email: savedEmail, link: link);
+  }
+
+  Future<void> _completeEmailSignInLink({
+    required String email,
+    required String link,
+  }) async {
+    if (_isLoading || _handlingEmailLink) return;
+    _handlingEmailLink = true;
+    FocusScope.of(context).unfocus();
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
+      _showError = false;
       _errorMessage = null;
     });
 
-    final passwordAttempt = _passwordController.text.trim().isNotEmpty
-        ? _passwordController.text
-        : null;
-
     try {
-      await const AuthService().signInWithEmailOtp(
-        email: _identifierController.text,
-        otp: otp,
-        password: passwordAttempt,
+      await const AuthService().signInWithEmailLink(
+        email: email,
+        emailLink: link,
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
       setState(() {
         _isLoading = false;
         _showError = true;
         _errorMessage = error.message;
       });
-      // When a reset link was dispatched for an existing account, switch back
-      // to password mode so the user can easily enter their updated password.
-      if (error.message.contains('password reset link')) {
-        setState(() {
-          _isOtpMode = false;
-          _passwordController.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Reset link sent to ${_identifierController.text.trim()}. Check your inbox.',
-            ),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-      return;
-    } on TimeoutException {
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage =
-            'Firebase did not respond. Check your internet and try again.';
-      });
+      _lastHandledEmailLink = null;
+      _handlingEmailLink = false;
       return;
     } catch (_) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
       setState(() {
         _isLoading = false;
         _showError = true;
-        _errorMessage = 'Sign-in could not finish. Please try again.';
+        _errorMessage = context.l10n.signInFailure;
       });
+      _lastHandledEmailLink = null;
+      _handlingEmailLink = false;
       return;
     }
 
     if (!mounted) return;
+    _handlingEmailLink = false;
+    _pendingEmailLink = null;
     _finishSignIn();
+  }
+
+  Future<void> _completePendingEmailSignInLink() async {
+    final email = _identifierController.text.trim();
+    final link = _pendingEmailLink;
+    if (link == null) return;
+    if (!(_formKeyStep0.currentState?.validate() ?? false)) {
+      HapticFeedback.mediumImpact();
+      setState(() => _showError = true);
+      return;
+    }
+    if (_kind != IdentifierKind.email) {
+      setState(() {
+        _showError = true;
+        _errorMessage = context.l10n.emailSignInLinkEnterEmail;
+      });
+      return;
+    }
+    await _completeEmailSignInLink(email: email, link: link);
   }
 
   Future<void> _finishSignIn({String? name, String? email}) async {
@@ -457,7 +514,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
       // ── 2. Show confirmation sheet with the REAL Facebook name ────────────
       final bool? confirmed = await _showFacebookConfirmationSheet(
-        name: resolvedName.isNotEmpty ? resolvedName : 'you',
+        name: resolvedName.isNotEmpty ? resolvedName : context.l10n.neighbour,
         email: resolvedEmail,
       );
 
@@ -489,7 +546,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       setState(() {
         _facebookLoading = false;
         _showError = true;
-        _errorMessage = 'Facebook sign-in failed. Please try again.';
+        _errorMessage = context.l10n.facebookSignInFailure;
       });
     }
   }
@@ -499,6 +556,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     required String email,
   }) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return showModalBottomSheet<bool>(
       context: context,
       isDismissible: true,
@@ -550,7 +608,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Continue as $name',
+                            strings.continueAs(name),
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
@@ -572,7 +630,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 20),
                 NsPrimaryButton(
-                  label: 'Continue as $name',
+                  label: strings.continueAs(name),
                   icon: Icons.check_circle_rounded,
                   onPressed: () {
                     _closeBrowser();
@@ -581,7 +639,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 10),
                 NsOutlineButton(
-                  label: 'Cancel',
+                  label: strings.cancel,
                   onPressed: () {
                     _closeBrowser();
                     Navigator.of(sheetContext).pop(false);
@@ -595,7 +653,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _requestEmailOtp() async {
+  Future<void> _requestEmailSignInLink() async {
     if (_isLoading) return;
     setState(() {
       _isLoading = true;
@@ -603,22 +661,22 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       _errorMessage = null;
     });
     try {
-      await const AuthService().requestEmailOtp(
+      await const AuthService().sendEmailSignInLink(
         _identifierController.text.trim(),
         locale: _languageController.value.code,
       );
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _isOtpMode = true;
+        _isEmailLinkMode = true;
         _direction = 1;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Verification code sent to ${_identifierController.text.trim()}',
+            context.l10n.emailSignInLinkSent(_identifierController.text.trim()),
           ),
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 6),
         ),
       );
     } on AuthFailure catch (error) {
@@ -633,7 +691,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       setState(() {
         _isLoading = false;
         _showError = true;
-        _errorMessage = 'Could not send the code. Please try again.';
+        _errorMessage = context.l10n.emailSignInLinkFailure;
       });
     }
   }
@@ -641,6 +699,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   void _openTryAnotherWaySheet() {
     FocusScope.of(context).unfocus();
     HapticFeedback.selectionClick();
+    final strings = context.l10n;
     final tokens = NsColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -673,7 +732,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Sign in another way',
+                  strings.tryAnotherWay,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -682,7 +741,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Choose how you would like to sign in as ${_identifierController.text.trim()}:',
+                  strings.chooseSignInMethodFor(
+                    _identifierController.text.trim(),
+                  ),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -692,14 +753,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 const SizedBox(height: 16),
                 _OptionTile(
                   icon: Icons.lock_rounded,
-                  title: 'Use password',
-                  subtitle: 'Enter your account password',
-                  selected: !_isOtpMode,
+                  title: strings.usePassword,
+                  subtitle: strings.passwordMethodSubtitle,
+                  selected: !_isEmailLinkMode,
                   isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     setState(() {
-                      _isOtpMode = false;
+                      _isEmailLinkMode = false;
                       _showError = false;
                       _errorMessage = null;
                     });
@@ -708,20 +769,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 const SizedBox(height: 10),
                 _OptionTile(
                   icon: Icons.mark_email_read_rounded,
-                  title: 'Get OTP via email',
-                  subtitle: 'Send a 6-digit code to your inbox',
-                  selected: _isOtpMode,
+                  title: strings.emailSignInLink,
+                  subtitle: strings.emailSignInLinkSubtitle,
+                  selected: _isEmailLinkMode,
                   isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
-                    _requestEmailOtp();
+                    _requestEmailSignInLink();
                   },
                 ),
                 const SizedBox(height: 10),
                 _OptionTile(
                   icon: Icons.g_mobiledata_rounded,
-                  title: 'Continue with Google',
-                  subtitle: 'Sign in with your Google account',
+                  title: strings.continueWithGoogle,
+                  subtitle: strings.googleSignInSubtitle,
                   selected: false,
                   isDark: isDark,
                   onTap: () {
@@ -732,8 +793,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 const SizedBox(height: 10),
                 _OptionTile(
                   icon: Icons.facebook_rounded,
-                  title: 'Continue with Facebook',
-                  subtitle: 'Sign in with your Facebook account',
+                  title: strings.continueWithFacebook,
+                  subtitle: strings.facebookSignInSubtitle,
                   selected: false,
                   isDark: isDark,
                   onTap: () {
@@ -851,6 +912,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       valueListenable: _themeController,
       builder: (context, mode, _) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final strings = context.l10n;
         return NsPressable(
           onTap: () {
             HapticFeedback.selectionClick();
@@ -865,8 +927,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           expand: false,
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           semanticLabel: isDark
-              ? 'Switch to light mode'
-              : 'Switch to dark mode',
+              ? context.l10n.switchToLightMode
+              : context.l10n.switchToDarkMode,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -877,7 +939,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(width: 5),
               Text(
-                isDark ? 'Light' : 'Dark',
+                isDark ? strings.lightShort : strings.darkShort,
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.1,
@@ -894,12 +956,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildBody() {
+    final strings = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         NsAuthHeading(
-          title: 'Welcome back',
-          message: _message(context.l10n),
+          title: strings.welcomeBack,
+          message: _message(strings),
           mood: _mood,
           look: _look,
           wave: _celebrating,
@@ -908,16 +971,18 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         if (_step == 0) _buildStep0() else _buildStep1(),
         if (_step == 0) ...[
           const SizedBox(height: 14),
-          const NsAuthDivider(),
+          NsAuthDivider(label: strings.orContinueWith),
           const SizedBox(height: 8),
           NsGoogleButton(
             onPressed: _signInWithGoogle,
             isLoading: _googleLoading,
+            label: strings.continueWithGoogle,
           ),
           const SizedBox(height: 8),
           NsFacebookButton(
             onPressed: _signInWithFacebook,
             isLoading: _facebookLoading,
+            label: strings.continueWithFacebook,
           ),
           const SizedBox(height: 2),
         ],
@@ -927,6 +992,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildStep0() {
+    final strings = context.l10n;
     return AutofillGroup(
       child: Form(
         key: _formKeyStep0,
@@ -935,8 +1001,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           children: [
             NsTextField(
               controller: _identifierController,
-              label: 'Email or phone',
-              hint: 'you@example.com or 98XXXXXXXX',
+              label: strings.emailOrPhone,
+              hint: strings.emailOrPhoneHint,
               icon: _kind == IdentifierKind.phone
                   ? Icons.phone_iphone_rounded
                   : Icons.alternate_email_rounded,
@@ -953,16 +1019,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               labelTrailing: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 160),
                 child: _kind == IdentifierKind.email
-                    ? const NsChip(
+                    ? NsChip(
                         key: ValueKey('email'),
-                        label: 'EMAIL',
+                        label: strings.email,
                         icon: Icons.mail_rounded,
                         compact: true,
                       )
                     : _kind == IdentifierKind.phone
-                    ? const NsChip(
+                    ? NsChip(
                         key: ValueKey('phone'),
-                        label: 'PHONE',
+                        label: strings.phone,
                         icon: Icons.smartphone_rounded,
                         tone: NsChipTone.sky,
                         compact: true,
@@ -970,15 +1036,27 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     : const SizedBox.shrink(key: ValueKey('empty')),
               ),
             ),
+            if (_pendingEmailLink != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                strings.emailSignInLinkEnterEmail,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: NsColors.of(context).muted,
+                ),
+              ),
+            ],
             if (_showError &&
                 _errorMessage != null &&
-                _errorMessage!.contains('No account found')) ...[
+                (_errorMessage!.contains('No account found') ||
+                    _errorMessage == strings.noAccountFoundBanner)) ...[
               const SizedBox(height: 10),
               _buildNotFoundBanner(),
             ],
             const SizedBox(height: 18),
             NsPrimaryButton(
-              label: 'Continue',
+              label: strings.continueText,
               isLoading: _isLoading,
               onPressed: _checkIdentifierAndContinue,
               icon: Icons.arrow_forward_rounded,
@@ -991,6 +1069,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Widget _buildNotFoundBanner() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -1004,7 +1083,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _errorMessage ?? 'No account found with this email.',
+              _errorMessage ?? strings.noAccountFoundBanner,
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
@@ -1020,7 +1099,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              'Sign up',
+              strings.signUp,
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w900,
@@ -1035,6 +1114,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Widget _buildCredentialHelp() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
@@ -1056,8 +1136,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Wrong password, or signed up with Google/Facebook? '
-                  'Use "Try another way" below, or send a password reset link.',
+                  strings.credentialHelp,
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.32,
@@ -1073,7 +1152,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               _AuthLink(
-                label: 'Send reset link',
+                label: strings.sendResetLink,
                 onPressed: _isLoading
                     ? null
                     : () async {
@@ -1085,7 +1164,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Password reset link sent to ${_identifierController.text.trim()}',
+                                context.l10n.passwordResetLinkSent(
+                                  _identifierController.text.trim(),
+                                ),
                               ),
                             ),
                           );
@@ -1100,8 +1181,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(width: 8),
               _AuthLink(
-                label: 'Email me a code',
-                onPressed: _isLoading ? null : _requestEmailOtp,
+                label: strings.emailSignInLink,
+                onPressed: _isLoading ? null : _requestEmailSignInLink,
               ),
             ],
           ),
@@ -1112,6 +1193,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Widget _buildStep1() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return AutofillGroup(
       child: Form(
@@ -1157,7 +1239,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                      'Change',
+                      strings.changeIdentifier,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -1168,11 +1250,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            if (!_isOtpMode) ...[
+            if (!_isEmailLinkMode) ...[
               NsTextField(
                 controller: _passwordController,
-                label: 'Password',
-                hint: 'Enter your password',
+                label: strings.password,
+                hint: strings.passwordHint,
                 icon: Icons.lock_rounded,
                 obscureText: true,
                 autofocus: true,
@@ -1200,13 +1282,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               Align(
                 alignment: Alignment.centerRight,
                 child: _AuthLink(
-                  label: 'Forgot password?',
+                  label: strings.forgotPassword,
                   onPressed: _openForgotPassword,
                 ),
               ),
               const SizedBox(height: 16),
               NsPrimaryButton(
-                label: 'Sign in',
+                label: strings.signIn,
                 isLoading: _isLoading,
                 onPressed: _signInWithPassword,
                 icon: Icons.arrow_forward_rounded,
@@ -1214,89 +1296,41 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               const SizedBox(height: 2),
               Center(
                 child: _AuthLink(
-                  label: 'Try another way',
+                  label: strings.tryAnotherWay,
                   onPressed: _openTryAnotherWaySheet,
                 ),
               ),
             ] else ...[
-              NsTextField(
-                controller: _otpController,
-                label: 'Verification code',
-                hint: '6-digit code',
-                icon: Icons.pin_rounded,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                validator: (val) {
-                  if (val == null || val.trim().length != 6) {
-                    return 'Enter the 6-digit code';
-                  }
-                  return null;
-                },
-                onFieldSubmitted: (_) => _signInWithOtp(),
-                onChanged: (_) {
-                  if (_showError) {
-                    setState(() {
-                      _showError = false;
-                      _errorMessage = null;
-                    });
-                  }
-                },
-                onFocusChange: (focused) {
-                  setState(() => _otpFocused = focused);
-                },
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  _AuthLink(
-                    label: 'Resend code',
-                    onPressed: _isLoading ? null : _requestEmailOtp,
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: tokens.surfaceSoft,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: tokens.border),
+                ),
+                child: Text(
+                  strings.emailSignInLinkSent(
+                    _identifierController.text.trim(),
                   ),
-                  const Spacer(),
-                  _AuthLink(
-                    label: 'Send reset link instead',
-                    onPressed: _isLoading
-                        ? null
-                        : () async {
-                            try {
-                              await const AuthService().sendPasswordReset(
-                                _identifierController.text.trim(),
-                              );
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Reset link sent to ${_identifierController.text.trim()}',
-                                  ),
-                                ),
-                              );
-                            } catch (e) {
-                              if (!mounted) return;
-                              setState(() {
-                                _showError = true;
-                                _errorMessage = e.toString();
-                              });
-                            }
-                          },
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
                   ),
-                ],
+                ),
               ),
               const SizedBox(height: 14),
               NsPrimaryButton(
-                label: 'Verify & sign in',
+                label: strings.emailSignInLink,
                 isLoading: _isLoading,
-                onPressed: _signInWithOtp,
-                icon: Icons.check_rounded,
+                onPressed: _requestEmailSignInLink,
+                icon: Icons.mark_email_read_rounded,
               ),
               const SizedBox(height: 2),
               Center(
                 child: _AuthLink(
-                  label: 'Try another way',
+                  label: strings.tryAnotherWay,
                   onPressed: _openTryAnotherWaySheet,
                 ),
               ),
@@ -1309,6 +1343,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Widget _buildFooter() {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1318,7 +1353,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              'New to NagarSathi?',
+              strings.newToNagarSathi,
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
@@ -1333,7 +1368,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
-                'Sign up',
+                strings.signUp,
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w900,
@@ -1349,7 +1384,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              'Are you municipality staff? ',
+              strings.areYouStaff,
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
@@ -1364,7 +1399,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
-                'Staff portal',
+                strings.staffPortal,
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
