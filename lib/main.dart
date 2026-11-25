@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'l10n/app_locale.dart';
 import 'l10n/app_strings.dart';
 import 'l10n/language_controller.dart';
+import 'screens/app_lock_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/staff_home_screen.dart';
@@ -15,6 +16,7 @@ import 'services/session_service.dart';
 import 'services/staff_auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
+import 'widgets/app_lock_gate.dart';
 import 'widgets/update_gate.dart';
 
 Future<void> main() async {
@@ -44,14 +46,22 @@ Future<void> main() async {
     await const SessionService().clearStaffSession();
   }
   final startSignedIn = hasSession && rememberMe;
+  if (!startSignedIn) {
+    // App Lock only protects an active remembered session.
+    await const SessionService().saveAppLock(false);
+  }
   final staffSession = startSignedIn
       ? await const SessionService().loadStaffSession()
       : null;
+  // App Lock only matters when there is a remembered session to protect.
+  final appLockEnabled =
+      startSignedIn && await const SessionService().loadAppLock();
 
   runApp(
     NagarSathiApp(
       startSignedIn: startSignedIn,
       initialStaffSession: staffSession,
+      appLockEnabled: appLockEnabled,
     ),
   );
 }
@@ -63,6 +73,7 @@ class NagarSathiApp extends StatefulWidget {
     this.languageController,
     this.startSignedIn = false,
     this.initialStaffSession,
+    this.appLockEnabled = false,
   });
 
   /// Injectable for tests; defaults to the app-wide controller.
@@ -74,6 +85,10 @@ class NagarSathiApp extends StatefulWidget {
 
   /// Restores a remembered staff/admin workspace if present.
   final StaffSession? initialStaffSession;
+
+  /// Whether the remembered session must pass the phone's biometric or screen
+  /// lock check before it opens.
+  final bool appLockEnabled;
 
   @override
   State<NagarSathiApp> createState() => _NagarSathiAppState();
@@ -124,23 +139,45 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
                         child: child ?? const SizedBox.shrink(),
                       ),
                     ),
-                home: widget.startSignedIn
-                    ? (widget.initialStaffSession != null
-                          ? StaffHomeScreen(
-                              staffIdentifier:
-                                  widget.initialStaffSession!.identifier,
-                              isPhone: widget.initialStaffSession!.isPhone,
-                            )
-                          : const HomeScreen())
-                    : LoginScreen(
-                        themeController: _themeController,
-                        languageController: _languageController,
-                      ),
+                home: _buildHome(),
               ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildHome() {
+    final staffSession = widget.initialStaffSession;
+    final hasRememberedSession = staffSession != null || widget.startSignedIn;
+
+    final Widget signedInHome = staffSession != null
+        ? StaffHomeScreen(
+            staffIdentifier: staffSession.identifier,
+            isPhone: staffSession.isPhone,
+          )
+        : const HomeScreen();
+
+    if (!hasRememberedSession) {
+      return LoginScreen(
+        themeController: _themeController,
+        languageController: _languageController,
+      );
+    }
+
+    // The gate re-locks a running session after a spell in the background.
+    final Widget gatedHome = AppLockGate(
+      isStaff: staffSession != null,
+      child: signedInHome,
+    );
+
+    if (!widget.appLockEnabled) return gatedHome;
+
+    // Cold start: show the lock first, then hand over to the gated home.
+    return AppLockScreen(
+      isStaff: staffSession != null,
+      target: (_) => gatedHome,
     );
   }
 

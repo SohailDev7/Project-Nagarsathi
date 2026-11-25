@@ -4,6 +4,7 @@ import '../l10n/app_strings.dart';
 import '../services/session_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ns_app_lock_prompt.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_card.dart';
 import '../widgets/ns_chip.dart';
@@ -15,6 +16,7 @@ import '../widgets/ns_pressable.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_settings_sheet.dart';
 import 'admin/ward_officer_management_screen.dart';
+import 'settings_screen.dart';
 import 'staff_login_screen.dart';
 
 /// Landing page for the separate staff sign-in flow.
@@ -48,18 +50,24 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
   Future<void> _maybePromptRememberMe() async {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
-    await showRememberMeNotification(
+    final remembered = await showRememberMeNotification(
       context: context,
       isStaff: true,
       staffIdentifier: widget.staffIdentifier,
       isPhone: widget.isPhone,
     );
+    if (!mounted || remembered != true) return;
+
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await showAppLockOffer(context: context, isStaff: true);
   }
 
   Future<void> _signOut(BuildContext context) async {
     await StaffAuthService.signOut();
     await const SessionService().clearStaffSession();
     await const SessionService().saveRememberMe(false);
+    await const SessionService().saveAppLock(false);
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
@@ -241,6 +249,19 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
                       const SizedBox(height: 10),
                       const _QueueCard(),
                       const SizedBox(height: 20),
+                      NsOutlineButton(
+                        key: const Key('staff-open-settings'),
+                        label: strings.settings,
+                        icon: Icons.tune_rounded,
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
                       NsOutlineButton(
                         label: strings.signOutOfStaff,
                         icon: Icons.logout_rounded,

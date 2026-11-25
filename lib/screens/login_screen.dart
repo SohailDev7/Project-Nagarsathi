@@ -13,6 +13,7 @@ import '../services/session_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import '../utils/validators.dart';
+import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_heading.dart';
 import '../widgets/ns_auth_scaffold.dart';
 import '../widgets/ns_back_button.dart';
@@ -433,10 +434,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => HomeScreen(
-          initialName: name,
-          initialEmail: email,
-          showRememberMePrompt: true,
+        builder: (_) => AppLockGate(
+          child: HomeScreen(
+            initialName: name,
+            initialEmail: email,
+            showRememberMePrompt: true,
+          ),
         ),
       ),
       (route) => false,

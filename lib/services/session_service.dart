@@ -13,6 +13,7 @@ class SessionService {
   const SessionService();
 
   static const rememberKey = 'remember_me';
+  static const appLockKey = 'app_lock_enabled';
   static const staffIdentifierKey = 'staff_identifier';
   static const staffIsPhoneKey = 'staff_is_phone';
 
@@ -33,6 +34,28 @@ class SessionService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(rememberKey, value);
+    } catch (_) {
+      // Best effort only.
+    }
+  }
+
+  /// Whether the citizen/staff chose to unlock the saved session with the
+  /// phone's biometrics or screen lock. Off unless explicitly enabled.
+  Future<bool> loadAppLock() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(appLockKey) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Persists the app-lock choice. Disabling is best-effort, like the other
+  /// preferences here.
+  Future<void> saveAppLock(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(appLockKey, value);
     } catch (_) {
       // Best effort only.
     }

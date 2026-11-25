@@ -14,6 +14,7 @@ import '../services/location_service.dart';
 import '../services/session_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ns_app_lock_prompt.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_entrance.dart';
@@ -79,7 +80,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _maybePromptRememberMe() async {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
-    await showRememberMeNotification(context: context, isStaff: false);
+    final remembered = await showRememberMeNotification(
+      context: context,
+      isStaff: false,
+    );
+    if (!mounted || remembered != true) return;
+
+    // Remember me is now on. Offer the device-lock layer while the choice is
+    // still fresh, but never insist: a user can enable it later in Settings.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await showAppLockOffer(context: context);
   }
 
   @override
@@ -353,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _signOut() async {
     await const AuthService().signOut();
     await const SessionService().saveRememberMe(false);
+    await const SessionService().saveAppLock(false);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),

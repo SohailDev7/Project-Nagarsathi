@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
+import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_scaffold.dart';
 import '../widgets/ns_back_button.dart';
 import '../widgets/ns_card.dart';
@@ -244,10 +245,13 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     TextInput.finishAutofillContext();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => StaffHomeScreen(
-          staffIdentifier: session.identifier,
-          isPhone: session.isPhone,
-          showRememberMePrompt: true,
+        builder: (_) => AppLockGate(
+          isStaff: true,
+          child: StaffHomeScreen(
+            staffIdentifier: session.identifier,
+            isPhone: session.isPhone,
+            showRememberMePrompt: true,
+          ),
         ),
       ),
       (route) => false,
