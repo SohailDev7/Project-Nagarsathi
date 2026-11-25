@@ -1,0 +1,7 @@
+{
+  "name": "nagarsathi-admin-mail",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy"
+  }
+}
