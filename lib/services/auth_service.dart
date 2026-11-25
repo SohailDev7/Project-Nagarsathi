@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/language_controller.dart';
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
 
@@ -87,8 +88,11 @@ class AuthService {
     }
   }
 
-  Future<void> requestEmailOtp(String email) async {
-    await _postOtp('/request-email-otp', {'email': email.trim()});
+  Future<void> requestEmailOtp(String email, {String? locale}) async {
+    await _postOtp('/request-email-otp', {
+      'email': email.trim(),
+      'locale': locale ?? LanguageController.instance.value.code,
+    });
   }
 
   Future<void> verifyEmailOtp({
@@ -145,10 +149,7 @@ class AuthService {
       // 1. Try signing in with the provided password
       try {
         final credential = await FirebaseAuth.instance
-            .signInWithEmailAndPassword(
-              email: cleanEmail,
-              password: password,
-            );
+            .signInWithEmailAndPassword(email: cleanEmail, password: password);
         final user = credential.user;
         if (user != null) {
           await _touchProfile(
@@ -328,7 +329,9 @@ class AuthService {
     }
 
     final cleanEmail = email.trim().toLowerCase();
-    final cleanName = name.trim().isNotEmpty ? name.trim() : cleanEmail.split('@').first;
+    final cleanName = name.trim().isNotEmpty
+        ? name.trim()
+        : cleanEmail.split('@').first;
 
     try {
       final credential = await FirebaseAuth.instance
@@ -353,6 +356,7 @@ class AuthService {
           'email': cleanEmail,
           'phone': (phone?.trim().isEmpty ?? true) ? null : phone!.trim(),
           'role': 'citizen',
+          'preferredLanguage': LanguageController.instance.value.code,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });

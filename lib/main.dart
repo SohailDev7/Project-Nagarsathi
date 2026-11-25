@@ -2,6 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'l10n/app_locale.dart';
+import 'l10n/app_strings.dart';
+import 'l10n/language_controller.dart';
 import 'screens/app_lock_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -23,6 +26,7 @@ Future<void> main() async {
   // Guarded internally; falls back to ThemeMode.system if storage is
   // unavailable.
   await ThemeController.instance.load();
+  await LanguageController.instance.load();
 
   // Honour "Remember me on this device" before the first frame. Firebase keeps
   // its session on disk; when the user opted out we clear it and start at
@@ -66,6 +70,7 @@ class NagarSathiApp extends StatefulWidget {
   const NagarSathiApp({
     super.key,
     this.themeController,
+    this.languageController,
     this.startSignedIn = false,
     this.initialStaffSession,
     this.appLockEnabled = false,
@@ -73,6 +78,7 @@ class NagarSathiApp extends StatefulWidget {
 
   /// Injectable for tests; defaults to the app-wide controller.
   final ThemeController? themeController;
+  final LanguageController? languageController;
 
   /// Opens the citizen home when a remembered Firebase session already exists.
   final bool startSignedIn;
@@ -94,30 +100,48 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
   ThemeController get _themeController =>
       widget.themeController ?? ThemeController.instance;
 
+  LanguageController get _languageController =>
+      widget.languageController ?? LanguageController.instance;
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: _themeController,
       builder: (context, mode, _) {
-        return MaterialApp(
-          title: 'NagarSathi',
-          debugShowCheckedModeBanner: false,
-          navigatorKey: _navigatorKey,
-          theme: buildAppTheme(brightness: Brightness.light),
-          darkTheme: buildAppTheme(brightness: Brightness.dark),
-          themeMode: mode,
-          routes: {
-            WardOfficerManagementScreen.routeName: (_) =>
-                const WardOfficerManagementScreen(),
+        return ValueListenableBuilder<AppLocale>(
+          valueListenable: _languageController,
+          builder: (context, locale, _) {
+            final strings = AppStrings.forLocale(locale);
+            return AppStringsScope(
+              strings: strings,
+              child: MaterialApp(
+                title: strings.appName,
+                debugShowCheckedModeBanner: false,
+                navigatorKey: _navigatorKey,
+                locale: locale.locale,
+                supportedLocales: const [
+                  Locale('en', 'US'),
+                  Locale('ne', 'NP'),
+                ],
+                theme: buildAppTheme(brightness: Brightness.light),
+                darkTheme: buildAppTheme(brightness: Brightness.dark),
+                themeMode: mode,
+                routes: {
+                  WardOfficerManagementScreen.routeName: (_) =>
+                      const WardOfficerManagementScreen(),
+                },
+                builder: (context, child) =>
+                    AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: _overlayStyle(context),
+                      child: UpdateGate(
+                        navigatorKey: _navigatorKey,
+                        child: child ?? const SizedBox.shrink(),
+                      ),
+                    ),
+                home: _buildHome(),
+              ),
+            );
           },
-          builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-            value: _overlayStyle(context),
-            child: UpdateGate(
-              navigatorKey: _navigatorKey,
-              child: child ?? const SizedBox.shrink(),
-            ),
-          ),
-          home: _buildHome(),
         );
       },
     );
@@ -135,7 +159,10 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
         : const HomeScreen();
 
     if (!hasRememberedSession) {
-      return LoginScreen(themeController: _themeController);
+      return LoginScreen(
+        themeController: _themeController,
+        languageController: _languageController,
+      );
     }
 
     // The gate re-locks a running session after a spell in the background.

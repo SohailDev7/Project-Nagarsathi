@@ -22,10 +22,15 @@ class StaffPhoneChallenge {
 }
 
 class StaffSession {
-  const StaffSession({required this.identifier, required this.isPhone});
+  const StaffSession({
+    required this.identifier,
+    required this.isPhone,
+    this.mustChangePassword = false,
+  });
 
   final String identifier;
   final bool isPhone;
+  final bool mustChangePassword;
 }
 
 class StaffAuthService {
@@ -170,6 +175,41 @@ class StaffAuthService {
     return _loadStaffSession(result.user, challenge.phoneNumber);
   }
 
+  Future<void> updateStaffPassword(String newPassword) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw const AuthFailure('No signed-in staff member found.');
+    }
+    try {
+      await user.updatePassword(newPassword);
+
+      final firestore = FirebaseFirestore.instance;
+      // Mark mustChangePassword as false in staff collection
+      await firestore.collection(_staffCollection).doc(user.uid).set({
+        'mustChangePassword': false,
+      }, SetOptions(merge: true));
+
+      // Also mirror update to ward_officers if present
+      final emailLower = user.email?.trim().toLowerCase();
+      if (emailLower != null && emailLower.isNotEmpty) {
+        final query = await firestore
+            .collection('ward_officers')
+            .where('emailLower', isEqualTo: emailLower)
+            .get();
+        for (final doc in query.docs) {
+          await doc.reference.update({
+            'mustChangePassword': false,
+            'tempPassword': FieldValue.delete(),
+          });
+        }
+      }
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(AuthService.friendlyMessage(error));
+    } catch (e) {
+      throw AuthFailure('Failed to update password. Try again later.');
+    }
+  }
+
   Future<StaffSession> _loadEmailStaffSession(User? user, String email) async {
     if (user == null) {
       throw const AuthFailure('We could not verify your staff access.');
@@ -180,7 +220,35 @@ class StaffAuthService {
           .collection(_staffCollection)
           .doc(user.uid)
           .get();
-      final data = snapshot.data();
+      var data = snapshot.data();
+
+      // Fallback: check by email in staff collection or ward_officers collection
+      if (data == null) {
+        final emailDoc = await FirebaseFirestore.instance
+            .collection(_staffCollection)
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+        if (emailDoc.docs.isNotEmpty) {
+          data = emailDoc.docs.first.data();
+        } else {
+          final officerDoc = await FirebaseFirestore.instance
+              .collection('ward_officers')
+              .where('emailLower', isEqualTo: email)
+              .limit(1)
+              .get();
+          if (officerDoc.docs.isNotEmpty) {
+            final officerData = officerDoc.docs.first.data();
+            if (officerData['status'] == 'active') {
+              data = {
+                ...officerData,
+                'role': 'staff',
+                'active': true,
+              };
+            }
+          }
+        }
+      }
 
       if (data == null || data['role'] != 'staff' || data['active'] != true) {
         await FirebaseAuth.instance.signOut();
@@ -189,7 +257,13 @@ class StaffAuthService {
         );
       }
 
-      return StaffSession(identifier: email, isPhone: false);
+      final mustChange = data['mustChangePassword'] == true;
+
+      return StaffSession(
+        identifier: email,
+        isPhone: false,
+        mustChangePassword: mustChange,
+      );
     } on AuthFailure {
       rethrow;
     } catch (_) {

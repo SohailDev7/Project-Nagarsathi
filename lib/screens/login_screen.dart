@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_strings.dart';
+import '../l10n/language_controller.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
@@ -19,6 +21,7 @@ import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_facebook_button.dart';
 import '../widgets/ns_google_button.dart';
+import '../widgets/ns_language_toggle.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
@@ -31,10 +34,11 @@ import 'sign_up_screen.dart';
 import 'staff_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.themeController});
+  const LoginScreen({super.key, this.themeController, this.languageController});
 
   /// Injectable for tests; defaults to the app-wide controller.
   final ThemeController? themeController;
+  final LanguageController? languageController;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -51,6 +55,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   ThemeController get _themeController =>
       widget.themeController ?? ThemeController.instance;
+
+  LanguageController get _languageController =>
+      widget.languageController ?? LanguageController.instance;
 
   int _step = 0;
   int _direction = 1;
@@ -96,37 +103,37 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     return const Offset(0.2, 0.1);
   }
 
-  String get _message {
-    if (_celebrating) return 'Welcome back! Opening your city…';
+  String _message(AppStrings s) {
+    if (_celebrating) return s.mascotOpeningCity;
     if (_showError) {
       if (_errorMessage != null &&
           _errorMessage!.contains('No account found')) {
-        return 'I could not find an account with that email.';
+        return s.mascotAccountNotFound;
       }
-      return _errorMessage ?? 'Hmm, check that and give it another go.';
+      return _errorMessage ?? s.mascotTryAgain;
     }
-    if (_googleLoading) return 'Opening Google… pick your account.';
-    if (_facebookLoading) return 'Opening Facebook… hold tight.';
+    if (_googleLoading) return s.mascotOpeningGoogle;
+    if (_facebookLoading) return s.mascotOpeningFacebook;
     if (_isLoading) {
-      if (_step == 0) return 'Checking your account…';
-      return _isOtpMode ? 'Verifying code…' : 'Checking your details…';
+      if (_step == 0) return s.mascotCheckingAccount;
+      return _isOtpMode ? s.mascotVerifyingCode : s.mascotCheckingDetails;
     }
     if (_step == 1) {
       if (_isOtpMode) {
-        return 'Enter the 6-digit verification code sent to your email.';
+        return s.mascotStepVerify;
       }
-      if (_passwordFocused) return 'Your password stays private. Promise.';
-      return 'Enter your password to sign in.';
+      if (_passwordFocused) return s.mascotPasswordPrivate;
+      return s.mascotEnterPassword;
     }
     switch (_kind) {
       case IdentifierKind.email:
-        return 'Email spotted. Looking good!';
+        return s.mascotEmailSpotted;
       case IdentifierKind.phone:
-        return 'Phone number it is. Nice!';
+        return s.mascotPhoneSpotted;
       case IdentifierKind.unknown:
-        return 'Type an email or a phone number — I will sort it out.';
+        return s.mascotTypeEither;
       case IdentifierKind.empty:
-        return 'Namaste! Ready when you are.';
+        return s.mascotLoginReady;
     }
   }
 
@@ -601,6 +608,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     try {
       await const AuthService().requestEmailOtp(
         _identifierController.text.trim(),
+        locale: _languageController.value.code,
       );
       if (!mounted) return;
       setState(() {
@@ -833,7 +841,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
+        NsLanguageToggle(controller: _languageController, compact: true),
+        const SizedBox(width: 8),
         _buildThemeToggle(),
       ],
     );
@@ -892,7 +902,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       children: [
         NsAuthHeading(
           title: 'Welcome back',
-          message: _message,
+          message: _message(context.l10n),
           mood: _mood,
           look: _look,
           wave: _celebrating,

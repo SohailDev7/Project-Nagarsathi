@@ -26,7 +26,7 @@ void main() {
     expect(find.text('Around you'), findsOneWidget);
     expect(find.text('Report an issue'), findsOneWidget);
 
-    for (final tab in ['Reports', 'Map', 'Profile']) {
+    for (final tab in ['Reports', 'Map']) {
       await tester.tap(find.text(tab));
       await tester.pump();
       expect(find.text('Feature coming soon.'), findsOneWidget);
@@ -47,6 +47,26 @@ void main() {
 
     expect(find.text('NagarSathi citizen'), findsOneWidget);
     expect(find.text('CITIZEN'), findsOneWidget);
+    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.text('Dark mode'), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
+  });
+
+  testWidgets('the Profile tab opens the account sheet with Settings', (
+    tester,
+  ) async {
+    await _pumpHome(tester);
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.text('Dark mode'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('open-settings')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('theme-mode-dark')), findsOneWidget);
   });
 }

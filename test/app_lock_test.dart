@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:projectnagarsathi/l10n/app_locale.dart';
+import 'package:projectnagarsathi/l10n/app_strings.dart';
 import 'package:projectnagarsathi/main.dart';
 import 'package:projectnagarsathi/screens/app_lock_screen.dart';
 import 'package:projectnagarsathi/screens/home_screen.dart';
@@ -745,15 +747,18 @@ void main() {
       expect(find.byType(StaffHomeScreen), findsNothing);
     });
 
-    testWidgets('StaffHomeScreen opens SettingsScreen from Settings & security button', (
+    testWidgets('StaffHomeScreen opens SettingsScreen from Settings button', (
       tester,
     ) async {
       usePhoneSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: buildAppTheme(),
-          home: const StaffHomeScreen(staffIdentifier: 'staff@kmc.gov.np'),
+        AppStringsScope(
+          strings: AppStrings.forLocale(AppLocale.en),
+          child: MaterialApp(
+            theme: buildAppTheme(),
+            home: const StaffHomeScreen(staffIdentifier: 'staff@kmc.gov.np'),
+          ),
         ),
       );
       await tester.pumpAndSettle();

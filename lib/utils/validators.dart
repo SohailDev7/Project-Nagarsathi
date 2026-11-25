@@ -1,6 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-/// Shared form validators.
+import '../l10n/app_strings.dart';
+import '../l10n/language_controller.dart';
+
+/// Shared form validators with immediate bilingual localization.
 enum IdentifierKind { empty, email, phone, unknown }
 
 abstract final class Validators {
@@ -9,6 +12,9 @@ abstract final class Validators {
   static final _devanagariDigits = RegExp(r'[०-९]');
   static final _nepaliMobilePattern = RegExp(r'^9[6-8]\d{8}$');
   static final _otpPattern = RegExp(r'^\d{6}$');
+
+  static AppStrings _resolveStrings([AppStrings? strings]) =>
+      strings ?? AppStrings.forLocale(LanguageController.instance.value);
 
   /// Detects whether the shared sign-in field holds an email or a phone.
   static IdentifierKind identifierKind(String? value) {
@@ -19,45 +25,49 @@ abstract final class Validators {
     return IdentifierKind.unknown;
   }
 
-  static String? identifier(String? value) {
+  static String? identifier(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     switch (identifierKind(value)) {
       case IdentifierKind.empty:
-        return 'Enter your email or phone number';
+        return s.errEmailOrPhone;
       case IdentifierKind.email:
-        return email(value);
+        return email(value, strings: s);
       case IdentifierKind.phone:
-        return phone(value);
+        return phone(value, strings: s);
       case IdentifierKind.unknown:
-        return 'Enter a valid email or phone number';
+        return s.errInvalidEmailOrPhone;
     }
   }
 
-  static String? name(String? value) {
+  static String? name(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) return 'Enter your full name';
-    if (trimmed.length < 2) return 'Enter a valid name';
+    if (trimmed.isEmpty) return s.errName;
+    if (trimmed.length < 2) return s.errNameLength;
     return null;
   }
 
-  static String? email(String? value) {
+  static String? email(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) return 'Enter your email address';
-    if (!_emailPattern.hasMatch(trimmed)) return 'Enter a valid email address';
+    if (trimmed.isEmpty) return s.errEmail;
+    if (!_emailPattern.hasMatch(trimmed)) return s.errInvalidEmail;
     return null;
   }
 
-  static String? phone(String? value) {
+  static String? phone(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     final digits = (value ?? '').replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.isEmpty) return 'Enter your phone number';
+    if (digits.isEmpty) return s.errPhone;
     if (digits.length < 7 || digits.length > 15) {
-      return 'Enter a valid phone number';
+      return s.errInvalidPhone;
     }
     return null;
   }
 
-  static String? optionalPhone(String? value) {
+  static String? optionalPhone(String? value, {AppStrings? strings}) {
     if ((value ?? '').trim().isEmpty) return null;
-    return phone(value);
+    return phone(value, strings: strings);
   }
 
   /// Converts local, `+977`, `977` and `00977` input to an E.164 number.
@@ -83,39 +93,45 @@ abstract final class Validators {
     return '+977$national';
   }
 
-  static String? nepaliPhone(String? value) {
-    if ((value ?? '').trim().isEmpty) return 'Enter your mobile number';
+  static String? nepaliPhone(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
+    if ((value ?? '').trim().isEmpty) return s.errPhone;
     if (normalizeNepaliPhone(value) == null) {
-      return 'Enter a valid Nepali mobile number';
+      return s.errNepaliPhone;
     }
     return null;
   }
 
-  static String? otp(String? value) {
+  static String? otp(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     if (value == null || !_otpPattern.hasMatch(value.trim())) {
-      return 'Enter the 6-digit code';
+      return s.errOtpFormat;
     }
     return null;
   }
 
-  static String? password(String? value) {
+  static String? password(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
     final password = value ?? '';
-    if (password.isEmpty) return 'Create a password';
-    if (password.length < 8) return 'Use at least 8 characters';
+    if (password.isEmpty) return s.errRequired;
+    if (password.length < 8) return s.errPasswordLength;
     return null;
   }
 
-  static String? loginPassword(String? value) {
-    if (value == null || value.isEmpty) return 'Enter your password';
+  static String? loginPassword(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
+    if (value == null || value.isEmpty) return s.errRequired;
     return null;
   }
 
   static String? Function(String?) confirmPassword(
-    TextEditingController password,
-  ) {
+    TextEditingController password, {
+    AppStrings? strings,
+  }) {
+    final s = _resolveStrings(strings);
     return (String? value) {
-      if (value == null || value.isEmpty) return 'Confirm your password';
-      if (value != password.text) return 'Passwords do not match';
+      if (value == null || value.isEmpty) return s.errRequired;
+      if (value != password.text) return s.errPasswordMatch;
       return null;
     };
   }
