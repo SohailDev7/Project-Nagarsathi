@@ -184,10 +184,13 @@ class StaffAuthService {
       await user.updatePassword(newPassword);
 
       final firestore = FirebaseFirestore.instance;
-      // Mark mustChangePassword as false in staff collection
-      await firestore.collection(_staffCollection).doc(user.uid).set({
-        'mustChangePassword': false,
-      }, SetOptions(merge: true));
+      // Best-effort: mark mustChangePassword as false in staff collection
+      // (regular ward officers may not have write access to /staff/{uid}).
+      try {
+        await firestore.collection(_staffCollection).doc(user.uid).set({
+          'mustChangePassword': false,
+        }, SetOptions(merge: true));
+      } catch (_) {}
 
       // Also mirror update to ward_officers if present
       final emailLower = user.email?.trim().toLowerCase();
@@ -216,41 +219,53 @@ class StaffAuthService {
     }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection(_staffCollection)
-          .doc(user.uid)
-          .get();
-      var data = snapshot.data();
+      Map<String, dynamic>? data;
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection(_staffCollection)
+            .doc(user.uid)
+            .get();
+        data = snapshot.data();
+      } catch (_) {
+        // Fall back to email / ward_officers lookup when /staff/{uid} is missing or restricted.
+      }
 
       // Fallback: check by email in staff collection or ward_officers collection
       if (data == null) {
-        final emailDoc = await FirebaseFirestore.instance
-            .collection(_staffCollection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (emailDoc.docs.isNotEmpty) {
-          data = emailDoc.docs.first.data();
-        } else {
-          final officerDoc = await FirebaseFirestore.instance
-              .collection('ward_officers')
-              .where('emailLower', isEqualTo: email)
+        try {
+          final emailDoc = await FirebaseFirestore.instance
+              .collection(_staffCollection)
+              .where('email', isEqualTo: email)
               .limit(1)
               .get();
-          if (officerDoc.docs.isNotEmpty) {
-            final officerData = officerDoc.docs.first.data();
-            if (officerData['status'] == 'active') {
-              data = {
-                ...officerData,
-                'role': 'staff',
-                'active': true,
-              };
-            }
+          if (emailDoc.docs.isNotEmpty) {
+            data = emailDoc.docs.first.data();
+          }
+        } catch (_) {}
+      }
+
+      if (data == null) {
+        final officerDoc = await FirebaseFirestore.instance
+            .collection('ward_officers')
+            .where('emailLower', isEqualTo: email)
+            .limit(1)
+            .get();
+        if (officerDoc.docs.isNotEmpty) {
+          final officerData = officerDoc.docs.first.data();
+          if (officerData['status'] == 'active') {
+            data = {
+              ...officerData,
+              'role': 'staff',
+              'active': true,
+            };
           }
         }
       }
 
-      if (data == null || data['role'] != 'staff' || data['active'] != true) {
+      final role = data?['role'];
+      if (data == null ||
+          (role != 'staff' && role != 'admin') ||
+          data['active'] != true) {
         await FirebaseAuth.instance.signOut();
         throw const AuthFailure(
           'This account is not registered for staff access.',
@@ -283,7 +298,7 @@ class StaffAuthService {
       final snapshot = await FirebaseFirestore.instance
           .collection(_staffCollection)
           .where('phone', isEqualTo: phone)
-          .where('role', isEqualTo: 'staff')
+          .where('role', whereIn: const ['staff', 'admin'])
           .where('active', isEqualTo: true)
           .limit(1)
           .get();
@@ -296,7 +311,8 @@ class StaffAuthService {
       }
 
       final data = snapshot.docs.first.data();
-      if (data['active'] != true || data['role'] != 'staff') {
+      final role = data['role'];
+      if (data['active'] != true || (role != 'staff' && role != 'admin')) {
         await FirebaseAuth.instance.signOut();
         throw const AuthFailure(
           'This number is not registered for staff access.',
