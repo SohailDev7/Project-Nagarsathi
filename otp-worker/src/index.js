@@ -438,6 +438,10 @@ async function retryPendingExports(env, now = Date.now()) {
           .catch(() => {});
         continue;
       }
+      if (now - createdAt < 2 * 60 * 1000) {
+        // The original request may still be sending this one.
+        continue;
+      }
       if (now - createdAt > DELIVERY_SLA_MINUTES * 60 * 1000) {
         // The delivery window has passed; do not keep an undeliverable bundle.
         await env.DB.prepare("DELETE FROM data_exports WHERE export_id = ?")

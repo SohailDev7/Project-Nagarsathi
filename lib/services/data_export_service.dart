@@ -177,6 +177,10 @@ class DataExportService {
             'Data export service is not available on the server yet.',
           );
         }
+        final serverError = payload['error'];
+        if (serverError is String && serverError.trim().isNotEmpty) {
+          throw DataExportFailure(serverError);
+        }
         if (response.statusCode == 401 || response.statusCode == 403) {
           throw const DataExportFailure(
             'Your session expired. Sign in again and retry.',
@@ -187,12 +191,9 @@ class DataExportService {
             'Too many export requests. Please try again later.',
           );
         }
-        final serverError = payload['error'];
         throw DataExportFailure(
-          serverError is String && serverError.trim().isNotEmpty
-              ? serverError
-              : 'The export service is temporarily unavailable '
-                    '(HTTP ${response.statusCode}). Please try again.',
+          'The export service is temporarily unavailable '
+          '(HTTP ${response.statusCode}). Please try again.',
         );
       }
 
