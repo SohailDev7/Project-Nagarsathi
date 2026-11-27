@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/user_profile.dart';
+import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
@@ -18,6 +20,8 @@ import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
 import '../widgets/ns_route.dart';
 import '../widgets/ns_settings_sheet.dart';
+import '../widgets/ns_user_avatar.dart';
+import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'staff_login_screen.dart';
 
@@ -49,6 +53,7 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    ProfileService.instance.loadProfile();
     if (widget.showRememberMePrompt) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _maybePromptRememberMe();
@@ -122,6 +127,14 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
         .push(NsPageRoute<void>(builder: (_) => const SettingsScreen()));
   }
 
+  void _openProfile() {
+    Navigator.of(context).push(
+      NsPageRoute<void>(
+        builder: (_) => const ProfileScreen(showWardPreferences: false),
+      ),
+    );
+  }
+
   Future<void> _showAccountSheet() async {
     HapticFeedback.selectionClick();
     await showModalBottomSheet<void>(
@@ -134,6 +147,10 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
       builder: (sheetContext) => _StaffAccountSheet(
         identifier: widget.staffIdentifier,
         isPhone: widget.isPhone,
+        onOpenProfile: () {
+          Navigator.of(sheetContext).pop();
+          _openProfile();
+        },
         onOpenSettings: () {
           Navigator.of(sheetContext).pop();
           _openSettings();
@@ -455,30 +472,39 @@ class _StaffAvatarButton extends StatelessWidget {
     final tokens = NsColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isDark ? tokens.mint : AppColors.forest,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isDark ? AppColors.primary : AppColors.primaryLight,
-              width: 2,
-            ),
+    return ValueListenableBuilder<UserProfile?>(
+      valueListenable: ProfileService.instance.notifier,
+      builder: (context, profile, _) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: profile?.hasCustomAvatar == true
+                ? NsUserAvatar(profile: profile, size: 40)
+                : Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isDark ? tokens.mint : AppColors.forest,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.primary
+                            : AppColors.primaryLight,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.badge_rounded,
+                      size: 19,
+                      color: isDark ? tokens.accentText : Colors.white,
+                    ),
+                  ),
           ),
-          child: Icon(
-            Icons.badge_rounded,
-            size: 19,
-            color: isDark ? tokens.accentText : Colors.white,
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -1544,12 +1570,14 @@ class _StaffAccountSheet extends StatelessWidget {
   const _StaffAccountSheet({
     required this.identifier,
     required this.isPhone,
+    required this.onOpenProfile,
     required this.onOpenSettings,
     required this.onSignOut,
   });
 
   final String identifier;
   final bool isPhone;
+  final VoidCallback onOpenProfile;
   final VoidCallback onOpenSettings;
   final VoidCallback onSignOut;
 
@@ -1557,6 +1585,11 @@ class _StaffAccountSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
     final strings = context.l10n;
+    final profile = ProfileService.instance.notifier.value;
+    final displayTitle =
+        (profile?.displayName.trim().isNotEmpty == true)
+            ? profile!.displayName.trim()
+            : strings.staffWorkspace;
 
     return SafeArea(
       top: false,
@@ -1568,28 +1601,33 @@ class _StaffAccountSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: tokens.mint,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primary, width: 2),
-                  ),
-                  child: Icon(
-                    isPhone ? Icons.phone_android_rounded : Icons.badge_rounded,
-                    size: 23,
-                    color: tokens.accentText,
-                  ),
-                ),
+                profile?.hasCustomAvatar == true
+                    ? NsUserAvatar(profile: profile, size: 50)
+                    : Container(
+                        width: 50,
+                        height: 50,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: tokens.mint,
+                          shape: BoxShape.circle,
+                          border:
+                              Border.all(color: AppColors.primary, width: 2),
+                        ),
+                        child: Icon(
+                          isPhone
+                              ? Icons.phone_android_rounded
+                              : Icons.badge_rounded,
+                          size: 23,
+                          color: tokens.accentText,
+                        ),
+                      ),
                 const SizedBox(width: 13),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        strings.staffWorkspace,
+                        displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1618,6 +1656,12 @@ class _StaffAccountSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
+            NsOutlineButton(
+              label: 'Edit profile',
+              icon: Icons.person_outline_rounded,
+              onPressed: onOpenProfile,
+            ),
+            const SizedBox(height: 12),
             NsOutlineButton(
               label: strings.settings,
               icon: Icons.tune_rounded,
