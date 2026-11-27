@@ -234,6 +234,7 @@ Future<bool?> showRememberMeNotification({
   bool isStaff = false,
   String? staffIdentifier,
   bool isPhone = false,
+  bool isSuperAdmin = false,
   SessionService sessionService = const SessionService(),
 }) async {
   final result = await showGeneralDialog<bool>(
@@ -273,6 +274,7 @@ Future<bool?> showRememberMeNotification({
                       await sessionService.saveStaffSession(
                         identifier: staffIdentifier,
                         isPhone: isPhone,
+                        isSuperAdmin: isSuperAdmin,
                       );
                     }
                     if (dialogContext.mounted) {

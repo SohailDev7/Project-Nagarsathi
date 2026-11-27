@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
@@ -66,6 +67,9 @@ class FirebaseConfig {
 
 /// Initializes Firebase once, without ever breaking app start-up.
 /// Authentication remains disabled until initialization succeeds.
+///
+/// Firestore keeps a local cache so a ward officer who loses signal still sees
+/// the records they already loaded instead of an error screen.
 abstract final class FirebaseBootstrap {
   static bool _ready = false;
   static Object? _error;
@@ -89,6 +93,7 @@ abstract final class FirebaseBootstrap {
         }
       }
       _ready = Firebase.apps.isNotEmpty;
+      if (_ready) _enableOfflineCache();
     } catch (error) {
       _ready = false;
       _error = error;
@@ -98,6 +103,20 @@ abstract final class FirebaseBootstrap {
           'Run `flutterfire configure` or pass FIREBASE_* dart-defines. '
           'Reason: $error',
         );
+      }
+    }
+  }
+
+  /// Best-effort: an unsupported platform simply keeps the default cache.
+  static void _enableOfflineCache() {
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Firestore offline cache is unavailable. Reason: $error');
       }
     }
   }

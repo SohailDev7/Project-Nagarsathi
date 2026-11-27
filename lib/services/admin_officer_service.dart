@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
+import '../models/municipality.dart';
 import '../models/ward_officer.dart';
 import '../utils/password_utils.dart';
 import 'firebase_bootstrap.dart';
+import 'staff_auth_service.dart';
 
 /// Thrown when an officer operation cannot be completed.
 class AdminOfficerException implements Exception {
@@ -41,6 +48,7 @@ class OfficerNotification {
     required this.body,
     required this.status,
     required this.dispatchedAt,
+    this.errorDetail,
   });
 
   final String recipientEmail;
@@ -48,12 +56,15 @@ class OfficerNotification {
   final String body;
   final OfficerNotificationStatus status;
   final DateTime dispatchedAt;
+  final String? errorDetail;
 
   bool get isSent => status == OfficerNotificationStatus.sent;
 
   String get message => isSent
       ? 'Confirmation email sent to $recipientEmail.'
-      : 'Could not send the confirmation email to $recipientEmail.';
+      : errorDetail == null
+      ? 'Could not send the confirmation email to $recipientEmail.'
+      : 'Could not send email to $recipientEmail ($errorDetail).';
 
   Map<String, dynamic> toJson() {
     return {
@@ -89,10 +100,21 @@ class AdminOfficerService {
 
   /// Placeholder admin identity used when Firebase Auth has no signed-in user.
   static const String mockAdminId = 'admin_001';
+  static const String _mailWorkerUrl = String.fromEnvironment(
+    'ADMIN_MAIL_WORKER_URL',
+    defaultValue: 'https://nagarsathi-admin-mail.shaswat-nagarsath.workers.dev',
+  );
 
   static const String officersCollection = 'ward_officers';
   static const String auditLogsCollection = 'officer_audit_logs';
   static const String notificationsCollection = 'notifications';
+
+  /// Backend worker that owns the Firebase service account and the Gmail mail
+  /// endpoint. It is also used by the citizen OTP flow.
+  static const String _backendUrl = String.fromEnvironment(
+    'OTP_WORKER_URL',
+    defaultValue: 'https://nagarsathi-otp.sohailk2064.workers.dev',
+  );
 
   static final RegExp _emailPattern = RegExp(
     r'^[\w.\-+]+@[\w\-]+(\.[\w\-]+)+$',
@@ -182,6 +204,7 @@ class AdminOfficerService {
     required String email,
     required String phoneNumber,
     required int assignedWard,
+    Municipality municipality = Municipality.kmc,
     String reason = '',
   }) {
     return _guard('Could not create the officer.', () async {
@@ -195,11 +218,25 @@ class AdminOfficerService {
       if (!_emailPattern.hasMatch(emailValue)) {
         throw const AdminOfficerException('Enter a valid email address.');
       }
+      // An allowlisted admin address always opens the super admin console, so
+      // it can never behave as a ward officer account.
+      await StaffAuthService.loadSuperAdminEmails();
+      if (StaffAuthService.isSuperAdminEmail(emailValue)) {
+        throw const AdminOfficerException(
+          "That email belongs to a super admin account. "
+          "Use the officer's own email address.",
+        );
+      }
       final phoneDigits = phone.replaceAll(RegExp(r'[^\d]'), '');
       if (phoneDigits.length < 7 || phoneDigits.length > 15) {
         throw const AdminOfficerException('Enter a valid phone number.');
       }
       _validateWard(assignedWard);
+      if (!municipality.hasWard(assignedWard)) {
+        throw AdminOfficerException(
+          '${municipality.code} has wards 1 to ${municipality.wardCount}.',
+        );
+      }
 
       // Case-insensitive uniqueness via the derived emailLower field.
       final duplicate = await _officers
@@ -220,29 +257,21 @@ class AdminOfficerService {
       // Attempt to register the Firebase Auth account using a temporary secondary app
       // so the acting admin remains signed in.
       String? createdUid;
-      try {
-        if (FirebaseBootstrap.isReady) {
-          final tempAppName =
-              'OfficerCreator_${DateTime.now().millisecondsSinceEpoch}';
-          final secondaryApp = await Firebase.initializeApp(
-            name: tempAppName,
-            options: Firebase.app().options,
+      if (FirebaseBootstrap.isReady) {
+        try {
+          createdUid = await _createAuthUser(
+            email: emailValue,
+            password: tempPassword,
           );
-          try {
-            final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-            final userCred = await secondaryAuth.createUserWithEmailAndPassword(
-              email: emailValue,
-              password: tempPassword,
+        } on FirebaseAuthException catch (error) {
+          if (error.code == 'email-already-in-use') {
+            throw const AdminOfficerException(
+              'An officer with this email already exists.',
             );
-            createdUid = userCred.user?.uid;
-          } finally {
-            await secondaryApp.delete();
           }
-        }
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'email-already-in-use') {
-          throw const AdminOfficerException(
-            'An officer with this email already exists.',
+          throw AdminOfficerException(
+            'Could not create the staff sign-in account. '
+            '${error.message ?? 'Please try again.'}',
           );
         }
       }
@@ -254,11 +283,22 @@ class AdminOfficerService {
         email: emailValue,
         phoneNumber: phone,
         assignedWard: assignedWard,
+        municipality: municipality,
         status: OfficerStatus.active,
         createdAt: now,
         mustChangePassword: true,
         tempPassword: tempPassword,
       );
+
+      var notificationStatus = OfficerNotificationStatus.failed;
+      if (FirebaseBootstrap.isReady) {
+        try {
+          await _sendStaffInvite(officer: officer, tempPassword: tempPassword);
+          notificationStatus = OfficerNotificationStatus.sent;
+        } catch (_) {
+          notificationStatus = OfficerNotificationStatus.failed;
+        }
+      }
 
       return _finishAction(
         officer: officer,
@@ -268,6 +308,7 @@ class AdminOfficerService {
         reason: reason,
         fallbackReason: 'Officer account created by admin.',
         now: now,
+        notificationStatus: notificationStatus,
       );
     });
   }
@@ -358,13 +399,18 @@ class AdminOfficerService {
         now: now,
       );
 
-      // Write the deletion audit entry before wiping the documents so the
-      // record always exists regardless of partial failures.
+      // Write the deletion audit entry before wiping the officer document so
+      // the record always exists regardless of partial failures.
       final batch = _firestore.batch();
       batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
       batch.delete(_officers.doc(existing.id));
-      batch.delete(_firestore.collection('staff').doc(existing.id));
       await batch.commit();
+
+      // Best-effort: remove any mirrored staff record (firestore.rules may
+      // restrict client writes to /staff).
+      try {
+        await _firestore.collection('staff').doc(existing.id).delete();
+      } catch (_) {}
 
       // Best-effort: delete related audit logs (pre-delete entries).
       try {
@@ -381,6 +427,16 @@ class AdminOfficerService {
         // Cleanup is best-effort; the main delete has already been committed.
       }
 
+      // Remove the Firebase Auth account too. Without this the email stays
+      // reserved and the same address cannot be used for a new officer.
+      try {
+        final authUid = existing.id.startsWith('officer_') ? null : existing.id;
+        await _deleteStaffAuthAccount(uid: authUid, email: existing.email);
+      } catch (_) {
+        // Best-effort: creating an officer with the same email retries this
+        // cleanup before reporting a duplicate.
+      }
+
       try {
         await _notifications
             .doc('notification_${auditLog.id}')
@@ -393,6 +449,8 @@ class AdminOfficerService {
       } catch (_) {
         // Notification write is best-effort.
       }
+
+      await _sendRealEmail(notification);
     });
   }
 
@@ -421,6 +479,128 @@ class AdminOfficerService {
     });
   }
 
+  /// Creates the Firebase Auth account on a throwaway secondary app so the
+  /// signed-in admin stays signed in. If the email is still attached to an
+  /// orphaned account from an earlier delete, that account is removed and the
+  /// creation is retried once.
+  Future<String?> _createAuthUser({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      return await _createAuthUserOnce(email: email, password: password);
+    } on FirebaseAuthException catch (error) {
+      if (error.code != 'email-already-in-use') rethrow;
+
+      await _deleteStaffAuthAccount(email: email);
+      return _createAuthUserOnce(email: email, password: password);
+    }
+  }
+
+  Future<String?> _createAuthUserOnce({
+    required String email,
+    required String password,
+  }) async {
+    final tempAppName =
+        'OfficerCreator_${DateTime.now().microsecondsSinceEpoch}';
+    final secondaryApp = await Firebase.initializeApp(
+      name: tempAppName,
+      options: Firebase.app().options,
+    );
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final userCred = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return userCred.user?.uid;
+    } finally {
+      await secondaryApp.delete();
+    }
+  }
+
+  Future<void> _deleteStaffAuthAccount({String? uid, String? email}) async {
+    await _postBackend('/admin/delete-staff-account', {
+      if (uid != null && uid.isNotEmpty) 'uid': uid,
+      if (email != null && email.isNotEmpty)
+        'email': email.trim().toLowerCase(),
+    });
+  }
+
+  Future<void> _sendStaffInvite({
+    required WardOfficer officer,
+    required String tempPassword,
+  }) async {
+    await _postBackend('/admin/send-staff-invite', {
+      'email': officer.email,
+      'name': officer.fullName,
+      'ward': officer.assignedWard,
+      'tempPassword': tempPassword,
+    });
+  }
+
+  /// Calls an authenticated endpoint on the staff backend worker.
+  Future<Map<String, dynamic>> _postBackend(
+    String path,
+    Map<String, Object?> body,
+  ) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    } catch (_) {
+      // Firebase Auth is not available (local/widget tests).
+    }
+
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_backendUrl$path'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw const AdminOfficerException(
+        'The staff account service timed out. Check your connection and try again.',
+      );
+    } catch (_) {
+      throw const AdminOfficerException(
+        'Could not reach the staff account service. Check your connection and try again.',
+      );
+    }
+
+    var payload = const <String, dynamic>{};
+    if (response.body.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) {
+          payload = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        // Leave the payload empty; the status code still tells us it failed.
+      }
+    }
+
+    if (response.statusCode != 200) {
+      final message = payload['error'];
+      if (response.statusCode == 404) {
+        throw const AdminOfficerException(
+          'The staff account service is not available. Update the OTP worker and try again.',
+        );
+      }
+      throw AdminOfficerException(
+        message is String && message.trim().isNotEmpty
+            ? message
+            : 'The staff account service could not complete that request.',
+      );
+    }
+    return payload;
+  }
+
   Future<WardOfficer> _requireOfficer(String officerId) async {
     final snapshot = await _officers.doc(officerId).get();
     if (!snapshot.exists) {
@@ -437,6 +617,8 @@ class AdminOfficerService {
     required String reason,
     required String fallbackReason,
     required DateTime now,
+    OfficerNotificationStatus notificationStatus =
+        OfficerNotificationStatus.sent,
   }) async {
     final trimmedReason = reason.trim();
     final auditLog = OfficerAuditLog(
@@ -458,11 +640,13 @@ class AdminOfficerService {
       newValue: newValue,
       reason: auditLog.reason,
       now: now,
+      status: notificationStatus,
     );
 
-    // The officer record and audit entry commit together. The queued email
-    // record is best-effort: a restricted notifications collection must not
-    // prevent an admin from creating or updating an officer.
+    // The officer record and audit entry commit together. The staff mirror and
+    // queued email record are best-effort: restricted /staff or
+    // /notifications rules must not prevent an admin from creating or updating
+    // an officer.
     final batch = _firestore.batch();
     batch.set(_officers.doc(officer.id), officer.toFirestore());
     batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
@@ -475,6 +659,7 @@ class AdminOfficerService {
       'active': officer.isActive,
       'mustChangePassword': officer.mustChangePassword,
       'assignedWard': officer.assignedWard,
+      'municipality': officer.municipality.code,
       'updatedAt': Timestamp.fromDate(now),
     }, SetOptions(merge: true));
     await batch.commit();
@@ -489,11 +674,62 @@ class AdminOfficerService {
       // The UI still reports the simulated email confirmation.
     }
 
+    final emailError = await _sendRealEmail(notification);
+    final finalNotification = emailError == null
+        ? notification
+        : OfficerNotification(
+            recipientEmail: notification.recipientEmail,
+            subject: notification.subject,
+            body: notification.body,
+            status: OfficerNotificationStatus.failed,
+            dispatchedAt: notification.dispatchedAt,
+            errorDetail: emailError,
+          );
+
     return OfficerActionResult(
       officer: officer,
       auditLog: auditLog,
-      notification: notification,
+      notification: finalNotification,
     );
+  }
+
+  Future<String?> _sendRealEmail(OfficerNotification notification) async {
+    if (_mailWorkerUrl.isEmpty || !FirebaseBootstrap.isReady) return null;
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        return 'Email not sent (missing auth token).';
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$_mailWorkerUrl/send-officer-email'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({
+              'to': notification.recipientEmail,
+              'subject': notification.subject,
+              'text': notification.body,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          debugPrint(
+            'Admin mail worker returned ${response.statusCode}: ${response.body}',
+          );
+        }
+        return 'Email failed (${response.statusCode}): ${response.body}';
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Admin mail worker error: $e');
+      }
+      return 'Email failed: $e';
+    }
   }
 
   OfficerNotification _dispatchNotification({
@@ -503,6 +739,7 @@ class AdminOfficerService {
     required String newValue,
     required String reason,
     required DateTime now,
+    OfficerNotificationStatus status = OfficerNotificationStatus.sent,
   }) {
     final subject = switch (action) {
       OfficerAuditAction.create =>
@@ -546,15 +783,16 @@ class AdminOfficerService {
       recipientEmail: officer.email,
       subject: subject,
       body: body,
-      status: OfficerNotificationStatus.sent,
+      status: status,
       dispatchedAt: now,
     );
   }
 
   /// Firestore record consumed by the backend email worker.
   ///
-  /// The UI already reports the simulated send as successful, while the stored
-  /// record stays queued until a real provider processes it.
+  /// The stored audit record reflects whether the email was actually delivered.
+  /// Create invitations are sent by the backend worker; suspend/reactivate/
+  /// delete notifications are still simulated.
   Map<String, dynamic> _notificationRecord({
     required OfficerNotification notification,
     required OfficerAuditLog auditLog,
@@ -564,8 +802,8 @@ class AdminOfficerService {
       'subject': notification.subject,
       'body': notification.body,
       'channel': 'email',
-      'status': 'queued',
-      'simulated': true,
+      'status': notification.status.value,
+      'simulated': auditLog.actionType != OfficerAuditAction.create,
       'officerId': auditLog.targetOfficerId,
       'officerName': auditLog.targetOfficerName,
       'auditLogId': auditLog.id,

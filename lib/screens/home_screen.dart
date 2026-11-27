@@ -25,6 +25,7 @@ import '../widgets/ns_pressable.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
+import '../widgets/ns_route.dart';
 import '../widgets/update_dialog.dart';
 import 'delete_profile_screen.dart';
 import 'login_screen.dart';
@@ -321,18 +322,14 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadProfile();
     if (!mounted) return;
 
-<<<<<<< Updated upstream
     User? user;
     try {
-      user = FirebaseAuth.instance.currentUser;
+      if (AuthService.isConfigured) {
+        user = FirebaseAuth.instance.currentUser;
+      }
     } catch (_) {
       // Firebase Auth is not available in local/widget tests.
     }
-=======
-    final user = AuthService.isConfigured
-        ? FirebaseAuth.instance.currentUser
-        : null;
->>>>>>> Stashed changes
     final displayName = (_name != null && _name!.trim().isNotEmpty)
         ? _name!.trim()
         : (user?.displayName?.trim().isNotEmpty == true
@@ -376,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onOpenSettings: () {
           Navigator.of(sheetContext).pop();
           Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+            NsPageRoute<void>(builder: (_) => const SettingsScreen()),
           );
         },
       ),
@@ -384,16 +381,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut() async {
-<<<<<<< Updated upstream
-    await const AuthService().signOut();
+    await widget.authService.signOut();
     await const SessionService().saveRememberMe(false);
     await const SessionService().saveAppLock(false);
-=======
-    await widget.authService.signOut();
->>>>>>> Stashed changes
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      NsPageRoute<void>(
+        style: NsTransitionStyle.fade,
+        builder: (_) => const LoginScreen(),
+      ),
       (route) => false,
     );
   }
@@ -408,10 +404,14 @@ class _HomeScreenState extends State<HomeScreen> {
         onProfile: _showAccountSheet,
       ),
       body: NsBackground(
+        ambientGlow: true,
         child: SafeArea(
           bottom: false,
           child: NsEntrance(
             child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
               child: Center(
                 child: ConstrainedBox(
@@ -474,19 +474,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Row(
       children: [
-        const NsLogo(size: 32, depth: 2),
+        const NsLogo(size: 32, depth: 0),
         const SizedBox(width: 9),
-        Text(
-          'NagarSathi',
-          style: TextStyle(
-            fontSize: 16,
-            height: 1.05,
-            fontWeight: FontWeight.w900,
-            color: tokens.heading,
-            letterSpacing: -0.4,
+        Expanded(
+          child: Text(
+            'NagarSathi',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16.5,
+              height: 1.05,
+              fontWeight: FontWeight.w900,
+              color: tokens.heading,
+              letterSpacing: -0.5,
+            ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 8),
         _RoundIconButton(
           icon: Icons.notifications_none_rounded,
           showDot: true,
@@ -539,10 +543,25 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        const NsMascot(
-          size: 58,
-          mood: NsMascotMood.happy,
-          look: Offset(0, 0.4),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? tokens.mint
+                : const Color(0xFF1E7B4B),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.primary.withValues(alpha: 0.35)
+                  : AppColors.primaryLight.withValues(alpha: 0.55),
+              width: 1.5,
+            ),
+          ),
+          child: const NsMascot(
+            size: 52,
+            mood: NsMascotMood.excited,
+            look: Offset(0, 0.4),
+          ),
         ),
       ],
     );
@@ -571,40 +590,54 @@ class _LocationPill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
+          padding: const EdgeInsets.fromLTRB(7, 6, 10, 6),
           decoration: BoxDecoration(
             color: tokens.surface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: tokens.border, width: 1.5),
+            border: Border.all(
+              color: tokens.border.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
             boxShadow: [
-              if (isDark)
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.28),
-                  offset: const Offset(0, 2),
-                  blurRadius: 0,
-                ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.05),
+                offset: const Offset(0, 4),
+                blurRadius: 12,
+              ),
             ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                locating
-                    ? Icons.my_location_rounded
-                    : Icons.location_on_rounded,
-                size: 15,
-                color: tokens.accentText,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                locating ? context.l10n.findingYourWard : label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: tokens.heading,
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: tokens.mint,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  locating
+                      ? Icons.my_location_rounded
+                      : Icons.location_on_rounded,
+                  size: 13.5,
+                  color: tokens.accentText,
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  locating ? context.l10n.findingYourWard : label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: tokens.heading,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
               Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 17,
@@ -629,117 +662,157 @@ class _ReportHero extends StatelessWidget {
     final strings = context.l10n;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // The hero stays lime in both themes; the inner action flips to a dark
-    // forest plate in dark mode so it reads like the login screen's surfaces.
-    final actionFill = isDark ? const Color(0xFF163B2B) : tokens.surface;
-    final actionBorder = isDark ? tokens.border : AppColors.forest;
-    final actionInk = isDark ? tokens.accentBright : AppColors.forest;
+    // Deep forest action plate pops crisply over the vibrant lime hero card
+    // in both light and dark modes with zero white glare.
+    const actionFill = Color(0xFF163B2B);
+    final actionInk = isDark ? tokens.accentBright : const Color(0xFFA5F542);
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF6AD90E), AppColors.primary, Color(0xFF4BB800)],
+        ),
+        borderRadius: BorderRadius.circular(26),
         border: Border.all(
-          color: isDark ? tokens.primaryStrong : AppColors.primaryDark,
-          width: 2,
+          color: isDark
+              ? AppColors.primaryLight.withValues(alpha: 0.35)
+              : AppColors.primaryDark.withValues(alpha: 0.35),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : AppColors.primaryDark.withValues(alpha: 0.34),
-            offset: const Offset(0, 5),
-            blurRadius: 0,
+                ? Colors.black.withValues(alpha: 0.42)
+                : AppColors.primary.withValues(alpha: 0.28),
+            offset: const Offset(0, 10),
+            blurRadius: 22,
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.62),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.campaign_rounded,
-                  size: 13,
-                  color: AppColors.forest,
+          Positioned(
+            top: -36,
+            right: -36,
+            width: 140,
+            height: 140,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.24),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 5),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.mint,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.campaign_rounded,
+                        size: 13,
+                        color: AppColors.forest,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        strings.communityReporting,
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.forest,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 13),
                 Text(
-                  strings.communityReporting,
+                  strings.somethingBrokenNearby,
                   style: const TextStyle(
-                    fontSize: 9,
+                    fontSize: 22.5,
+                    height: 1.12,
                     fontWeight: FontWeight.w900,
                     color: AppColors.forest,
-                    letterSpacing: 1.1,
+                    letterSpacing: -0.7,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  strings.reportHeroPrompt,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.forest.withValues(alpha: 0.9),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                NsPressable(
+                  onTap: onTap,
+                  color: actionFill,
+                  borderColor: isDark
+                      ? tokens.border
+                      : Colors.white.withValues(alpha: 0.6),
+                  shadowColor: isDark
+                      ? Colors.black.withValues(alpha: 0.45)
+                      : AppColors.forest.withValues(alpha: 0.16),
+                  radius: 15,
+                  depth: 0,
+                  child: SizedBox(
+                    height: 46,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.add_a_photo_rounded,
+                            size: 17,
+                            color: actionInk,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            strings.reportNow,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w900,
+                              color: actionInk,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 17,
+                            color: actionInk,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            strings.somethingBrokenNearby,
-            style: const TextStyle(
-              fontSize: 22,
-              height: 1.12,
-              fontWeight: FontWeight.w900,
-              color: AppColors.forest,
-              letterSpacing: -0.7,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            strings.reportHeroPrompt,
-            style: TextStyle(
-              fontSize: 12.5,
-              height: 1.45,
-              fontWeight: FontWeight.w700,
-              color: AppColors.forest.withValues(alpha: 0.88),
-            ),
-          ),
-          const SizedBox(height: 14),
-          NsPressable(
-            onTap: onTap,
-            color: actionFill,
-            borderColor: actionBorder,
-            shadowColor: isDark
-                ? Colors.black.withValues(alpha: 0.5)
-                : AppColors.forest.withValues(alpha: 0.22),
-            radius: 14,
-            depth: 3,
-            child: SizedBox(
-              height: 44,
-              child: Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add_a_photo_rounded, size: 17, color: actionInk),
-                    const SizedBox(width: 8),
-                    Text(
-                      strings.reportNow,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w900,
-                        color: actionInk,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 17,
-                      color: actionInk,
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
         ],
@@ -855,28 +928,38 @@ class _CategoryTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 13),
           decoration: BoxDecoration(
-            color: tokens.surface,
+            color: Color.alphaBlend(
+              tint.withValues(alpha: isDark ? 0.12 : 0.28),
+              tokens.surface,
+            ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: tokens.border, width: 1.5),
+            border: Border.all(
+              color: tint.withValues(alpha: isDark ? 0.42 : 0.6),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.045),
+                offset: const Offset(0, 5),
+                blurRadius: 12,
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
-                  color: tint.withValues(alpha: isDark ? 0.22 : 0.16),
+                  color: tint.withValues(alpha: isDark ? 0.30 : 0.24),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: tint.withValues(alpha: isDark ? 0.55 : 0.4),
-                  ),
                 ),
                 child: Icon(
                   icon,
-                  size: 19,
+                  size: 19.5,
                   color: isDark ? tokens.heading : AppColors.forest,
                 ),
               ),
@@ -970,6 +1053,7 @@ class _ReportRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Material(
       color: Colors.transparent,
@@ -977,23 +1061,32 @@ class _ReportRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+          padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
           decoration: BoxDecoration(
             color: tokens.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: tokens.border, width: 1.5),
+            border: Border.all(
+              color: tokens.border.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.045),
+                offset: const Offset(0, 5),
+                blurRadius: 14,
+              ),
+            ],
           ),
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: tokens.surfaceSoft,
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: tokens.border),
                 ),
-                child: Icon(icon, size: 19, color: tokens.heading),
+                child: Icon(icon, size: 19.5, color: tokens.heading),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -1122,7 +1215,7 @@ class _AvatarButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w900,
-              color: isDark ? tokens.accentText : Colors.white,
+              color: isDark ? tokens.accentText : const Color(0xFFEAF7E2),
               letterSpacing: 0.3,
             ),
           ),
@@ -1158,15 +1251,16 @@ class _BottomNavBar extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: tokens.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: tokens.border, width: 1.5),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(
+              color: tokens.border.withValues(alpha: 0.85),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : tokens.shadow,
-                offset: const Offset(0, 4),
-                blurRadius: 0,
+                color: Colors.black.withValues(alpha: isDark ? 0.48 : 0.08),
+                offset: const Offset(0, 8),
+                blurRadius: 22,
               ),
             ],
           ),
@@ -1348,7 +1442,9 @@ class _AccountSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
-                      color: isDark ? tokens.accentText : Colors.white,
+                      color: isDark
+                          ? tokens.accentText
+                          : const Color(0xFFEAF7E2),
                     ),
                   ),
                 ),

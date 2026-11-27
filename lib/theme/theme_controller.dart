@@ -8,9 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// guarded: widget tests do not register the shared_preferences plugin and
 /// the app must still start (and render) when storage is unavailable.
 class ThemeController extends ValueNotifier<ThemeMode> {
-  // TODO: restore ThemeMode.system as default when US-01 PR 2 (screen migration) is complete.
+  // Follows the phone's light/dark setting until the user picks one here.
   // ignore: use_super_parameters
-  ThemeController([ThemeMode initial = ThemeMode.light]) : super(initial);
+  ThemeController([ThemeMode initial = ThemeMode.system]) : super(initial);
 
   static final ThemeController instance = ThemeController();
 
@@ -19,7 +19,7 @@ class ThemeController extends ValueNotifier<ThemeMode> {
   static const storageKey = 'theme_mode';
 
   /// Reads the persisted mode. Missing or unknown values fall back to
-  /// [ThemeMode.light].
+  /// [ThemeMode.system], so a fresh install matches the phone.
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -45,6 +45,6 @@ class ThemeController extends ValueNotifier<ThemeMode> {
     for (final mode in ThemeMode.values) {
       if (mode.name == raw) return mode;
     }
-    return ThemeMode.light;
+    return ThemeMode.system;
   }
 }

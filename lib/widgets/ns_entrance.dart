@@ -1,14 +1,17 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Springy fade-up used as screens enter. Finite, so tests settle cleanly.
+/// GPU-composited springy fade-up used as screens enter.
+///
+/// Uses [FadeTransition], [SlideTransition], and [ScaleTransition] instead of
+/// [Opacity] so the engine never allocates an offscreen `saveLayer`.
 class NsEntrance extends StatefulWidget {
   const NsEntrance({
     super.key,
     required this.child,
     this.delay = Duration.zero,
-    this.duration = const Duration(milliseconds: 520),
-    this.offset = const Offset(0, 20),
-    this.scale = 0.97,
+    this.duration = const Duration(milliseconds: 360),
+    this.offset = const Offset(0, 16),
+    this.scale = 0.98,
   });
 
   final Widget child;
@@ -27,7 +30,40 @@ class _NsEntranceState extends State<NsEntrance>
     vsync: this,
     duration: widget.delay + widget.duration,
   );
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _scale;
   bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final totalMs = mathMax(1, (widget.delay + widget.duration).inMilliseconds);
+    final delayFraction = (widget.delay.inMilliseconds / totalMs).clamp(
+      0.0,
+      0.95,
+    );
+
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: Interval(delayFraction, 1.0, curve: Curves.easeOutCubic),
+    );
+    _opacity = CurvedAnimation(
+      parent: _controller,
+      curve: Interval(
+        delayFraction,
+        (delayFraction + (1.0 - delayFraction) * 0.65).clamp(0.0, 1.0),
+        curve: Curves.easeOut,
+      ),
+    );
+    _slide = Tween<Offset>(
+      begin: Offset(widget.offset.dx * 0.02, widget.offset.dy * 0.002),
+      end: Offset.zero,
+    ).animate(curved);
+    _scale = Tween<double>(begin: widget.scale, end: 1.0).animate(curved);
+  }
+
+  static int mathMax(int a, int b) => a > b ? a : b;
 
   @override
   void didChangeDependencies() {
@@ -50,30 +86,12 @@ class _NsEntranceState extends State<NsEntrance>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      child: widget.child,
-      builder: (context, child) {
-        final total = (widget.delay + widget.duration).inMilliseconds;
-        final elapsed = _controller.value * total - widget.delay.inMilliseconds;
-        final raw = (elapsed / widget.duration.inMilliseconds).clamp(0.0, 1.0);
-        final eased = Curves.easeOutCubic.transform(raw);
-        final opacity = (raw * 3).clamp(0.0, 1.0);
-
-        return Opacity(
-          opacity: opacity,
-          child: Transform.translate(
-            offset: Offset(
-              widget.offset.dx * (1 - eased),
-              widget.offset.dy * (1 - eased),
-            ),
-            child: Transform.scale(
-              scale: widget.scale + (1 - widget.scale) * eased,
-              child: child,
-            ),
-          ),
-        );
-      },
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: ScaleTransition(scale: _scale, child: widget.child),
+      ),
     );
   }
 }

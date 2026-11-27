@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_theme.dart';
 
-/// Labelled input with a focus halo, chunky border and optional status chip.
+/// Sleek soft-filled rounded-14 input with glowing focus halo and status chip.
 class NsTextField extends StatefulWidget {
   const NsTextField({
     super.key,
@@ -103,11 +103,27 @@ class _NsTextFieldState extends State<NsTextField> {
     final scheme = Theme.of(context).colorScheme;
     final tokens = NsColors.of(context);
 
+    final fillColor = _focused ? tokens.mint : tokens.surface;
+
+    const radius = BorderRadius.all(Radius.circular(14));
+    final idleBorder = OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: tokens.inputBorder, width: 1.2),
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: scheme.primary, width: 1.8),
+    );
+    final errorBorder = OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: tokens.errorBorder, width: 1.5),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 3, right: 3, bottom: 7),
+          padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
           child: Row(
             children: [
               Flexible(
@@ -115,9 +131,9 @@ class _NsTextFieldState extends State<NsTextField> {
                   widget.label,
                   style: TextStyle(
                     fontSize: 12.5,
-                    fontWeight: FontWeight.w900,
-                    color: tokens.heading,
-                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w800,
+                    color: _focused ? tokens.accentText : tokens.heading,
+                    letterSpacing: 0.15,
                   ),
                 ),
               ),
@@ -128,16 +144,14 @@ class _NsTextFieldState extends State<NsTextField> {
             ],
           ),
         ),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
+        DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(NsTokens.radius + 2),
+            borderRadius: radius,
             boxShadow: _focused
                 ? [
                     BoxShadow(
-                      color: scheme.primary.withValues(alpha: 0.18),
-                      spreadRadius: 4,
+                      color: scheme.primary.withValues(alpha: 0.15),
+                      spreadRadius: 3.5,
                       blurRadius: 0,
                     ),
                   ]
@@ -161,29 +175,40 @@ class _NsTextFieldState extends State<NsTextField> {
             autofocus: widget.autofocus,
             maxLength: widget.maxLength,
             style: TextStyle(
-              fontSize: 15.5,
+              fontSize: 15,
               fontWeight: FontWeight.w700,
               color: tokens.ink,
               letterSpacing: -0.1,
             ),
             cursorColor: tokens.accentText,
-            cursorWidth: 2.4,
+            cursorWidth: 2.2,
             cursorRadius: const Radius.circular(2),
             decoration: InputDecoration(
               counterText: '',
+              filled: true,
+              fillColor: fillColor,
               hintText: widget.hint,
+              hintStyle: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: tokens.muted.withValues(alpha: 0.78),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 15,
+              ),
+              border: idleBorder,
+              enabledBorder: idleBorder,
+              disabledBorder: idleBorder,
+              focusedBorder: focusedBorder,
+              errorBorder: errorBorder,
+              focusedErrorBorder: errorBorder,
               prefixIcon: widget.icon == null
                   ? null
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(
-                        widget.icon,
-                        key: ValueKey(widget.icon),
-                        size: 20,
-                        color: _focused
-                            ? tokens.accentText
-                            : tokens.muted,
-                      ),
+                  : Icon(
+                      widget.icon,
+                      size: 19,
+                      color: _focused ? tokens.accentText : tokens.muted,
                     ),
               suffixIcon:
                   widget.suffix ??
@@ -195,7 +220,7 @@ class _NsTextFieldState extends State<NsTextField> {
                             _obscured
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
-                            size: 20,
+                            size: 19,
                             color: tokens.muted,
                           ),
                           tooltip: _obscured
@@ -213,11 +238,11 @@ class _NsTextFieldState extends State<NsTextField> {
         ),
         if (widget.helper != null)
           Padding(
-            padding: const EdgeInsets.only(left: 4, right: 4, top: 7),
+            padding: const EdgeInsets.only(left: 4, right: 4, top: 6),
             child: Text(
               widget.helper!,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12,
                 height: 1.4,
                 fontWeight: FontWeight.w600,
                 color: tokens.muted,

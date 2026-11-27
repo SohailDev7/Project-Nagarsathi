@@ -8,6 +8,7 @@ import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'ns_pressable.dart';
+import 'ns_route.dart';
 
 /// Opens the quick settings sheet used across the citizen, staff and admin
 /// dashboards. Both appearance (dark mode) and language live here so the
@@ -250,7 +251,7 @@ class NsSettingsSheet extends StatelessWidget {
                       onTap: () {
                         Navigator.of(context).pop();
                         Navigator.of(context).push(
-                          MaterialPageRoute<void>(
+                          NsPageRoute<void>(
                             builder: (_) => SettingsScreen(
                               controller: _theme,
                               languageController: _language,

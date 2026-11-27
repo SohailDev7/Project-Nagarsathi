@@ -16,6 +16,7 @@ class SessionService {
   static const appLockKey = 'app_lock_enabled';
   static const staffIdentifierKey = 'staff_identifier';
   static const staffIsPhoneKey = 'staff_is_phone';
+  static const staffIsSuperAdminKey = 'staff_is_super_admin';
 
   /// Returns the saved choice, or `true` when nothing has been stored yet.
   Future<bool> loadRememberMe() async {
@@ -68,7 +69,12 @@ class SessionService {
       final identifier = prefs.getString(staffIdentifierKey);
       if (identifier == null || identifier.isEmpty) return null;
       final isPhone = prefs.getBool(staffIsPhoneKey) ?? false;
-      return StaffSession(identifier: identifier, isPhone: isPhone);
+      final isSuperAdmin = prefs.getBool(staffIsSuperAdminKey) ?? false;
+      return StaffSession(
+        identifier: identifier,
+        isPhone: isPhone,
+        isSuperAdmin: isSuperAdmin,
+      );
     } catch (_) {
       return null;
     }
@@ -78,11 +84,13 @@ class SessionService {
   Future<void> saveStaffSession({
     required String identifier,
     required bool isPhone,
+    bool isSuperAdmin = false,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(staffIdentifierKey, identifier);
       await prefs.setBool(staffIsPhoneKey, isPhone);
+      await prefs.setBool(staffIsSuperAdminKey, isSuperAdmin);
     } catch (_) {
       // Best effort only.
     }
@@ -94,6 +102,7 @@ class SessionService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(staffIdentifierKey);
       await prefs.remove(staffIsPhoneKey);
+      await prefs.remove(staffIsSuperAdminKey);
     } catch (_) {
       // Best effort only.
     }

@@ -4,16 +4,17 @@ import 'package:material_ui/material_ui.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
-import '../widgets/ns_auth_heading.dart';
-import '../widgets/ns_auth_scaffold.dart';
+import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_back_button.dart';
-import '../widgets/ns_card.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
-import '../widgets/ns_language_toggle.dart';
+import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_shake.dart';
+import '../widgets/ns_speech_bubble.dart';
+import '../widgets/ns_split_hero_scaffold.dart';
 import '../widgets/ns_text_field.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
+  final _shakeController = NsShakeController();
 
   bool _isLoading = false;
   bool _sent = false;
@@ -40,6 +42,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _identifierController.dispose();
+    _shakeController.dispose();
     super.dispose();
   }
 
@@ -75,6 +78,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) {
       HapticFeedback.mediumImpact();
+      _shakeController.shake();
       setState(() => _showError = true);
       return;
     }
@@ -90,6 +94,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } on AuthFailure catch (error) {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
+      _shakeController.shake();
       setState(() {
         _isLoading = false;
         _showError = true;
@@ -113,30 +118,43 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        NsAuthScaffold(
+        NsSplitHeroScaffold(
           topBar: Row(
             children: [
-              NsBackButton(onPressed: _backToSignIn),
-              const Spacer(),
-              const NsLanguageToggle(compact: true),
+              NsBackButton(onPressed: _backToSignIn, onDarkHeader: true),
+              const SizedBox(width: 10),
+              const NsLogo(size: 30, depth: 0),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'NagarSathi',
+                    style: TextStyle(
+                      fontSize: 16,
+                      height: 1.05,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const NsAuthPreferencePills(onDarkHeader: true),
             ],
           ),
-          child: NsEntrance(
-            child: TweenAnimationBuilder<double>(
-              key: ValueKey(_sent),
-              tween: Tween<double>(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, child) {
-                return Opacity(
-                  opacity: value,
-                  child: Transform.translate(
-                    offset: Offset(0, 12 * (1 - value)),
-                    child: child,
-                  ),
-                );
-              },
-              child: _sent ? _buildSuccess() : _buildForm(),
+          hero: _buildHero(),
+          sheetChild: NsEntrance(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: KeyedSubtree(
+                key: ValueKey(_sent),
+                child: _sent ? _buildSuccess() : _buildForm(),
+              ),
             ),
           ),
         ),
@@ -153,20 +171,64 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
+  Widget _buildHero() {
+    final tone = switch (_mood) {
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
+      _ => NsSpeechTone.neutral,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: NsSpeechBubble(
+                  messages: [_message],
+                  speaker: 'Sathi',
+                  tailOnRight: true,
+                  tone: tone,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          NsMascot(
+            size: 82,
+            mood: _mood,
+            look: const Offset(0, 0.7),
+            wave: _sent,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildForm() {
+    final tokens = NsColors.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        NsAuthHeading(
-          title: 'Forgot password?',
-          message: _message,
-          mood: _mood,
-          look: const Offset(0, 0.8),
-          mascotSize: 58,
+        Text(
+          'Forgot password?',
+          style: TextStyle(
+            fontSize: 25,
+            height: 1.1,
+            fontWeight: FontWeight.w900,
+            color: tokens.heading,
+            letterSpacing: -0.7,
+          ),
         ),
-        const SizedBox(height: 18),
-        NsCard(
-          padding: const EdgeInsets.all(16),
+        const SizedBox(height: 16),
+        NsShake(
+          controller: _shakeController,
           child: AutofillGroup(
             child: Form(
               key: _formKey,
@@ -209,7 +271,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           : const SizedBox.shrink(key: ValueKey('empty')),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   NsPrimaryButton(
                     label: 'Send reset link',
                     isLoading: _isLoading,
@@ -221,6 +283,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 10),
         Center(
           child: TextButton(
             onPressed: _backToSignIn,
@@ -237,66 +300,56 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Center(child: NsMascot(size: 72, mood: NsMascotMood.celebrate)),
-        const SizedBox(height: 12),
-        NsCard(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: tokens.mint,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary, width: 2),
-                ),
-                child: Icon(
-                  Icons.mark_email_read_rounded,
-                  size: 26,
-                  color: tokens.accentText,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Reset link sent',
-                style: TextStyle(
-                  fontSize: 26,
-                  height: 1.1,
-                  fontWeight: FontWeight.w900,
-                  color: tokens.heading,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Check $_contact for the reset instructions.',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  height: 1.5,
-                  fontWeight: FontWeight.w600,
-                  color: tokens.muted,
-                ),
-              ),
-              const SizedBox(height: 20),
-              NsPrimaryButton(
-                label: 'Back to sign in',
-                onPressed: _backToSignIn,
-                icon: Icons.arrow_forward_rounded,
-              ),
-              Center(
-                child: TextButton(
-                  onPressed: () => setState(() {
-                    _sent = false;
-                    _kind = IdentifierKind.empty;
-                    _identifierController.clear();
-                  }),
-                  child: const Text('Use a different email or phone'),
-                ),
-              ),
-            ],
+        Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tokens.mint,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.primary, width: 1.8),
+          ),
+          child: Icon(
+            Icons.mark_email_read_rounded,
+            size: 26,
+            color: tokens.accentText,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Reset link sent',
+          style: TextStyle(
+            fontSize: 25,
+            height: 1.1,
+            fontWeight: FontWeight.w900,
+            color: tokens.heading,
+            letterSpacing: -0.7,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Check $_contact for the reset instructions.',
+          style: TextStyle(
+            fontSize: 13.5,
+            height: 1.5,
+            fontWeight: FontWeight.w600,
+            color: tokens.muted,
+          ),
+        ),
+        const SizedBox(height: 20),
+        NsPrimaryButton(
+          label: 'Back to sign in',
+          onPressed: _backToSignIn,
+          icon: Icons.arrow_forward_rounded,
+        ),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() {
+              _sent = false;
+              _kind = IdentifierKind.empty;
+              _identifierController.clear();
+            }),
+            child: const Text('Use a different email or phone'),
           ),
         ),
       ],

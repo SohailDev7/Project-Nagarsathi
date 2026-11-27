@@ -374,7 +374,7 @@ class _UpdateDialogState extends State<UpdateDialog>
               Icon(
                 Icons.auto_awesome_outlined,
                 size: 14,
-                color: AppColors.primary,
+                color: AppColors.primaryDeep,
               ),
               SizedBox(width: 7),
               Text(
@@ -382,7 +382,7 @@ class _UpdateDialogState extends State<UpdateDialog>
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: AppColors.primaryDeep,
                   letterSpacing: 0.4,
                 ),
               ),
@@ -425,7 +425,7 @@ class _UpdateDialogState extends State<UpdateDialog>
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+                color: AppColors.primaryDeep,
               ),
             ),
           ],
@@ -480,7 +480,7 @@ class _UpdateDialogState extends State<UpdateDialog>
                     fontSize: 12.5,
                     height: 1.45,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryDeep,
                   ),
                 ),
               ),
@@ -658,7 +658,7 @@ class _Badge extends StatelessWidget {
         style: TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w700,
-          color: urgent ? const Color(0xFFB4570A) : AppColors.primaryDark,
+          color: urgent ? const Color(0xFF8A3F00) : AppColors.primaryDeep,
           letterSpacing: 0.1,
         ),
       ),
@@ -689,7 +689,7 @@ class _NoticeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 17, color: AppColors.primary),
+          Icon(icon, size: 17, color: AppColors.primaryDeep),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

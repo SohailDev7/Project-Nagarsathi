@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flutter:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # pubspec.yaml requires Flutter >= 3.47.0; pin the same release here
+          # if a newer stable channel ever breaks the material_ui package.
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  otp-worker:
+    name: Worker syntax check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: otp-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check worker syntax
+        run: node --check src/index.js

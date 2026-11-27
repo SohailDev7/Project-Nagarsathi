@@ -4,11 +4,24 @@ import '../theme/app_theme.dart';
 import 'ns_mascot.dart';
 import 'ns_speech_bubble.dart';
 
-/// One title and one mascot line of dialogue.
+/// Shared hero flight shuttle so text styles never flash yellow underlines.
+Widget nsHeroShuttle(
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection flightDirection,
+  BuildContext fromHeroContext,
+  BuildContext toHeroContext,
+) {
+  return Material(
+    type: MaterialType.transparency,
+    child: toHeroContext.widget,
+  );
+}
+
+/// Compact hero header with Sathi the yeti and a stable floating speech pill.
 ///
-/// Sathi the yeti carries the supporting message in a speech bubble instead of
-/// a topic chip or a second subtitle, so each screen keeps a single voice. The
-/// mascot sits on the right so the greeting reads first.
+/// The mascot sits inside an optional [Hero] so it glides smoothly between
+/// Login, Sign Up, Forgot Password, and Staff Login without layout jumps.
 class NsAuthHeading extends StatelessWidget {
   const NsAuthHeading({
     super.key,
@@ -17,8 +30,9 @@ class NsAuthHeading extends StatelessWidget {
     this.mood = NsMascotMood.idle,
     this.look = const Offset(0, 0.6),
     this.wave = false,
-    this.mascotSize = 64,
+    this.mascotSize = 68,
     this.mascotOnRight = true,
+    this.heroTag,
   });
 
   final String title;
@@ -28,42 +42,61 @@ class NsAuthHeading extends StatelessWidget {
   final bool wave;
   final double mascotSize;
   final bool mascotOnRight;
+  final String? heroTag;
 
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
-    final mascot = NsMascot(
+    final rawMascot = NsMascot(
       size: mascotSize,
       mood: mood,
       look: look,
       wave: wave,
     );
+    final mascot = heroTag == null
+        ? rawMascot
+        : Hero(
+            tag: heroTag!,
+            flightShuttleBuilder: nsHeroShuttle,
+            child: rawMascot,
+          );
+
     final tone = switch (mood) {
-      NsMascotMood.sad => NsSpeechTone.error,
-      NsMascotMood.celebrate => NsSpeechTone.success,
-      NsMascotMood.curious => NsSpeechTone.info,
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
       _ => NsSpeechTone.neutral,
     };
+
     final copy = Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             title,
             style: TextStyle(
-              fontSize: 28,
-              height: 1.05,
+              fontSize: 27,
+              height: 1.06,
               fontWeight: FontWeight.w900,
               color: tokens.heading,
               letterSpacing: -0.9,
             ),
           ),
           const SizedBox(height: 8),
-          NsSpeechBubble(
-            messages: [message],
-            speaker: 'Sathi the Yeti',
-            tailOnRight: mascotOnRight,
-            tone: tone,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 54),
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topLeft,
+              child: NsSpeechBubble(
+                messages: [message],
+                speaker: 'Sathi the Yeti',
+                tailOnRight: mascotOnRight,
+                tone: tone,
+              ),
+            ),
           ),
         ],
       ),
@@ -72,8 +105,8 @@ class NsAuthHeading extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: mascotOnRight
-          ? [copy, const SizedBox(width: 10), mascot]
-          : [mascot, const SizedBox(width: 10), copy],
+          ? [copy, const SizedBox(width: 12), mascot]
+          : [mascot, const SizedBox(width: 12), copy],
     );
   }
 }

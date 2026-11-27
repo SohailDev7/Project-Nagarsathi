@@ -1,10 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// A pressable surface with Duolingo-style depth.
+/// A pressable surface with Duolingo-style depth and zero shadow-lerp jank.
 ///
-/// The button sits on a hard coloured shadow. Pressing translates it into the
-/// shadow so the action feels physical instead of flat.
+/// The button sits on a hard coloured shadow. Pressing translates it smoothly
+/// into the shadow via a GPU-composited transform instead of interpolating
+/// `BoxDecoration` shadows on every frame.
 class NsPressable extends StatefulWidget {
   const NsPressable({
     super.key,
@@ -39,54 +40,90 @@ class NsPressable extends StatefulWidget {
   State<NsPressable> createState() => _NsPressableState();
 }
 
-class _NsPressableState extends State<NsPressable> {
+class _NsPressableState extends State<NsPressable>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 70),
+    reverseDuration: const Duration(milliseconds: 110),
+  );
   bool _pressed = false;
 
   bool get _enabled => widget.onTap != null;
 
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
   void _down(TapDownDetails _) {
     if (!_enabled) return;
     if (widget.haptic) HapticFeedback.selectionClick();
-    setState(() => _pressed = true);
+    _pressed = true;
+    _press.forward();
   }
 
   void _up() {
     if (!_pressed) return;
-    setState(() => _pressed = false);
+    _pressed = false;
+    _press.reverse();
   }
 
   void _cancel() {
     if (!_pressed) return;
-    setState(() => _pressed = false);
+    _pressed = false;
+    _press.reverse();
   }
 
   @override
   Widget build(BuildContext context) {
     final depth = _enabled ? widget.depth : 0.0;
-    final pressed = _pressed && _enabled;
 
-    final surface = AnimatedContainer(
-      duration: const Duration(milliseconds: 80),
-      curve: Curves.easeOut,
-      transform: Matrix4.translationValues(0, pressed ? depth : 0, 0),
-      padding: widget.padding,
+    final staticContent = DecoratedBox(
       decoration: BoxDecoration(
         color: widget.color,
         borderRadius: BorderRadius.circular(widget.radius),
         border: widget.borderWidth == 0
             ? null
             : Border.all(color: widget.borderColor, width: widget.borderWidth),
-        boxShadow: pressed || !_enabled
-            ? const []
-            : [
-                BoxShadow(
-                  color: widget.shadowColor,
-                  offset: Offset(0, depth),
-                  blurRadius: 0,
-                ),
-              ],
       ),
-      child: widget.child,
+      child: Padding(padding: widget.padding, child: widget.child),
+    );
+
+    final surface = AnimatedBuilder(
+      animation: _press,
+      child: staticContent,
+      builder: (context, child) {
+        final t = Curves.easeOut.transform(_press.value);
+        final translateY = depth * t;
+        final shadowHeight = depth * (1.0 - t);
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            if (_enabled && shadowHeight > 0.1)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: depth,
+                bottom: -depth,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: widget.shadowColor,
+                    borderRadius: BorderRadius.circular(widget.radius),
+                  ),
+                ),
+              ),
+            Transform.translate(
+              offset: Offset(0, translateY),
+              child: Transform.scale(
+                scale: 1.0 - 0.012 * t,
+                child: child,
+              ),
+            ),
+          ],
+        );
+      },
     );
 
     return Semantics(

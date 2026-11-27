@@ -6,9 +6,9 @@ import 'ns_background.dart';
 
 /// Compact single-viewport shell for every auth screen.
 ///
-/// The top bar stays pinned so entry points such as the staff portal are
-/// always reachable without scrolling. Short forms sit directly under it and
-/// the body only scrolls on very small screens or with the keyboard open.
+/// The top bar stays pinned so navigation and preferences are always reachable
+/// without scrolling. Uses keyboard-aware smooth scrolling so opening the soft
+/// keyboard never jumps or clips form controls.
 class NsAuthScaffold extends StatelessWidget {
   const NsAuthScaffold({
     super.key,
@@ -16,6 +16,7 @@ class NsAuthScaffold extends StatelessWidget {
     this.topBar,
     this.bottom,
     this.staff = false,
+    this.ambientGlow = true,
     this.maxWidth = 430,
     this.centerContent = false,
   });
@@ -24,6 +25,7 @@ class NsAuthScaffold extends StatelessWidget {
   final Widget? topBar;
   final Widget? bottom;
   final bool staff;
+  final bool ambientGlow;
   final double maxWidth;
 
   /// Centres short forms in the space under the top bar instead of leaving a
@@ -35,10 +37,11 @@ class NsAuthScaffold extends StatelessWidget {
     return Scaffold(
       body: NsBackground(
         staff: staff,
+        ambientGlow: ambientGlow,
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final horizontal = constraints.maxWidth < 380 ? 18.0 : 24.0;
+              final horizontal = constraints.maxWidth < 380 ? 16.0 : 22.0;
               final available = math.max(
                 0.0,
                 constraints.maxWidth - horizontal * 2,
@@ -53,7 +56,7 @@ class NsAuthScaffold extends StatelessWidget {
                         horizontal,
                         10,
                         horizontal,
-                        0,
+                        4,
                       ),
                       child: SizedBox(width: contentWidth, child: topBar),
                     ),
@@ -61,16 +64,21 @@ class NsAuthScaffold extends StatelessWidget {
                     child: LayoutBuilder(
                       builder: (context, body) {
                         return SingleChildScrollView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
                           padding: EdgeInsets.fromLTRB(
                             horizontal,
-                            12,
+                            10,
                             horizontal,
                             24,
                           ),
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               minHeight: centerContent
-                                  ? math.max(0, body.maxHeight - 36)
+                                  ? math.max(0, body.maxHeight - 34)
                                   : 0,
                             ),
                             child: Center(
@@ -95,7 +103,7 @@ class NsAuthScaffold extends StatelessWidget {
                         horizontal,
                         4,
                         horizontal,
-                        16,
+                        14,
                       ),
                       child: SizedBox(width: contentWidth, child: bottom),
                     ),

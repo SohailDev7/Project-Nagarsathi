@@ -10,6 +10,7 @@ import '../widgets/ns_background.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_route.dart';
 import 'login_screen.dart';
 import 'staff_login_screen.dart';
 
@@ -133,8 +134,12 @@ class _AppLockScreenState extends State<AppLockScreen>
       if (widget.resumeMode && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       } else {
-        Navigator.of(context)
-            .pushReplacement(MaterialPageRoute<void>(builder: widget.target));
+        Navigator.of(context).pushReplacement(
+          NsPageRoute<void>(
+            style: NsTransitionStyle.fade,
+            builder: widget.target,
+          ),
+        );
       }
       return;
     }
@@ -213,7 +218,10 @@ class _AppLockScreenState extends State<AppLockScreen>
       await widget.sessionService.clearStaffSession();
       if (!mounted) return;
       navigator.pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const StaffLoginScreen()),
+        NsPageRoute<void>(
+          style: NsTransitionStyle.fade,
+          builder: (_) => const StaffLoginScreen(),
+        ),
         (route) => false,
       );
     } else {
@@ -221,7 +229,10 @@ class _AppLockScreenState extends State<AppLockScreen>
       await widget.sessionService.clearStaffSession();
       if (!mounted) return;
       navigator.pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+        NsPageRoute<void>(
+          style: NsTransitionStyle.fade,
+          builder: (_) => const LoginScreen(),
+        ),
         (route) => false,
       );
     }

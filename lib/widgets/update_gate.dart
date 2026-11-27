@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../models/app_update.dart';
+import '../services/release_notification_service.dart';
 import '../services/shorebird_service.dart';
 import '../services/update_service.dart';
 import 'update_dialog.dart';
@@ -22,7 +25,9 @@ class UpdateGate extends StatefulWidget {
 
 class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   final _service = UpdateService();
+  final _releaseNotifications = ReleaseNotificationService.instance;
 
+  Timer? _startupDelay;
   bool _busy = false;
   bool _dialogVisible = false;
 
@@ -30,12 +35,33 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runChecks());
+    // Defer update & push notification setup slightly so initial route
+    // transitions never contend with network/storage startup work.
+    _startupDelay = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      unawaited(_initReleaseNotifications());
+      _runChecks();
+    });
+  }
+
+  Future<void> _initReleaseNotifications() async {
+    await _releaseNotifications.initialize(
+      onUpdateNotificationTap: () {
+        if (!mounted) return;
+        unawaited(_runChecks(checkPatch: false, force: true, forcePrompt: true));
+      },
+      onForegroundReleasePush: () async {
+        if (!mounted) return;
+        await _runChecks(checkPatch: false, force: true);
+      },
+    );
   }
 
   @override
   void dispose() {
+    _startupDelay?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_releaseNotifications.dispose());
     _service.dispose();
     super.dispose();
   }
@@ -47,7 +73,11 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _runChecks({bool checkPatch = true}) async {
+  Future<void> _runChecks({
+    bool checkPatch = true,
+    bool force = false,
+    bool forcePrompt = false,
+  }) async {
     if (_busy) return;
     _busy = true;
 
@@ -57,9 +87,18 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
         if (mounted) _announcePatch(patch);
       }
 
-      final update = await _service.checkForUpdate();
+      final update = await _service.checkForUpdate(force: force);
       if (!mounted || update == null) return;
-      if (!await _service.shouldPrompt(update)) return;
+
+      final shouldPrompt = forcePrompt || await _service.shouldPrompt(update);
+      if (!shouldPrompt) {
+        // If user dismissed/snoozed earlier, still send one system notification
+        // for any newer release so they have an easy reminder in the tray.
+        await _releaseNotifications.notifyIfNewRelease(update);
+        return;
+      }
+
+      await _releaseNotifications.markVersionNotified(update.version.display);
       if (!mounted) return;
       await _present(update);
     } catch (error) {

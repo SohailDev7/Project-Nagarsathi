@@ -1,24 +1,32 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_strings.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
-import '../widgets/ns_auth_heading.dart';
-import '../widgets/ns_auth_scaffold.dart';
+import '../widgets/app_lock_gate.dart';
+import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_back_button.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_google_button.dart';
-import '../widgets/ns_language_toggle.dart';
+import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
-import '../widgets/ns_pressable.dart';
+import '../widgets/ns_otp_input.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_route.dart';
+import '../widgets/ns_shake.dart';
+import '../widgets/ns_speech_bubble.dart';
+import '../widgets/ns_split_hero_scaffold.dart';
 import '../widgets/ns_step_progress.dart';
 import '../widgets/ns_text_field.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 
-/// Two short steps: your details, then how you keep the account secure.
+/// Three streamlined steps: details, password + checklist, and 6-digit email OTP.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -30,6 +38,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   static const _totalSteps = 3;
   static const _passwordStep = 1;
   static const _lastStep = 2;
+  static const _resendCooldownSeconds = 45;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -37,6 +46,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _otpController = TextEditingController();
+  final _shakeController = NsShakeController();
 
   final _formKeys = List<GlobalKey<FormState>>.generate(
     _totalSteps,
@@ -53,60 +63,79 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _fieldFocused = false;
   String? _errorMessage;
 
+  Timer? _resendTimer;
+  int _resendRemaining = 0;
+
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     _otpController.dispose();
+    _shakeController.dispose();
     super.dispose();
+  }
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendRemaining = _resendCooldownSeconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendRemaining <= 1) {
+        timer.cancel();
+        setState(() => _resendRemaining = 0);
+      } else {
+        setState(() => _resendRemaining -= 1);
+      }
+    });
   }
 
   NsMascotMood get _mood {
     if (_celebrating) return NsMascotMood.celebrate;
     if (_showError) return NsMascotMood.sad;
+    if (_fieldFocused && _step == 1) {
+      // Eyes shut while the new password is typed.
+      return NsMascotMood.sleepy;
+    }
     if (_fieldFocused) return NsMascotMood.curious;
     return NsMascotMood.happy;
   }
 
-  (String, String) get _copy => switch (_step) {
-    0 => ('Create your account', 'Tell me who you are and where to reach you.'),
-    1 => (
-      'Secure your account',
-      'At least 8 characters. I promise not to peek!',
-    ),
-    _ => ('Verify your email', 'Enter the 6-digit code sent to your email.'),
+  (String, String) _copy(AppStrings s) => switch (_step) {
+    0 => (s.createAccount, s.mascotStepYourDetails),
+    1 => (s.password, s.mascotPasswordPrompt),
+    _ => (s.verificationCode, s.mascotStepVerify),
   };
 
-  String get _stepMessage {
-    if (_celebrating) return 'You are all set! Welcome to NagarSathi.';
-    if (_showError) {
-      return _errorMessage ??
-          (_step == _lastStep
-              ? 'Check both passwords and try once more.'
-              : 'Check your answer and try once more.');
-    }
-    if (_googleLoading) {
-      return 'Opening Google… pick your account.';
-    }
-    if (_isLoading) {
-      return 'Creating your citizen account…';
-    }
-    return _copy.$2;
+  String _stepMessage(AppStrings s) {
+    if (_celebrating) return s.mascotAllSet;
+    if (_showError) return _errorMessage ?? s.mascotTryAgain;
+    if (_googleLoading) return s.mascotGoogleLoading;
+    if (_isLoading) return s.mascotCreatingAccount;
+    return _copy(s).$2;
+  }
+
+  void _triggerError([String? message]) {
+    HapticFeedback.mediumImpact();
+    _shakeController.shake();
+    setState(() {
+      _isLoading = false;
+      _showError = true;
+      if (message != null) _errorMessage = message;
+    });
   }
 
   void _next() {
     FocusScope.of(context).unfocus();
-    if (!(_formKeys[_step].currentState?.validate() ?? false)) {
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _showError = true;
-        _errorMessage = _step == _lastStep
-            ? 'Check both passwords and try once more.'
-            : null;
-      });
+    if (_step != _lastStep &&
+        !(_formKeys[_step].currentState?.validate() ?? false)) {
+      _triggerError();
       return;
     }
 
@@ -132,7 +161,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   void _back() {
     FocusScope.of(context).unfocus();
     if (_step == 0) {
-      Navigator.of(context).pop();
+      _returnToSignIn();
       return;
     }
     setState(() {
@@ -144,16 +173,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
   }
 
+  void _returnToSignIn() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushReplacement(
+      NsPageRoute<void>(builder: (_) => const LoginScreen()),
+    );
+  }
+
   Future<void> _requestOtp() async {
+    final strings = context.l10n;
     if (_step == _passwordStep) {
       if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
-        setState(() => _showError = true);
+        _triggerError();
         return;
       }
       if (!_acceptedTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Accept the terms to continue.')),
-        );
+        _triggerError(strings.acceptTermsNotice);
         return;
       }
     }
@@ -166,6 +205,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       await const AuthService().requestEmailOtp(_emailController.text);
       if (!mounted) return;
+      _startResendCooldown();
       setState(() {
         _isLoading = false;
         _direction = 1;
@@ -173,33 +213,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
       });
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerError(error.message);
     }
   }
 
   Future<void> _createAccount() async {
+    final strings = context.l10n;
     FocusScope.of(context).unfocus();
-    if (!(_formKeys[_lastStep].currentState?.validate() ?? false)) {
-      HapticFeedback.mediumImpact();
-      setState(() => _showError = true);
+    final otpErr = Validators.otp(_otpController.text, strings: strings);
+    if (otpErr != null) {
+      _triggerError(otpErr);
       return;
     }
 
     if (!_acceptedTerms) {
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Accept the terms to continue.')),
-      );
+      _triggerError(strings.acceptTermsNotice);
       return;
     }
 
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
+      _showError = false;
       _errorMessage = null;
     });
 
@@ -216,12 +251,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _isLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerError(error.message);
       return;
     }
 
@@ -244,12 +274,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       signedIn = await const AuthService().signInWithGoogle();
     } on AuthFailure catch (error) {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() {
-        _googleLoading = false;
-        _showError = true;
-        _errorMessage = error.message;
-      });
+      _triggerError(error.message);
+      setState(() => _googleLoading = false);
       return;
     }
 
@@ -270,12 +296,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
     HapticFeedback.mediumImpact();
 
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    await Future<void>.delayed(const Duration(milliseconds: 520));
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        builder: (_) => const HomeScreen(showRememberMePrompt: true),
+      NsPageRoute<void>(
+        style: NsTransitionStyle.fade,
+        builder: (_) => const AppLockGate(
+          child: HomeScreen(showRememberMePrompt: true),
+        ),
       ),
       (route) => false,
     );
@@ -291,44 +320,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       },
       child: Stack(
         children: [
-          NsAuthScaffold(
+          NsSplitHeroScaffold(
             topBar: _buildTopBar(),
-            bottom: _buildActions(),
-            child: AutofillGroup(
-              child: NsEntrance(
-                duration: const Duration(milliseconds: 420),
-                child: TweenAnimationBuilder<double>(
-                  key: ValueKey('step-$_step'),
-                  tween: Tween<double>(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, child) {
-                    return Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(14 * (1 - value) * _direction, 0),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      NsAuthHeading(
-                        title: _copy.$1,
-                        message: _stepMessage,
-                        mood: _mood,
-                        look: const Offset(0, 0.6),
-                        wave: _celebrating,
-                        mascotSize: 58,
-                      ),
-                      const SizedBox(height: 20),
-                      _buildStep(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            hero: _buildHero(),
+            sheetChild: NsEntrance(child: _buildSheetContent()),
           ),
           if (_celebrating)
             Positioned.fill(
@@ -344,40 +339,254 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildTopBar() {
-    final tokens = NsColors.of(context);
-
     return Row(
       children: [
-        NsBackButton(onPressed: _back),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${_step + 1} of $_totalSteps',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: tokens.accentText,
-                  letterSpacing: 0.6,
-                ),
+        NsBackButton(onPressed: _back, onDarkHeader: true),
+        const SizedBox(width: 10),
+        const NsLogo(size: 30, depth: 0),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'NagarSathi',
+              style: TextStyle(
+                fontSize: 16,
+                height: 1.05,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.5,
               ),
-              const SizedBox(height: 5),
-              NsStepProgress(step: _step, total: _totalSteps, height: 14),
-            ],
+            ),
           ),
         ),
         const SizedBox(width: 8),
-        const NsLanguageToggle(compact: true),
-        const SizedBox(width: 8),
-        _CloseButton(onPressed: () => Navigator.of(context).pop()),
+        const NsAuthPreferencePills(onDarkHeader: true),
       ],
     );
   }
 
+  Widget _buildHero() {
+    final strings = context.l10n;
+    final msg = _stepMessage(strings);
+    final tone = switch (_mood) {
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
+      _ => NsSpeechTone.neutral,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: NsSpeechBubble(
+                  messages: [msg],
+                  speaker: 'Sathi',
+                  tailOnRight: true,
+                  tone: tone,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          NsMascot(
+            size: 80,
+            mood: _mood,
+            look: const Offset(0, 0.5),
+            wave: _celebrating,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSheetContent() {
+    final strings = context.l10n;
+    final tokens = NsColors.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                _copy(strings).$1,
+                style: TextStyle(
+                  fontSize: 24,
+                  height: 1.1,
+                  fontWeight: FontWeight.w900,
+                  color: tokens.heading,
+                  letterSpacing: -0.7,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: tokens.mint,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                strings.stepOfTotal(_step + 1, _totalSteps),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                  color: tokens.accentText,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        NsStepProgress(
+          step: _step,
+          total: _totalSteps,
+          height: 10,
+        ),
+        const SizedBox(height: 16),
+        NsShake(
+          controller: _shakeController,
+          child: AutofillGroup(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final slide = Tween<Offset>(
+                    begin: Offset(0.05 * _direction, 0),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: slide, child: child),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey('signup-step-$_step'),
+                  child: _buildStepCardContent(),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_step == 0) ...[
+          const SizedBox(height: 16),
+          NsAuthDivider(label: strings.orContinueWith),
+          const SizedBox(height: 10),
+          NsSocialAuthRow(
+            onGooglePressed: _signUpWithGoogle,
+            googleLoading: _googleLoading,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                strings.alreadyHaveAccount,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.muted,
+                ),
+              ),
+              TextButton(
+                onPressed: _returnToSignIn,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  strings.signIn,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: tokens.accentText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStepCardContent() {
+    final strings = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_showError && _errorMessage != null) ...[
+          _buildErrorBanner(),
+          const SizedBox(height: 12),
+        ],
+        _buildStep(),
+        const SizedBox(height: 16),
+        NsPrimaryButton(
+          label: _step == _lastStep ? strings.createAccount : strings.continueText,
+          isLoading: _isLoading,
+          onPressed: _next,
+          icon: _step == _lastStep
+              ? Icons.check_rounded
+              : Icons.arrow_forward_rounded,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    final tokens = NsColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: tokens.errorBorder.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tokens.errorBorder.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, size: 18, color: tokens.errorBorder),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              _errorMessage ?? '',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: tokens.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStep() {
+    final strings = context.l10n;
+    final tokens = NsColors.of(context);
+
     if (_step == 0) {
       return Form(
         key: _formKeys[0],
@@ -386,26 +595,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
           children: [
             NsTextField(
               controller: _nameController,
-              label: 'Full name',
+              label: strings.fullName,
               hint: 'Sita Sharma',
               icon: Icons.person_rounded,
               textCapitalization: TextCapitalization.words,
               textInputAction: TextInputAction.next,
-              validator: Validators.name,
+              validator: (v) => Validators.name(v, strings: strings),
               autofillHints: const [AutofillHints.name],
               autofocus: true,
               onChanged: (_) => _clearError(),
               onFocusChange: _setFieldFocus,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 13),
             NsTextField(
               controller: _emailController,
-              label: 'Email',
+              label: strings.email,
               hint: 'you@example.com',
               icon: Icons.mail_rounded,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
-              validator: Validators.email,
+              validator: (v) => Validators.email(v, strings: strings),
               autocorrect: false,
               autofillHints: const [AutofillHints.email],
               inputFormatters: [
@@ -414,20 +623,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
               onChanged: (_) => _clearError(),
               onFocusChange: _setFieldFocus,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 13),
             NsTextField(
               controller: _phoneController,
-              label: 'Phone (optional)',
+              label: '${strings.phone} (${strings.optional})',
               hint: '+977 98XXXXXXXX',
               icon: Icons.phone_iphone_rounded,
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.done,
-              validator: Validators.optionalPhone,
+              validator: (v) => Validators.optionalPhone(v, strings: strings),
               autofillHints: const [AutofillHints.telephoneNumber],
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s()]')),
               ],
-              helper: 'Only used for urgent ward notices.',
+              helper: strings.signUpPhoneHelper,
               onChanged: (_) => _clearError(),
               onFocusChange: _setFieldFocus,
               onFieldSubmitted: (_) => _next(),
@@ -443,36 +652,112 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            NsTextField(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: tokens.surfaceSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: tokens.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.mark_email_read_rounded,
+                    size: 18,
+                    color: tokens.accentText,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _emailController.text.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: tokens.ink,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              _direction = -1;
+                              _step = 0;
+                              _showError = false;
+                              _errorMessage = null;
+                            });
+                          },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      strings.editEmail,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: tokens.accentText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            NsOtpInput(
               controller: _otpController,
-              label: 'Email verification code',
-              hint: '6-digit code',
-              icon: Icons.pin_rounded,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.done,
-              validator: (value) =>
-                  RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '')
-                  ? null
-                  : 'Enter the 6-digit code',
-              autofocus: true,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
+              enabled: !_isLoading,
+              hasError: _showError,
               onChanged: (_) => _clearError(),
-              onFieldSubmitted: (_) => _createAccount(),
+              onCompleted: (_) {
+                if (!_isLoading) _createAccount();
+              },
             ),
             const SizedBox(height: 12),
             Text(
-              'We sent a code to ${_emailController.text}. It expires in 5 minutes.',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: TextButton(
-                onPressed: _isLoading ? null : _requestOtp,
-                child: const Text('Resend code'),
+              strings.otpSentNotice(_emailController.text.trim()),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: tokens.muted,
               ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: _resendRemaining > 0
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.surfaceSoft,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: tokens.border),
+                      ),
+                      child: Text(
+                        strings.resendIn(_resendRemaining),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.muted,
+                        ),
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: _isLoading ? null : _requestOtp,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: Text(strings.resendCode),
+                    ),
             ),
           ],
         ),
@@ -486,91 +771,51 @@ class _SignUpScreenState extends State<SignUpScreen> {
         children: [
           NsTextField(
             controller: _passwordController,
-            label: 'Password',
-            hint: 'Create a password',
+            label: strings.password,
+            hint: strings.passwordHint,
             icon: Icons.lock_rounded,
             obscureText: true,
             textInputAction: TextInputAction.next,
-            validator: Validators.password,
+            validator: (v) => Validators.password(v, strings: strings),
             autofillHints: const [AutofillHints.newPassword],
             onChanged: (_) => _onPasswordChanged(),
             onFocusChange: _setFieldFocus,
           ),
-          _PasswordStrength(password: _passwordController.text),
+          _PasswordStrengthPanel(password: _passwordController.text),
           const SizedBox(height: 14),
           NsTextField(
             controller: _confirmController,
-            label: 'Confirm password',
-            hint: 'Repeat your password',
+            label: strings.confirmPassword,
+            hint: strings.confirmPassword,
             icon: Icons.lock_reset_rounded,
             obscureText: true,
             textInputAction: TextInputAction.done,
-            validator: Validators.confirmPassword(_passwordController),
+            validator: Validators.confirmPassword(
+              _passwordController,
+              strings: strings,
+            ),
             onChanged: (_) => _clearError(),
             onFocusChange: _setFieldFocus,
-            onFieldSubmitted: (_) => _createAccount(),
+            onFieldSubmitted: (_) => _next(),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           _TermsRow(
             accepted: _acceptedTerms,
             onChanged: (value) {
               HapticFeedback.selectionClick();
-              setState(() => _acceptedTerms = value);
+              setState(() {
+                _acceptedTerms = value;
+                if (_showError &&
+                    _errorMessage == strings.acceptTermsNotice &&
+                    value) {
+                  _showError = false;
+                  _errorMessage = null;
+                }
+              });
             },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildActions() {
-    final tokens = NsColors.of(context);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        NsPrimaryButton(
-          label: _step == _lastStep ? 'Create account' : 'Continue',
-          isLoading: _isLoading,
-          onPressed: _next,
-          icon: _step == _lastStep
-              ? Icons.check_rounded
-              : Icons.arrow_forward_rounded,
-        ),
-        if (_step == 0) ...[
-          const SizedBox(height: 6),
-          const NsAuthDivider(label: 'or sign up with'),
-          const SizedBox(height: 8),
-          NsGoogleButton(
-            label: 'Sign up with Google',
-            isLoading: _googleLoading,
-            onPressed: _signUpWithGoogle,
-          ),
-          const SizedBox(height: 2),
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Already have an account?',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: tokens.muted,
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text(
-                  'Sign in',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
     );
   }
 
@@ -597,71 +842,148 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-class _PasswordStrength extends StatelessWidget {
-  const _PasswordStrength({required this.password});
+class _PasswordStrengthPanel extends StatelessWidget {
+  const _PasswordStrengthPanel({required this.password});
 
   final String password;
+
+  bool get _hasMinLength => password.length >= 8;
+  bool get _hasNumber => RegExp(r'\d').hasMatch(password);
+  bool get _hasUpperOrSymbol =>
+      RegExp(r'[A-Z]').hasMatch(password) ||
+      RegExp(r'[^A-Za-z0-9]').hasMatch(password);
 
   int get _score {
     if (password.isEmpty) return 0;
     var score = 0;
-    if (password.length >= 8) score += 1;
+    if (_hasMinLength) score += 1;
     if (password.length >= 12) score += 1;
-    if (RegExp(r'\d').hasMatch(password)) score += 1;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(password)) score += 1;
+    if (_hasNumber) score += 1;
+    if (_hasUpperOrSymbol) score += 1;
     return score;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (password.isEmpty) return const SizedBox.shrink();
-
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
-    const labels = ['Too short', 'Fair', 'Good', 'Strong'];
     final score = _score;
-    final label = score == 0 ? labels[0] : labels[(score - 1).clamp(0, 3)];
+    final label = switch (score) {
+      0 => '',
+      1 => strings.pwdStrengthWeak,
+      2 => strings.pwdStrengthFair,
+      3 => strings.pwdStrengthGood,
+      _ => strings.pwdStrengthStrong,
+    };
     final barColor = switch (score) {
-      0 => tokens.errorBorder,
-      1 => AppColors.sun,
-      2 => tokens.accentBright,
+      0 => tokens.hairline,
+      1 => tokens.errorBorder,
+      2 => AppColors.sun,
+      3 => tokens.accentBright,
       _ => AppColors.primary,
     };
     final labelColor = switch (score) {
-      0 => tokens.errorBorder,
-      1 => tokens.muted,
-      2 => tokens.accentText,
+      1 => tokens.errorBorder,
+      2 => tokens.muted,
+      3 => tokens.accentText,
       _ => AppColors.primary,
     };
-    final filled = score == 0 ? 1 : score;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 3, right: 3),
+      padding: const EdgeInsets.only(top: 10, left: 2, right: 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: List.generate(4, (index) {
-              return Expanded(
-                child: Container(
-                  height: 5,
-                  margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
-                  decoration: BoxDecoration(
-                    color: index < filled ? barColor : tokens.hairline,
-                    borderRadius: BorderRadius.circular(3),
+            children: [
+              Expanded(
+                child: Row(
+                  children: List.generate(4, (index) {
+                    final active = password.isNotEmpty && index < score;
+                    return Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        height: 5,
+                        margin: EdgeInsets.only(right: index == 3 ? 0 : 6),
+                        decoration: BoxDecoration(
+                          color: active ? barColor : tokens.hairline,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              if (label.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: labelColor,
                   ),
                 ),
-              );
-            }),
+              ],
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              _RuleChip(label: strings.pwdRuleLength, met: _hasMinLength),
+              _RuleChip(label: strings.pwdRuleNumber, met: _hasNumber),
+              _RuleChip(
+                label: strings.pwdRuleSymbolOrUpper,
+                met: _hasUpperOrSymbol,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleChip extends StatelessWidget {
+  const _RuleChip({required this.label, required this.met});
+
+  final String label;
+  final bool met;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final fg = met ? tokens.accentText : tokens.muted;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: met ? tokens.mint : tokens.surfaceSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: met ? AppColors.primary.withValues(alpha: 0.6) : tokens.border,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            met ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+            size: 13,
+            color: fg,
+          ),
+          const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: labelColor,
-              letterSpacing: 0.1,
+              color: fg,
             ),
           ),
         ],
@@ -679,6 +1001,7 @@ class _TermsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NsColors.of(context);
+    final strings = context.l10n;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -696,27 +1019,27 @@ class _TermsRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(top: 7),
+              padding: const EdgeInsets.only(top: 7),
               child: Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: 'I agree to the '),
+                    TextSpan(text: strings.agreeToTermsPrefix),
                     TextSpan(
-                      text: 'Terms of Service',
+                      text: strings.termsOfServiceLabel,
                       style: TextStyle(
                         color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    TextSpan(text: ' and '),
+                    TextSpan(text: strings.andLabel),
                     TextSpan(
-                      text: 'Privacy Policy',
+                      text: strings.privacyPolicyLabel,
                       style: TextStyle(
                         color: tokens.accentText,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    TextSpan(text: '.'),
+                    const TextSpan(text: '.'),
                   ],
                 ),
                 style: TextStyle(
@@ -729,38 +1052,6 @@ class _TermsRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CloseButton extends StatelessWidget {
-  const _CloseButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-
-    return NsPressable(
-      onTap: onPressed,
-      color: tokens.surface,
-      borderColor: tokens.controlBorder,
-      shadowColor: tokens.shadow,
-      depth: 3,
-      radius: 14,
-      expand: false,
-      semanticLabel: 'Close',
-      child: SizedBox(
-        width: 42,
-        height: 42,
-        child: Tooltip(
-          message: 'Close',
-          child: Center(
-            child: Icon(Icons.close_rounded, size: 22, color: tokens.heading),
-          ),
-        ),
       ),
     );
   }

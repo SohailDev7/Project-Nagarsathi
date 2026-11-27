@@ -97,6 +97,7 @@ flutter run \
 > package `com.softwarica.nagarsathi.projectnagarsathi` plus your signing
 > SHA-1/SHA-256, and limit the allowed APIs. Purge the old commits separately if
 > you want the string gone from history.
+
 In the Firebase console, enable **Email/Password**, **Email link (passwordless
 sign-in)**, and **Phone** under Authentication. Add the Android app's SHA-1 and
 SHA-256 fingerprints, and create a Cloud Firestore database. The email-link
@@ -121,14 +122,9 @@ The document ID must be the Firebase Auth UID for email/password staff. Phone
 OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
 country code. Staff documents are read-only from the app; create and update
 them only from a trusted admin environment.
-<<<<<<< Updated upstream
 
-The verified Firebase accounts `admin@nagarsathi.app` and
-`freefuzxcoj2@gmail.com` and `sohail@nagarsathi.app` are granted super-admin
-access to ward-officer management by both the staff sign-in flow and Firestore
-rules. Their Firebase Auth emails must be verified; the rules do not trust a
-client-side email check alone.
-=======
+The email accounts `admin@nagarsathi.app`, `freefuzxcoj2@gmail.com`, `sohail@nagarsathi.app`, and `sohailk2064@outlook.com` are granted super-admin access to ward-officer management by both the staff sign-in flow and Firestore rules. Their Firebase Auth emails must be verified; the rules do not trust a client-side email check alone.
+
 ### Citizen profile deletion
 
 The citizen's top-right avatar menu includes **Delete my profile**. Deletion
@@ -142,7 +138,6 @@ The new Firebase functions, Firestore rules/indexes, and OTP worker retention
 schedule must be deployed before this workflow is available in a live build.
 See [deployment and data requirements](functions/README.md).
 
->>>>>>> Stashed changes
 ### Google sign-in
 
 Across Authentication → Sign-in method, enable **Google**. It opens the built-in

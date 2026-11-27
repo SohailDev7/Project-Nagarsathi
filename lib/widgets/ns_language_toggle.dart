@@ -31,6 +31,7 @@ class NsLanguageToggle extends StatelessWidget {
     return ValueListenableBuilder<AppLocale>(
       valueListenable: _controller,
       builder: (context, locale, _) {
+        final tokens = NsColors.of(context);
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final isNepali = locale.isNepali;
 
@@ -40,9 +41,9 @@ class NsLanguageToggle extends StatelessWidget {
             HapticFeedback.selectionClick();
             _controller.toggle();
           },
-          color: isDark ? const Color(0xFF243B30) : AppColors.mint,
-          borderColor: isDark ? const Color(0xFF325444) : AppColors.primary,
-          shadowColor: isDark ? const Color(0xFF0F1A14) : AppColors.primaryDark,
+          color: isDark ? tokens.mint : AppColors.mint,
+          borderColor: isDark ? tokens.border : AppColors.primary,
+          shadowColor: isDark ? tokens.background : AppColors.primaryDark,
           depth: 2,
           radius: 999,
           expand: false,
