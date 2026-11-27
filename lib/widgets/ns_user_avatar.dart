@@ -46,16 +46,27 @@ class NsUserAvatar extends StatelessWidget {
       );
     }
 
+    final ringWidth = size >= 64 ? 2.5 : 1.8;
+    final gap = size >= 64 ? 2.0 : 1.2;
+
     return Container(
       width: size,
       height: size,
+      padding: EdgeInsets.all(ringWidth + gap),
       decoration: BoxDecoration(
-        color: tokens.mint,
+        color: tokens.surface,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.primary, width: size >= 64 ? 2.5 : 1.5),
+        border: Border.all(color: AppColors.primary, width: ringWidth),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: image ?? _defaultContent(tokens),
+      child: ClipOval(
+        child: Container(
+          color: tokens.mint,
+          alignment: Alignment.center,
+          child: image != null
+              ? SizedBox.expand(child: image)
+              : _defaultContent(tokens),
+        ),
+      ),
     );
   }
 
