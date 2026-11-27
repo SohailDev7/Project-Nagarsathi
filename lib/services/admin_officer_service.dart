@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -47,6 +50,7 @@ class OfficerNotification {
     required this.body,
     required this.status,
     required this.dispatchedAt,
+    this.errorDetail,
   });
 
   final String recipientEmail;
@@ -54,12 +58,15 @@ class OfficerNotification {
   final String body;
   final OfficerNotificationStatus status;
   final DateTime dispatchedAt;
+  final String? errorDetail;
 
   bool get isSent => status == OfficerNotificationStatus.sent;
 
   String get message => isSent
       ? 'Confirmation email sent to $recipientEmail.'
-      : 'Could not send the confirmation email to $recipientEmail.';
+      : errorDetail == null
+      ? 'Could not send the confirmation email to $recipientEmail.'
+      : 'Could not send email to $recipientEmail ($errorDetail).';
 
   Map<String, dynamic> toJson() {
     return {
@@ -95,6 +102,10 @@ class AdminOfficerService {
 
   /// Placeholder admin identity used when Firebase Auth has no signed-in user.
   static const String mockAdminId = 'admin_001';
+  static const String _mailWorkerUrl = String.fromEnvironment(
+    'ADMIN_MAIL_WORKER_URL',
+    defaultValue: 'https://nagarsathi-admin-mail.shaswat-nagarsath.workers.dev',
+  );
 
   static const String officersCollection = 'ward_officers';
   static const String auditLogsCollection = 'officer_audit_logs';
@@ -390,13 +401,18 @@ class AdminOfficerService {
         now: now,
       );
 
-      // Write the deletion audit entry before wiping the documents so the
-      // record always exists regardless of partial failures.
+      // Write the deletion audit entry before wiping the officer document so
+      // the record always exists regardless of partial failures.
       final batch = _firestore.batch();
       batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
       batch.delete(_officers.doc(existing.id));
-      batch.delete(_firestore.collection('staff').doc(existing.id));
       await batch.commit();
+
+      // Best-effort: remove any mirrored staff record (firestore.rules may
+      // restrict client writes to /staff).
+      try {
+        await _firestore.collection('staff').doc(existing.id).delete();
+      } catch (_) {}
 
       // Best-effort: delete related audit logs (pre-delete entries).
       try {
@@ -435,6 +451,8 @@ class AdminOfficerService {
       } catch (_) {
         // Notification write is best-effort.
       }
+
+      await _sendRealEmail(notification);
     });
   }
 
@@ -627,9 +645,10 @@ class AdminOfficerService {
       status: notificationStatus,
     );
 
-    // The officer record and audit entry commit together. The queued email
-    // record is best-effort: a restricted notifications collection must not
-    // prevent an admin from creating or updating an officer.
+    // The officer record and audit entry commit together. The staff mirror and
+    // queued email record are best-effort: restricted /staff or
+    // /notifications rules must not prevent an admin from creating or updating
+    // an officer.
     final batch = _firestore.batch();
     batch.set(_officers.doc(officer.id), officer.toFirestore());
     batch.set(_auditLogs.doc(auditLog.id), auditLog.toFirestore());
@@ -657,11 +676,62 @@ class AdminOfficerService {
       // The UI still reports the simulated email confirmation.
     }
 
+    final emailError = await _sendRealEmail(notification);
+    final finalNotification = emailError == null
+        ? notification
+        : OfficerNotification(
+            recipientEmail: notification.recipientEmail,
+            subject: notification.subject,
+            body: notification.body,
+            status: OfficerNotificationStatus.failed,
+            dispatchedAt: notification.dispatchedAt,
+            errorDetail: emailError,
+          );
+
     return OfficerActionResult(
       officer: officer,
       auditLog: auditLog,
-      notification: notification,
+      notification: finalNotification,
     );
+  }
+
+  Future<String?> _sendRealEmail(OfficerNotification notification) async {
+    if (_mailWorkerUrl.isEmpty || !FirebaseBootstrap.isReady) return null;
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        return 'Email not sent (missing auth token).';
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$_mailWorkerUrl/send-officer-email'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({
+              'to': notification.recipientEmail,
+              'subject': notification.subject,
+              'text': notification.body,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          debugPrint(
+            'Admin mail worker returned ${response.statusCode}: ${response.body}',
+          );
+        }
+        return 'Email failed (${response.statusCode}): ${response.body}';
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Admin mail worker error: $e');
+      }
+      return 'Email failed: $e';
+    }
   }
 
   OfficerNotification _dispatchNotification({

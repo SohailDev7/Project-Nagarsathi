@@ -450,7 +450,10 @@ class StaffAuthService {
         );
       }
 
-      if (data == null || data['role'] != 'staff' || data['active'] != true) {
+      final role = data?['role'];
+      if (data == null ||
+          (role != 'staff' && role != 'admin') ||
+          data['active'] != true) {
         await FirebaseAuth.instance.signOut();
         throw const AuthFailure(
           'This account is not registered for staff access.',
@@ -551,7 +554,7 @@ class StaffAuthService {
       final snapshot = await FirebaseFirestore.instance
           .collection(_staffCollection)
           .where('phone', isEqualTo: phone)
-          .where('role', isEqualTo: 'staff')
+          .where('role', whereIn: const ['staff', 'admin'])
           .where('active', isEqualTo: true)
           .limit(1)
           .get();

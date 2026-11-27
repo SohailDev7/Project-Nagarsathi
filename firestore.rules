@@ -40,6 +40,15 @@ service cloud.firestore {
             get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.admin == true ||
             get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.accountType == 'ward_creator'
           ));
+      return isVerifiedSuperAdmin() ||
+        (request.auth != null &&
+          exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'staff' &&
+          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.active == true &&
+          (
+            get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.admin == true ||
+            get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.accountType == 'ward_creator'
+          ));
     }
 
     // Each citizen may read and update only their own profile.
@@ -58,6 +67,7 @@ service cloud.firestore {
 
     match /staff/{staffId} {
       allow get: if request.auth != null
+        && resource != null
         && resource.data.role == 'staff'
         && resource.data.active == true
         && (request.auth.uid == staffId
