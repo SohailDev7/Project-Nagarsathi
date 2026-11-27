@@ -13,10 +13,20 @@ Firebase custom token so the app can call `signInWithCustomToken`.
 | `POST /admin/send-staff-invite` | `{ "email", "name", "ward", "tempPassword" }` | `{ sent: true }` |
 | `POST /delete-citizen-profile` | `{ "confirm": true, "immediate"?: true }` | `{ status: "deactivated" \| "deleted", deleteAt, emailStatus }` |
 | `POST /cancel-citizen-deletion` | `{ "confirm": true }` | `{ status: "active" }` |
+| `POST /request-data-export` | `Authorization: Bearer <firebaseIdToken>`, `{ "locale": "en\|ne" }` | `{ exportId, status, email, formats, reportCount, commentCount, requestedAt, expiresAt, deliverySlaMinutes: 15 }`. `status` is `sent` when the email went out, or `processing` when it was queued for the 5-minute delivery retry. |
+| `GET /data-export/download?token=...` | Encrypted AES-256-GCM token (`&format=zip\|json\|pdf`) | Encrypted-at-rest ZIP (JSON + PDF), JSON, or PDF download; expires in 48 hours |
 
 The two `/admin/*` endpoints require an `Authorization: Bearer <Firebase ID token>`
 header from a verified super-admin (or an active staff manager) and are used by
 the Ward Officer Management screen.
+
+`/request-data-export` builds the JSON + PDF bundle, encrypts it at rest in
+`data_exports`, and emails the download link to the citizen's registered
+address immediately. If the mail provider is down the row stays queued and the
+`*/5 * * * *` cron retries it, so the link still lands inside the 15-minute
+delivery promise; a row that misses that window is discarded. The table and
+its indexes are created on first use, so a database that predates this feature
+cannot make the endpoint fail with a non-JSON 500.
 
 `/delete-citizen-profile` performs the US-13 profile deletion. It needs the
 service account secret (`FIREBASE_SERVICE_ACCOUNT`) and the citizen's freshly

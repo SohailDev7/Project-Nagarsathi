@@ -2,11 +2,31 @@ import {
   createCitizenDeletionHandlers,
   createD1Jobs,
 } from "./citizen_deletion.js";
+import {
+  DELIVERY_SLA_MINUTES,
+  EXPORT_EXPIRY_MS,
+  EXPORT_RATE_WINDOW_MS,
+  MAX_EXPORTS_PER_HOUR,
+  base64DecodeBytes,
+  base64EncodeBytes,
+  buildExportEmail,
+  buildExportJson,
+  buildExportPackageZip,
+  buildExportPdf,
+  decryptDownloadToken,
+  decryptExportBundle,
+  encryptDownloadToken,
+  encryptExportBundle,
+  fetchUserExportData,
+} from "./export.js";
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const RESEND_WINDOW_MS = 60 * 60 * 1000;
 const MAX_RESENDS = 6;
 const MAX_ATTEMPTS = 6;
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -15,7 +35,7 @@ function json(body, status = 200) {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     },
   });
 }
@@ -261,6 +281,222 @@ async function mintFirebaseToken(env, email) {
   }
 }
 
+async function sendMail(env, { to, subject, text, html }) {
+  const mailResponse = await fetch(env.GMAIL_MAIL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      apiKey: env.GMAIL_MAIL_SECRET,
+      to,
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!mailResponse.ok) {
+    const detail = await mailResponse.text();
+    return {
+      ok: false,
+      error: "The email could not be sent.",
+      detail,
+    };
+  }
+
+  const mailPayload = await mailResponse.json().catch(() => null);
+  if (!mailPayload || mailPayload.sent !== true) {
+    return {
+      ok: false,
+      error: mailPayload?.error || "The email could not be sent.",
+    };
+  }
+  return { ok: true };
+}
+
+async function verifyFirebaseIdToken(env, idToken) {
+  const account = readServiceAccount(env);
+  if (!account || !account.project_id) {
+    return { error: "Firebase service account is not configured.", status: 500 };
+  }
+
+  const accessToken = await getGoogleAccessToken(env);
+  if (!accessToken) {
+    return { error: "Could not authenticate with Firebase.", status: 500 };
+  }
+
+  const lookup = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${account.project_id}/accounts:lookup`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ idToken }),
+    },
+  );
+  if (!lookup.ok) {
+    return { error: "Sign in again to request your data export.", status: 401 };
+  }
+
+  const payload = await lookup.json().catch(() => null);
+  const user = Array.isArray(payload?.users) ? payload.users[0] : null;
+  if (!user || !user.localId) {
+    return { error: "Sign in again to request your data export.", status: 401 };
+  }
+
+  return {
+    projectId: account.project_id,
+    accessToken,
+    user: {
+      uid: user.localId,
+      email: user.email ? String(user.email).trim().toLowerCase() : null,
+      emailVerified: Boolean(user.emailVerified),
+      displayName: user.displayName || null,
+      phoneNumber: user.phoneNumber || null,
+      createdAt: user.createdAt
+        ? new Date(Number(user.createdAt)).toISOString()
+        : null,
+    },
+  };
+}
+
+function getExportSecret(env) {
+  return env.EXPORT_ENCRYPTION_KEY || env.OTP_PEPPER || "";
+}
+
+const EXPORT_ORIGIN_FALLBACK =
+  "https://nagarsathi-otp.sohailk2064.workers.dev";
+let dataExportTableReady = false;
+
+/**
+ * Creates the export table on first use. A database that predates the export
+ * feature must never surface as an uncaught worker exception (Cloudflare would
+ * answer with an HTML 500 that the app cannot parse).
+ */
+async function ensureDataExportTable(env) {
+  if (dataExportTableReady || !env?.DB) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS data_exports (
+      export_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      email_hash TEXT NOT NULL,
+      recipient_email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ready',
+      encrypted_payload TEXT NOT NULL,
+      payload_iv TEXT NOT NULL,
+      report_count INTEGER NOT NULL DEFAULT 0,
+      comment_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      delivered_at INTEGER
+    )
+  `)
+    .run()
+    .catch(() => {});
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_data_exports_expiry ON data_exports(expires_at)",
+  )
+    .run()
+    .catch(() => {});
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_data_exports_user ON data_exports(user_id, created_at)",
+  )
+    .run()
+    .catch(() => {});
+  dataExportTableReady = true;
+}
+
+/**
+ * Emails any export package whose request handler could not reach the mail
+ * service. The 5-minute cron keeps the "link within 15 minutes" promise, and
+ * rows that miss the window are discarded rather than left undelivered.
+ */
+async function retryPendingExports(env, now = Date.now()) {
+  const secret = getExportSecret(env);
+  if (!env?.DB || !secret || !env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET) {
+    return;
+  }
+
+  try {
+    await ensureDataExportTable(env);
+    const result = await env.DB.prepare(
+      "SELECT export_id, user_id, email_hash, recipient_email, report_count, comment_count, created_at, expires_at FROM data_exports WHERE status = 'ready' AND delivered_at IS NULL ORDER BY created_at ASC LIMIT 10",
+    ).all();
+    const rows = Array.isArray(result?.results) ? result.results : [];
+    const origin = env.PUBLIC_ORIGIN || EXPORT_ORIGIN_FALLBACK;
+
+    for (const row of rows) {
+      const createdAt = Number(row.created_at) || 0;
+      const expiresAt = Number(row.expires_at) || 0;
+      if (expiresAt <= now) {
+        await env.DB.prepare("DELETE FROM data_exports WHERE export_id = ?")
+          .bind(row.export_id)
+          .run()
+          .catch(() => {});
+        continue;
+      }
+      if (now - createdAt > DELIVERY_SLA_MINUTES * 60 * 1000) {
+        // The delivery window has passed; do not keep an undeliverable bundle.
+        await env.DB.prepare("DELETE FROM data_exports WHERE export_id = ?")
+          .bind(row.export_id)
+          .run()
+          .catch(() => {});
+        continue;
+      }
+
+      const token = await encryptDownloadToken(secret, {
+        exportId: row.export_id,
+        userId: row.user_id,
+        emailHash: row.email_hash,
+        expiresAt,
+      });
+      const content = buildExportEmail({
+        locale: null,
+        name: null,
+        downloadUrl: `${origin}/data-export/download?token=${encodeURIComponent(token)}`,
+        exportId: row.export_id,
+        reportCount: Number(row.report_count) || 0,
+        commentCount: Number(row.comment_count) || 0,
+        expiresAt,
+      });
+      const mailed = await sendMail(env, {
+        to: row.recipient_email,
+        subject: content.subject,
+        text: content.text,
+        html: content.html,
+      }).catch(() => ({ ok: false }));
+      if (mailed.ok) {
+        await env.DB.prepare(
+          "UPDATE data_exports SET status = 'sent', delivered_at = ? WHERE export_id = ?",
+        )
+          .bind(Date.now(), row.export_id)
+          .run()
+          .catch(() => {});
+      }
+    }
+  } catch (error) {
+    console.error("retryPendingExports failed", error);
+  }
+}
+
+async function purgeExpiredRows(env, now = Date.now()) {
+  try {
+    await env.DB
+      .prepare("DELETE FROM data_exports WHERE expires_at <= ?")
+      .bind(now)
+      .run();
+    await env.DB
+      .prepare("DELETE FROM otp_challenges WHERE expires_at <= ?")
+      .bind(now - 24 * 60 * 60 * 1000)
+      .run();
+  } catch {
+    // Best-effort cleanup; never block primary requests if tables are mid-migration.
+  }
+}
+
 async function requestOtp(request, env, options = {}) {
   if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET || !env.OTP_PEPPER) {
     return json({ error: "OTP email service is not configured." }, 500);
@@ -356,38 +592,344 @@ async function requestOtp(request, env, options = {}) {
       ? `<p>तपाईंको नगरसाथी प्रमाणीकरण कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
       : `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`;
 
-  const mailResponse = await fetch(env.GMAIL_MAIL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      apiKey: env.GMAIL_MAIL_SECRET,
-      to: email,
-      subject: emailSubject,
-      text: emailText,
-      html: emailHtml,
-    }),
+  const mailResult = await sendMail(env, {
+    to: email,
+    subject: emailSubject,
+    text: emailText,
+    html: emailHtml,
   });
-
-  if (!mailResponse.ok) {
-    const detail = await mailResponse.text();
+  if (!mailResult.ok) {
     return json({
       error: "The verification email could not be sent.",
-      detail,
-    }, 502);
-  }
-
-  const mailPayload = await mailResponse.json().catch(() => null);
-  if (!mailPayload || mailPayload.sent !== true) {
-    return json({
-      error: mailPayload?.error || "The verification email could not be sent.",
+      ...(mailResult.detail ? { detail: mailResult.detail } : {}),
     }, 502);
   }
 
   return json({
     expiresInSeconds: OTP_TTL_MS / 1000,
     remainingResends: MAX_RESENDS - resendCount - 1,
+  });
+}
+
+async function requestDataExport(request, env) {
+  try {
+    return await handleDataExportRequest(request, env);
+  } catch (error) {
+    console.error("request-data-export failed", error);
+    return json(
+      {
+        error:
+          "The data export could not be completed. Please try again in a minute.",
+      },
+      500,
+    );
+  }
+}
+
+async function handleDataExportRequest(request, env) {
+  const encryptionSecret = getExportSecret(env);
+  if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET || !encryptionSecret) {
+    return json({ error: "Data export email service is not configured." }, 500);
+  }
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const idToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+  if (!idToken) {
+    return json({ error: "Sign in to request your data export." }, 401);
+  }
+
+  const verified = await verifyFirebaseIdToken(env, idToken);
+  if (verified.error) {
+    return json({ error: verified.error }, verified.status || 401);
+  }
+
+  const body = (await parseJson(request)) || {};
+  const now = Date.now();
+  await ensureDataExportTable(env);
+  await purgeExpiredRows(env, now);
+
+  const recentCountRow = await env.DB
+    .prepare(
+      "SELECT COUNT(*) AS total FROM data_exports WHERE user_id = ? AND created_at > ?",
+    )
+    .bind(verified.user.uid, now - EXPORT_RATE_WINDOW_MS)
+    .first();
+  if (Number(recentCountRow?.total || 0) >= MAX_EXPORTS_PER_HOUR) {
+    return json(
+      { error: "Too many export requests. Please try again later." },
+      429,
+    );
+  }
+
+  const exportData = await fetchUserExportData(
+    verified.projectId,
+    verified.accessToken,
+    verified.user,
+  );
+  const recipientEmail = String(
+    exportData.profile.email || verified.user.email || "",
+  )
+    .trim()
+    .toLowerCase();
+  if (!isValidEmail(recipientEmail)) {
+    return json(
+      { error: "A registered email address is required to receive your export." },
+      400,
+    );
+  }
+
+  const exportId = crypto.randomUUID();
+  const requestedAt = now;
+  const expiresAt = now + EXPORT_EXPIRY_MS;
+
+  const jsonString = buildExportJson({
+    exportId,
+    profile: exportData.profile,
+    reports: exportData.reports,
+    comments: exportData.comments,
+    requestedAt,
+    expiresAt,
+  });
+  const pdfBytes = buildExportPdf({
+    exportId,
+    profile: exportData.profile,
+    reports: exportData.reports,
+    comments: exportData.comments,
+    requestedAt,
+    expiresAt,
+  });
+
+  // Encrypt the combined JSON + PDF payload at rest using AES-256-GCM.
+  const envelopeBytes = textEncoder.encode(
+    JSON.stringify({
+      json: jsonString,
+      pdfBase64: base64EncodeBytes(pdfBytes),
+    }),
+  );
+  const encrypted = await encryptExportBundle(
+    encryptionSecret,
+    exportId,
+    envelopeBytes,
+  );
+  const emailHash = await sha256(`${encryptionSecret}:${recipientEmail}`);
+
+  await env.DB
+    .prepare(`
+      INSERT INTO data_exports (
+        export_id, user_id, email_hash, recipient_email, status,
+        encrypted_payload, payload_iv, report_count, comment_count,
+        created_at, expires_at, delivered_at
+      ) VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, ?, ?, NULL)
+    `)
+    .bind(
+      exportId,
+      verified.user.uid,
+      emailHash,
+      recipientEmail,
+      encrypted.ciphertextBase64,
+      encrypted.ivBase64,
+      exportData.reports.length,
+      exportData.comments.length,
+      requestedAt,
+      expiresAt,
+    )
+    .run();
+
+  const downloadToken = await encryptDownloadToken(encryptionSecret, {
+    exportId,
+    userId: verified.user.uid,
+    emailHash,
+    expiresAt,
+  });
+
+  const requestUrl = new URL(request.url);
+  const downloadUrl = `${requestUrl.origin}/data-export/download?token=${encodeURIComponent(downloadToken)}`;
+  const emailContent = buildExportEmail({
+    locale: body?.locale,
+    name: exportData.profile.name,
+    downloadUrl,
+    exportId,
+    reportCount: exportData.reports.length,
+    commentCount: exportData.comments.length,
+    expiresAt,
+  });
+
+  const mailResult = await sendMail(env, {
+    to: recipientEmail,
+    subject: emailContent.subject,
+    text: emailContent.text,
+    html: emailContent.html,
+  });
+  if (!mailResult.ok) {
+    // Keep the package queued: the 5-minute cron retries delivery so the link
+    // still reaches the inbox inside the 15-minute promise.
+    return json(
+      {
+        exportId,
+        status: "processing",
+        email: recipientEmail,
+        formats: ["json", "pdf"],
+        reportCount: exportData.reports.length,
+        commentCount: exportData.comments.length,
+        requestedAt,
+        expiresAt,
+        deliverySlaMinutes: DELIVERY_SLA_MINUTES,
+      },
+      202,
+    );
+  }
+
+  const deliveredAt = Date.now();
+  await env.DB
+    .prepare("UPDATE data_exports SET status = 'sent', delivered_at = ? WHERE export_id = ?")
+    .bind(deliveredAt, exportId)
+    .run();
+
+  return json({
+    exportId,
+    status: "sent",
+    email: recipientEmail,
+    formats: ["json", "pdf"],
+    reportCount: exportData.reports.length,
+    commentCount: exportData.comments.length,
+    requestedAt,
+    expiresAt,
+    deliveredAt,
+    expiresInSeconds: EXPORT_EXPIRY_MS / 1000,
+    deliverySlaMinutes: DELIVERY_SLA_MINUTES,
+  });
+}
+
+async function downloadDataExport(request, env) {
+  const encryptionSecret = getExportSecret(env);
+  if (!encryptionSecret) {
+    return json({ error: "Data export service is not configured." }, 500);
+  }
+
+  await ensureDataExportTable(env);
+
+  const url = new URL(request.url);
+  const token = String(url.searchParams.get("token") || "").trim();
+  const format = String(url.searchParams.get("format") || "zip").toLowerCase();
+
+  if (!token) {
+    return json({ error: "Missing export download token." }, 400);
+  }
+
+  const tokenPayload = await decryptDownloadToken(encryptionSecret, token);
+  if (!tokenPayload || !tokenPayload.exportId || !tokenPayload.userId) {
+    return json({ error: "This download link is invalid." }, 403);
+  }
+
+  const now = Date.now();
+  if (Number(tokenPayload.expiresAt || 0) <= now) {
+    await env.DB
+      .prepare("DELETE FROM data_exports WHERE export_id = ?")
+      .bind(tokenPayload.exportId)
+      .run()
+      .catch(() => {});
+    return json(
+      {
+        error:
+          "This export download link has expired after 48 hours. Request a new export in Privacy settings.",
+      },
+      410,
+    );
+  }
+
+  const row = await env.DB
+    .prepare("SELECT * FROM data_exports WHERE export_id = ?")
+    .bind(tokenPayload.exportId)
+    .first();
+
+  if (!row) {
+    return json(
+      { error: "This export is no longer available or has expired." },
+      410,
+    );
+  }
+
+  if (Number(row.expires_at) <= now) {
+    await env.DB
+      .prepare("DELETE FROM data_exports WHERE export_id = ?")
+      .bind(row.export_id)
+      .run()
+      .catch(() => {});
+    return json(
+      {
+        error:
+          "This export download link has expired after 48 hours. Request a new export in Privacy settings.",
+      },
+      410,
+    );
+  }
+
+  if (
+    row.user_id !== tokenPayload.userId ||
+    row.email_hash !== tokenPayload.emailHash
+  ) {
+    return json({ error: "This download link is invalid." }, 403);
+  }
+
+  let envelope;
+  try {
+    const plainBytes = await decryptExportBundle(
+      encryptionSecret,
+      row.export_id,
+      row.payload_iv,
+      row.encrypted_payload,
+    );
+    envelope = JSON.parse(textDecoder.decode(plainBytes));
+  } catch {
+    return json({ error: "Could not decrypt export package." }, 500);
+  }
+
+  const shortId = String(row.export_id).slice(0, 8);
+  const commonHeaders = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    "X-Content-Type-Options": "nosniff",
+  };
+
+  if (format === "json") {
+    return new Response(envelope.json, {
+      status: 200,
+      headers: {
+        ...commonHeaders,
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="nagarsathi-data-export-${shortId}.json"`,
+      },
+    });
+  }
+
+  const pdfBytes = base64DecodeBytes(envelope.pdfBase64);
+  if (format === "pdf") {
+    return new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        ...commonHeaders,
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="nagarsathi-data-export-${shortId}.pdf"`,
+      },
+    });
+  }
+
+  const zipBytes = buildExportPackageZip({
+    exportId: row.export_id,
+    jsonString: envelope.json,
+    pdfBytes,
+    requestedAt: Number(row.created_at),
+    expiresAt: Number(row.expires_at),
+  });
+
+  return new Response(zipBytes, {
+    status: 200,
+    headers: {
+      ...commonHeaders,
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="nagarsathi-data-export-${shortId}.zip"`,
+    },
   });
 }
 
@@ -1145,20 +1687,24 @@ export default {
       .bind(Date.now()).run();
     // Resume any citizen deletion a failed run left pending.
     await citizenDeletion.retryCitizenDeletions(env);
+    await purgeExpiredRows(env, Date.now());
+    await retryPendingExports(env, Date.now());
   },
 
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return json({});
     }
-    const url = new URL(request.url);
 
-    // Public profile link shared from a citizen's profile screen.
+    const url = new URL(request.url);
     if (request.method === "GET") {
       const profileMatch = /^\/u\/([A-Za-z0-9._]{1,30})\/?$/.exec(
         url.pathname,
       );
       if (profileMatch) return publicProfile(env, profileMatch[1]);
+      if (url.pathname === "/data-export/download") {
+        return downloadDataExport(request, env);
+      }
       return json({ error: "Not found." }, 404);
     }
 
@@ -1169,8 +1715,18 @@ export default {
     if (url.pathname === "/request-email-otp") {
       return requestOtp(request, env);
     }
+    if (url.pathname === "/request-admin-otp") {
+      return requestOtp(request, env, { digits: 4, purpose: "admin" });
+    }
     if (url.pathname === "/verify-email-otp") {
       return verifyOtp(request, env);
+    }
+    if (url.pathname === "/verify-admin-otp") {
+      return verifyOtp(request, env, {
+        digits: 4,
+        mintToken: false,
+        singleUse: true,
+      });
     }
     if (url.pathname === "/mark-email-verified") {
       return markEmailVerified(request, env);
@@ -1186,6 +1742,9 @@ export default {
     }
     if (url.pathname === "/cancel-citizen-deletion") {
       return citizenDeletion.cancelCitizenDeletion(request, env);
+    }
+    if (url.pathname === "/request-data-export") {
+      return requestDataExport(request, env);
     }
     return json({ error: "Not found." }, 404);
   },

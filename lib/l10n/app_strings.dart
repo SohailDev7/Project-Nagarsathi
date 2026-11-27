@@ -262,6 +262,23 @@ abstract class AppStrings {
   String versionText(String version);
   String get checkForUpdates;
   String get upToDate;
+  String get privacyTitle;
+  String get privacySubtitle;
+  String get dataExportCardTitle;
+  String get dataExportCardDesc;
+  String get downloadMyData;
+  String get dataExportFormatsLine;
+  String get dataExportDeliveryLine;
+  String get dataExportExpiryLine;
+  String get dataExportFootnote;
+  String get dataExportEmailSentBadge;
+  String get dataExportRequestedBadge;
+  String get dataExportExpiredBadge;
+  String dataExportSuccessMessage(String email);
+  String dataExportSentTo(String email);
+  String dataExportExpiresIn(int hours, int minutes);
+  String get dataExportExpiredNotice;
+  String dataExportCounts(int reports, int comments);
 
   // ── Dashboard & Quick Settings ────────────────────────────────────────────
   String get settings;
@@ -977,6 +994,52 @@ class EnglishStrings extends AppStrings {
   String get checkForUpdates => 'Check for updates';
   @override
   String get upToDate => 'NagarSathi is up to date.';
+  @override
+  String get privacyTitle => 'Privacy';
+  @override
+  String get privacySubtitle =>
+      'Download an archive of your profile, reports, and comments.';
+  @override
+  String get dataExportCardTitle => 'Personal data archive';
+  @override
+  String get dataExportCardDesc =>
+      'Generates machine-readable JSON and human-readable PDF of all your '
+      'reports and comments.';
+  @override
+  String get downloadMyData => 'Download My Data';
+  @override
+  String get dataExportFormatsLine => 'Formats: JSON & PDF archive';
+  @override
+  String get dataExportDeliveryLine =>
+      'Encrypted link sent to email within 15 minutes';
+  @override
+  String get dataExportExpiryLine =>
+      'Download link expires automatically after 48 hours';
+  @override
+  String get dataExportFootnote =>
+      'Your export package is encrypted and sent only to your registered '
+      'email address. Download links expire automatically after 48 hours.';
+  @override
+  String get dataExportEmailSentBadge => 'EMAIL SENT';
+  @override
+  String get dataExportRequestedBadge => 'REQUESTED';
+  @override
+  String get dataExportExpiredBadge => 'EXPIRED';
+  @override
+  String dataExportSuccessMessage(String email) =>
+      'Export requested! Your encrypted JSON & PDF download link will arrive '
+      'at $email within 15 minutes (expires in 48 hours).';
+  @override
+  String dataExportSentTo(String email) => 'Sent to $email';
+  @override
+  String dataExportExpiresIn(int hours, int minutes) =>
+      'Expires in ${hours}h ${minutes}m';
+  @override
+  String get dataExportExpiredNotice =>
+      'Link expired after 48 hours. Request a new export anytime.';
+  @override
+  String dataExportCounts(int reports, int comments) =>
+      '$reports report(s) · $comments comment(s)';
 
   @override
   String get settings => 'Settings';
@@ -1874,6 +1937,54 @@ class NepaliStrings extends AppStrings {
   String get checkForUpdates => 'अपडेट जाँच गर्नुहोस्';
   @override
   String get upToDate => 'नगरसाथी अद्यावधिक छ।';
+  @override
+  String get privacyTitle => 'गोपनीयता';
+  @override
+  String get privacySubtitle =>
+      'तपाईंको प्रोफाइल, रिपोर्ट र टिप्पणीहरूको सुरक्षित संग्रह डाउनलोड गर्नुहोस्।';
+  @override
+  String get dataExportCardTitle => 'व्यक्तिगत डाटा संग्रह';
+  @override
+  String get dataExportCardDesc =>
+      'तपाईंको सबै रिपोर्ट र टिप्पणीहरूको मेसिनले पढ्ने JSON र मानिसले पढ्ने '
+      'PDF फाइल तयार गर्छ।';
+  @override
+  String get downloadMyData => 'मेरो डाटा डाउनलोड गर्नुहोस्';
+  @override
+  String get dataExportFormatsLine => 'ढाँचाहरू: JSON र PDF संग्रह';
+  @override
+  String get dataExportDeliveryLine =>
+      '१५ मिनेटभित्र इमेलमा इन्क्रिप्ट गरिएको लिङ्क पठाइन्छ';
+  @override
+  String get dataExportExpiryLine =>
+      'डाउनलोड लिङ्क ४८ घण्टापछि स्वतः निष्क्रिय हुन्छ';
+  @override
+  String get dataExportFootnote =>
+      'तपाईंको निर्यात प्याकेज इन्क्रिप्ट गरी दर्ता भएको इमेलमा मात्र पठाइन्छ। '
+      'डाउनलोड लिङ्कहरू ४८ घण्टापछि स्वतः निष्क्रिय हुन्छन्।';
+  @override
+  String get dataExportEmailSentBadge => 'इमेल पठाइयो';
+  @override
+  String get dataExportRequestedBadge => 'अनुरोध गरियो';
+  @override
+  String get dataExportExpiredBadge => 'म्याद सकियो';
+  @override
+  String dataExportSuccessMessage(String email) =>
+      'निर्यात अनुरोध पठाइयो! तपाईंको इन्क्रिप्ट गरिएको JSON र PDF लिङ्क १५ '
+      'मिनेटभित्र $email मा पुग्नेछ (४८ घण्टामा निष्क्रिय हुनेछ)।';
+  @override
+  String dataExportSentTo(String email) => '$email मा पठाइयो';
+  @override
+  String dataExportExpiresIn(int hours, int minutes) =>
+      '${AppLocale.ne.formatDigits(hours)} घण्टा '
+      '${AppLocale.ne.formatDigits(minutes)} मिनेटमा निष्क्रिय';
+  @override
+  String get dataExportExpiredNotice =>
+      '४८ घण्टापछि लिङ्क निष्क्रिय भयो। जतिबेला पनि नयाँ प्रति माग्न सक्नुहुन्छ।';
+  @override
+  String dataExportCounts(int reports, int comments) =>
+      '${AppLocale.ne.formatDigits(reports)} रिपोर्ट · '
+      '${AppLocale.ne.formatDigits(comments)} टिप्पणी';
 
   @override
   String get settings => 'सेटिङहरू';
