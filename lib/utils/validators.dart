@@ -135,4 +135,46 @@ abstract final class Validators {
       return null;
     };
   }
+
+  /// Maximum allowed avatar upload size (5 MB).
+  static const int maxAvatarBytes = 5 * 1024 * 1024;
+
+  static final _profanityPattern = RegExp(
+    r'\b(fuck|shit|bitch|asshole|bastard|dick|cunt|slut|whore|idiot|moron|stupid|dumbass|motherfucker|randi|muji|madarchod|bhenchod|chutiya)\b',
+    caseSensitive: false,
+  );
+
+  /// Enforces a 3 to 40 character display name without offensive language.
+  static String? displayName(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.length < 3 || trimmed.length > 40) {
+      return 'Display name must be between 3 and 40 characters';
+    }
+    if (_profanityPattern.hasMatch(trimmed)) {
+      return 'Display name contains inappropriate language';
+    }
+    return null;
+  }
+
+  /// Validates that an avatar upload is JPEG/PNG and at most 5 MB.
+  static String? validateAvatarFile({
+    required String fileName,
+    required int byteLength,
+  }) {
+    final lower = fileName.trim().toLowerCase();
+    final validExt =
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png');
+    if (!validExt) {
+      return 'Only JPEG and PNG images are supported';
+    }
+    if (byteLength <= 0) {
+      return 'Selected image file is empty';
+    }
+    if (byteLength > maxAvatarBytes) {
+      return 'Profile photo must be 5 MB or smaller';
+    }
+    return null;
+  }
 }
