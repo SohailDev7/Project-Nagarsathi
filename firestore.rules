@@ -11,7 +11,6 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/config/admins).data.emails
         : [
             'admin@nagarsathi.app',
-            'freefuzxcoj2@gmail.com',
             'sohail@nagarsathi.app',
             'sohailk2064@outlook.com'
           ];
@@ -51,14 +50,28 @@ service cloud.firestore {
     }
 
     // Each citizen may read and update only their own profile.
+    // A handle is only accepted when this citizen holds its `usernames`
+    // reservation, so a modified client cannot claim or duplicate one.
     match /users/{uid} {
+      function usernameReserved() {
+        return request.resource.data.usernameLower is string
+          && request.resource.data.usernameLower == request.resource.data.usernameLower.lower()
+          && exists(/databases/$(database)/documents/usernames/$(request.resource.data.usernameLower))
+          && get(/databases/$(database)/documents/usernames/$(request.resource.data.usernameLower)).data.uid == request.auth.uid;
+      }
+
       allow read: if isCurrentCitizen(uid);
       allow create: if isCurrentCitizen(uid)
         && request.resource.data.uid == uid
-        && request.resource.data.role == 'citizen';
+        && request.resource.data.role == 'citizen'
+        && (!('usernameLower' in request.resource.data) || usernameReserved());
       allow update: if isCurrentCitizen(uid)
         && request.resource.data.uid == uid
-        && request.resource.data.role == 'citizen';
+        && request.resource.data.role == 'citizen'
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['usernameLower'])
+          || usernameReserved()
+        );
       allow delete: if false;
     }
 

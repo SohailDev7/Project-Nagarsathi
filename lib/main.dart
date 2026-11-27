@@ -18,6 +18,7 @@ import 'services/staff_auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/ns_email_verification_gate.dart';
 import 'widgets/update_gate.dart';
 
 Future<void> main() async {
@@ -228,10 +229,19 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
     }
 
     // The gate re-locks a running session after a spell in the background.
-    final Widget gatedHome = AppLockGate(
+    Widget gatedHome = AppLockGate(
       isStaff: staffSession != null,
       child: signedInHome,
     );
+
+    // Citizens must confirm their email before using the app. Staff accounts
+    // are managed by the municipality and are not part of this gate.
+    if (staffSession == null) {
+      gatedHome = NsEmailVerificationGate(
+        onSignOut: _returnToSignIn,
+        child: gatedHome,
+      );
+    }
 
     if (!widget.appLockEnabled) return gatedHome;
 
@@ -239,6 +249,18 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
     return AppLockScreen(
       isStaff: staffSession != null,
       target: (_) => gatedHome,
+    );
+  }
+
+  void _returnToSignIn() {
+    _navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => LoginScreen(
+          themeController: _themeController,
+          languageController: _languageController,
+        ),
+      ),
+      (route) => false,
     );
   }
 

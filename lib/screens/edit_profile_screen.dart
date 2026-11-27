@@ -2,9 +2,11 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/citizen_avatar.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
+import '../widgets/ns_citizen_avatar.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_text_field.dart';
@@ -22,6 +24,7 @@ class EditProfileScreen extends StatefulWidget {
     required this.initialUsername,
     required this.initialPhone,
     this.usernameChangedAt,
+    this.initialAvatarColor = CitizenAvatarColor.fallback,
   });
 
   final AuthService authService;
@@ -29,6 +32,7 @@ class EditProfileScreen extends StatefulWidget {
   final String initialUsername;
   final String initialPhone;
   final DateTime? usernameChangedAt;
+  final CitizenAvatarColor initialAvatarColor;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -42,6 +46,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   bool _saving = false;
   String? _error;
+  late CitizenAvatarColor _avatarColor;
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController = TextEditingController(text: widget.initialName);
     _usernameController = TextEditingController(text: widget.initialUsername);
     _phoneController = TextEditingController(text: widget.initialPhone);
+    _avatarColor = widget.initialAvatarColor;
   }
 
   @override
@@ -91,6 +97,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         name: _nameController.text,
         username: _usernameController.text,
         phone: _phoneController.text,
+        avatarColor: _avatarColor.key,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -211,6 +218,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         onChanged: (_) => _clearError(),
                         onFieldSubmitted: (_) => _save(),
                       ),
+                      const SizedBox(height: 20),
+                      Text(
+                        strings.avatarColor,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.2,
+                          color: tokens.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _AvatarColorPicker(
+                        selected: _avatarColor,
+                        initials: _initials,
+                        onSelected: (color) {
+                          HapticFeedback.selectionClick();
+                          setState(() => _avatarColor = color);
+                        },
+                      ),
                       if (_error != null) ...[
                         const SizedBox(height: 14),
                         Semantics(
@@ -249,6 +275,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _clearError() {
     if (_error != null) setState(() => _error = null);
+  }
+
+  String get _initials {
+    final parts = widget.initialName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'NS';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+}
+
+/// One tap picks the avatar colour; the initials preview updates with it.
+class _AvatarColorPicker extends StatelessWidget {
+  const _AvatarColorPicker({
+    required this.selected,
+    required this.initials,
+    required this.onSelected,
+  });
+
+  final CitizenAvatarColor selected;
+  final String initials;
+  final ValueChanged<CitizenAvatarColor> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final color in CitizenAvatarColor.values)
+          Semantics(
+            button: true,
+            selected: color == selected,
+            label: '${color.key} avatar',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: Key('avatar-color-${color.key}'),
+                onTap: () => onSelected(color),
+                customBorder: const CircleBorder(),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: color == selected
+                          ? tokens.accentText
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: NsCitizenAvatar(
+                    initials: initials,
+                    color: color,
+                    size: 38,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 

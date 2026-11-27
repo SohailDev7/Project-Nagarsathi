@@ -17,6 +17,7 @@ class SessionService {
   static const staffIdentifierKey = 'staff_identifier';
   static const staffIsPhoneKey = 'staff_is_phone';
   static const staffIsSuperAdminKey = 'staff_is_super_admin';
+  static const locationPromptedKey = 'location_prompted';
 
   /// Returns the saved choice, or `true` when nothing has been stored yet.
   Future<bool> loadRememberMe() async {
@@ -57,6 +58,27 @@ class SessionService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(appLockKey, value);
+    } catch (_) {
+      // Best effort only.
+    }
+  }
+
+  /// Whether the automatic ward detection already ran once on this install.
+  /// After that the citizen starts it by tapping the location pill, so people
+  /// who declined are not asked on every launch.
+  Future<bool> loadLocationPrompted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(locationPromptedKey) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> saveLocationPrompted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(locationPromptedKey, true);
     } catch (_) {
       // Best effort only.
     }

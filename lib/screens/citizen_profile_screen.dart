@@ -2,16 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/citizen_avatar.dart';
 import '../models/citizen_location.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_bottom_nav.dart';
+import '../widgets/ns_citizen_avatar.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_primary_button.dart';
+import '../widgets/ns_ward_picker.dart';
 import 'edit_profile_screen.dart';
 
 /// The citizen's own profile, laid out like an Instagram profile: a handle bar,
@@ -51,6 +55,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
   DateTime? _joinedAt;
   DateTime? _usernameChangedAt;
   CitizenLocation? _location;
+  CitizenAvatarColor _avatarColor = CitizenAvatarColor.fallback;
 
   @override
   void initState() {
@@ -66,6 +71,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     DateTime? joinedAt;
     DateTime? usernameChangedAt;
     CitizenLocation? location;
+    var avatarColor = CitizenAvatarColor.fallback;
 
     if (AuthService.isConfigured) {
       try {
@@ -82,6 +88,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           joinedAt = _readTimestamp(profile['createdAt']);
           usernameChangedAt = _readTimestamp(profile['usernameChangedAt']);
           location = CitizenLocation.tryFromMap(profile['location']);
+          avatarColor = CitizenAvatarColor.fromKey(profile['avatarColor']);
         }
       } catch (_) {
         // Keep whatever the home screen already knew.
@@ -96,6 +103,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       _joinedAt = joinedAt;
       _usernameChangedAt = usernameChangedAt;
       _location = location;
+      _avatarColor = avatarColor;
       _loading = false;
     });
   }
@@ -138,6 +146,7 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
           initialUsername: _username ?? '',
           initialPhone: _phone ?? '',
           usernameChangedAt: _usernameChangedAt,
+          initialAvatarColor: _avatarColor,
         ),
       ),
     );
@@ -152,14 +161,60 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
       ..showSnackBar(SnackBar(content: Text(context.l10n.profileSaved)));
   }
 
-  Future<void> _shareProfile() async {
+  /// Lets the citizen correct their ward straight from the profile, instead of
+  /// having to go back to the home screen first.
+  Future<void> _changeWard() async {
     HapticFeedback.selectionClick();
-    await Clipboard.setData(ClipboardData(text: '$_handle · NagarSathi'));
+    final picked = await showWardPicker(
+      context,
+      initialMunicipality: _location?.municipality,
+    );
+    if (picked == null || !mounted) return;
+
+    final saved = await widget.authService.saveLocation(picked);
     if (!mounted) return;
+    if (saved) setState(() => _location = picked);
+
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(context.l10n.profileLinkCopied)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            !AuthService.isConfigured || saved
+                ? context.l10n.wardSavedProfile
+                : context.l10n.wardSyncFailed,
+          ),
+        ),
+      );
+  }
+
+  /// Opens the native share sheet with a public link anyone can open.
+  Future<void> _shareProfile() async {
+    HapticFeedback.selectionClick();
+
+    final username = _username?.trim() ?? '';
+    final link = username.isEmpty ? '' : AuthService.profileLink(username);
+    final ward = _location == null
+        ? ''
+        : ' · ${_location!.municipality} Ward ${_location!.ward}';
+    final message = username.isEmpty
+        ? '$_displayName · NagarSathi'
+        : '$_displayName (@$username) on NagarSathi$ward\n$link';
+
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: message, subject: 'NagarSathi profile'),
+      );
+    } catch (_) {
+      // No share sheet (or a test harness): copying still works.
+      await Clipboard.setData(ClipboardData(text: message));
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(context.l10n.profileLinkCopied)));
+    }
   }
 
   void _comingSoon() {
@@ -192,7 +247,10 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     final strings = context.l10n;
 
     return Scaffold(
-      bottomNavigationBar: NsBottomNav(activeIndex: 3, onSelect: _onNavSelected),
+      bottomNavigationBar: NsBottomNav(
+        activeIndex: 3,
+        onSelect: _onNavSelected,
+      ),
       body: NsBackground(
         ambientGlow: true,
         child: SafeArea(
@@ -277,7 +335,12 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _Avatar(initials: _initials),
+        NsCitizenAvatar(
+          initials: _initials,
+          color: _avatarColor,
+          size: 92,
+          showBadge: true,
+        ),
         const SizedBox(width: 18),
         Expanded(
           child: Column(
@@ -310,30 +373,51 @@ class _CitizenProfileScreenState extends State<CitizenProfileScreen> {
                   color: tokens.heading,
                 ),
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    Icons.place_rounded,
-                    size: 13,
-                    color: tokens.accentText,
-                  ),
-                  const SizedBox(width: 3),
-                  Flexible(
-                    child: Text(
-                      _location == null
-                          ? strings.setYourLocation
-                          : '${_location!.municipality} · ${_location!.label}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: tokens.muted,
-                      ),
+              const SizedBox(height: 2),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const Key('profile-ward'),
+                  onTap: _changeWard,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.place_rounded,
+                          size: 13,
+                          color: tokens.accentText,
+                        ),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            _location == null
+                                ? strings.setYourLocation
+                                : '${_location!.municipality} · '
+                                      '${_location!.label}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: tokens.muted,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.edit_location_alt_outlined,
+                          size: 13,
+                          color: tokens.muted,
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -411,78 +495,6 @@ class _CircleButton extends StatelessWidget {
           ),
           child: Icon(icon, size: 20, color: tokens.heading),
         ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initials});
-
-  final String initials;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SizedBox(
-      width: 92,
-      height: 92,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 92,
-            height: 92,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [tokens.accentBright, AppColors.primary]
-                    : [AppColors.primary, const Color(0xFF6AD90E)],
-              ),
-            ),
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isDark ? tokens.surfaceSoft : tokens.mint,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                initials,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -1,
-                  color: isDark ? tokens.heading : AppColors.forest,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: -1,
-            bottom: -1,
-            child: Container(
-              width: 28,
-              height: 28,
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: tokens.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: tokens.border, width: 1.4),
-              ),
-              child: const NsMascot(
-                size: 24,
-                mood: NsMascotMood.happy,
-                look: Offset(0, 0.3),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

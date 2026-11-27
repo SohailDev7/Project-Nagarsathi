@@ -11,6 +11,7 @@ import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_back_button.dart';
 import '../widgets/ns_confetti.dart';
+import '../widgets/ns_email_verification_gate.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_google_button.dart';
 import '../widgets/ns_logo.dart';
@@ -267,8 +268,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     Navigator.of(context).pushAndRemoveUntil(
       NsPageRoute<void>(
         style: NsTransitionStyle.fade,
-        builder: (_) =>
-            const AppLockGate(child: HomeScreen(showRememberMePrompt: true)),
+        builder: (homeContext) => NsEmailVerificationGate(
+          onSignOut: () => Navigator.of(homeContext).pushAndRemoveUntil(
+            NsPageRoute<void>(
+              style: NsTransitionStyle.fade,
+              builder: (_) => const LoginScreen(),
+            ),
+            (route) => false,
+          ),
+          child: const AppLockGate(
+            child: HomeScreen(showRememberMePrompt: true),
+          ),
+        ),
       ),
       (route) => false,
     );

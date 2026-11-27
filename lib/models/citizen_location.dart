@@ -8,12 +8,25 @@ class CitizenLocation {
     required this.longitude,
     required this.municipality,
     required this.ward,
+    this.source = sourceGps,
   });
+
+  /// Coordinates came from a device fix.
+  static const sourceGps = 'gps';
+
+  /// The ward was picked by hand in the ward picker. The coordinates are then
+  /// a real fix when one was available, otherwise the municipality centre.
+  static const sourceManual = 'manual';
 
   final double latitude;
   final double longitude;
   final String municipality;
   final int ward;
+
+  /// How this ward was established: [sourceGps] or [sourceManual].
+  final String source;
+
+  bool get isManual => source == sourceManual;
 
   /// Short code built from the municipality name, e.g. "KMC" for
   /// "Kathmandu Metropolitan City". Empty when the name has no usable words.
@@ -36,6 +49,7 @@ class CitizenLocation {
     'longitude': longitude,
     'municipality': municipality,
     'ward': ward,
+    'source': source,
   };
 
   static CitizenLocation? tryFromMap(Object? value) {
@@ -48,11 +62,14 @@ class CitizenLocation {
     if (ward is! num || latitude is! num || longitude is! num) return null;
     if (municipality is! String || municipality.trim().isEmpty) return null;
 
+    final source = value['source'];
+
     return CitizenLocation(
       latitude: latitude.toDouble(),
       longitude: longitude.toDouble(),
       municipality: municipality,
       ward: ward.toInt(),
+      source: source == sourceManual ? sourceManual : sourceGps,
     );
   }
 }

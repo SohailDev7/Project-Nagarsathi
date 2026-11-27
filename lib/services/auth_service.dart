@@ -266,6 +266,70 @@ class AuthService {
     });
   }
 
+  /// The public page shared from a citizen's profile.
+  static String profileLink(String username) =>
+      '$_otpWorkerUrl/u/${username.trim().toLowerCase()}';
+
+  /// Asks the worker to stamp `emailVerified` on the signed-in account.
+  ///
+  /// Only called after the OTP worker verified a code for that address, so the
+  /// account really owns the email. Reloads the Firebase user so
+  /// [User.emailVerified] reflects the new flag.
+  Future<bool> markEmailVerified() async {
+    if (!isConfigured) return false;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    final token = await user.getIdToken();
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_otpWorkerUrl/mark-email-verified'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+            body: '{}',
+          )
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw const AuthFailure(
+        'Email verification timed out. Check your connection and try again.',
+      );
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the verification service. Try again.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      String message = 'We could not verify this email. Try again.';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['error'] is String) {
+          message = decoded['error'] as String;
+        }
+      } catch (_) {}
+      throw AuthFailure(message);
+    }
+
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+    } catch (_) {}
+    return FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+  }
+
+  /// Best-effort stamping after an OTP sign-in that already proved the email.
+  Future<void> _markVerifiedQuietly() async {
+    try {
+      await markEmailVerified().timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // The verification gate can retry later; never block sign-in here.
+    }
+  }
+
   /// Verifies an OTP and establishes a Firebase Auth session using the custom
   /// token returned by the backend, or by signing in/creating the verified account.
   Future<void> signInWithEmailOtp({
@@ -297,6 +361,7 @@ class AuthService {
             user,
             provider: 'email-otp',
           ).timeout(const Duration(seconds: 3), onTimeout: () {});
+          await _markVerifiedQuietly();
         }
         return;
       } on FirebaseAuthException catch (error) {
@@ -317,6 +382,7 @@ class AuthService {
             user,
             provider: 'password',
           ).timeout(const Duration(seconds: 3), onTimeout: () {});
+          await _markVerifiedQuietly();
         }
         return;
       } on FirebaseAuthException catch (e) {
@@ -346,6 +412,7 @@ class AuthService {
             name: defaultName,
             email: cleanEmail,
           ).timeout(const Duration(seconds: 3), onTimeout: () {});
+          await _markVerifiedQuietly();
         }
         return;
       } on FirebaseAuthException catch (e) {
@@ -1013,6 +1080,7 @@ class AuthService {
     required String name,
     required String username,
     String? phone,
+    String? avatarColor,
   }) async {
     if (!isConfigured) {
       throw const AuthFailure(
@@ -1073,6 +1141,8 @@ class AuthService {
           'username': cleanUsername,
           'usernameLower': usernameKey,
           'phone': cleanPhone.isEmpty ? null : cleanPhone,
+          if (avatarColor != null && avatarColor.trim().isNotEmpty)
+            'avatarColor': avatarColor.trim().toLowerCase(),
           'role': 'citizen',
           'profileComplete': true,
           if (renaming) 'usernameChangedAt': FieldValue.serverTimestamp(),

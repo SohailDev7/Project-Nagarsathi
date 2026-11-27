@@ -177,12 +177,48 @@ users/{uid}
 ```
 
 The label uses the municipality initials (`Kathmandu Metropolitan City` →
-`KMC`), and the saved value is reused on every later launch. If the geocoder
-cannot read a ward, the app keeps the pill on "Set your location", explains why
-and retries when the citizen taps it. Android needs the
+`KMC`), and the saved value is reused on every later launch. Detection runs
+once per install; afterwards the pill only detects when tapped, so a citizen who
+declined is not prompted on every launch.
+
+If the geocoder cannot read a ward (common for Nepali addresses), a **Choose your
+ward** sheet opens: pick KMC (1–32) or LMC (1–29), tap the ward and save. The
+same sheet opens from "Not quite" in the confirmation dialog and by tapping the
+ward line on the profile screen. A hand-picked ward is stored with
+`source: 'manual'`; it keeps a real GPS fix when one exists and otherwise uses
+the municipality centre as a placeholder. Android needs the
 `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` permissions declared in
 `android/app/src/main/AndroidManifest.xml`; the system prompt is shown at
 runtime.
+
+
+### Avatar, profile sharing & email verification
+
+Citizens choose an avatar colour instead of a photo. The choice is stored on
+their profile as `avatarColor` (one of `forest`, `lime`, `teal`, `sky`, `sun`,
+`rose`, `plum`, `slate`) and rendered by `lib/widgets/ns_citizen_avatar.dart` on
+the home header, profile header and account sheet. **Edit profile** shows the
+swatches next to the initials preview.
+
+**Share profile** opens the native share sheet (`share_plus`) with a public
+link:
+
+```text
+https://nagarsathi-otp.sohailk2064.workers.dev/u/{username}
+```
+
+The OTP worker serves that page from `users/{usernameLower}` and shows only the
+display name, handle and confirmed ward. Existing links keep working without
+the app installed.
+
+Email verification is enforced before a citizen reaches the app. After an OTP
+sign-in the app asks the worker to stamp `emailVerified` on the Firebase
+account (`POST /mark-email-verified`, authenticated with the ID token). Anyone
+who signed in with a password but never verified sees
+`NsEmailVerificationGate`: it sends a 6-digit code to the account email, checks
+it with the same OTP worker, then refreshes the gate. Google and Facebook
+sign-ins and phone-only accounts are not gated. The worker mirrors the flag to
+`users/{uid}.emailVerified`.
 
 
 ## Updates

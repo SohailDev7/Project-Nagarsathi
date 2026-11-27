@@ -90,6 +90,18 @@ class LocationService {
     );
   }
 
+  /// Last fix the device already has, without prompting for permission. Used to
+  /// keep real coordinates when the citizen picks the ward by hand.
+  Future<({double latitude, double longitude})?> lastKnownFix() async {
+    try {
+      final position = await Geolocator.getLastKnownPosition();
+      if (position == null) return null;
+      return (latitude: position.latitude, longitude: position.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Position?> _position() async {
     try {
       return await Geolocator.getCurrentPosition(

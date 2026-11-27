@@ -17,6 +17,7 @@ import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
+import '../widgets/ns_email_verification_gate.dart';
 import '../widgets/ns_deactivated_account_dialog.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_google_button.dart';
@@ -399,11 +400,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     Navigator.of(context).pushAndRemoveUntil(
       NsPageRoute<void>(
         style: NsTransitionStyle.fade,
-        builder: (_) => AppLockGate(
-          child: HomeScreen(
-            initialName: name,
-            initialEmail: email,
-            showRememberMePrompt: true,
+        builder: (homeContext) => NsEmailVerificationGate(
+          onSignOut: () => Navigator.of(homeContext).pushAndRemoveUntil(
+            NsPageRoute<void>(
+              style: NsTransitionStyle.fade,
+              builder: (_) => const LoginScreen(),
+            ),
+            (route) => false,
+          ),
+          child: AppLockGate(
+            child: HomeScreen(
+              initialName: name,
+              initialEmail: email,
+              showRememberMePrompt: true,
+            ),
           ),
         ),
       ),

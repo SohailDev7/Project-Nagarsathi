@@ -126,6 +126,11 @@ abstract class AppStrings {
   // ── Citizen profile & edit profile ────────────────────────────────────────
   String get editProfile;
   String get shareProfile;
+  String get avatarColor;
+  String get verifyEmailTitle;
+  String get verifyEmailBody;
+  String get verifyEmailAction;
+  String get verifyEmailDone;
   String get profileReports;
   String get profileWard;
   String get profileSince;
@@ -691,6 +696,17 @@ class EnglishStrings extends AppStrings {
   String get editProfile => 'Edit profile';
   @override
   String get shareProfile => 'Share profile';
+  @override
+  String get avatarColor => 'Avatar colour';
+  @override
+  String get verifyEmailTitle => 'Verify your email';
+  @override
+  String get verifyEmailBody =>
+      'Confirm this email address before you continue. We will send a 6-digit code to the email on your account.';
+  @override
+  String get verifyEmailAction => 'Verify and continue';
+  @override
+  String get verifyEmailDone => 'Email verified. Welcome!';
   @override
   String get profileReports => 'Reports';
   @override
@@ -1573,6 +1589,17 @@ class NepaliStrings extends AppStrings {
   String get editProfile => 'प्रोफाइल सम्पादन';
   @override
   String get shareProfile => 'प्रोफाइल साझा गर्नुहोस्';
+  @override
+  String get avatarColor => 'अवतार रंग';
+  @override
+  String get verifyEmailTitle => 'आफ्नो इमेल प्रमाणित गर्नुहोस्';
+  @override
+  String get verifyEmailBody =>
+      'अगाडि बढ्नुअघि यो इमेल ठेगाना प्रमाणित गर्नुहोस्। तपाईंको खाताको इमेलमा ६-अंकको कोड पठाइनेछ।';
+  @override
+  String get verifyEmailAction => 'प्रमाणित गरी जारी राख्नुहोस्';
+  @override
+  String get verifyEmailDone => 'इमेल प्रमाणित भयो। स्वागत छ!';
   @override
   String get profileReports => 'रिपोर्टहरू';
   @override
