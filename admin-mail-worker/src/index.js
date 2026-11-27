@@ -122,6 +122,96 @@ async function assertStaffManager(uid, idToken) {
   );
 }
 
+function encodeBase64Url(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function pemToArrayBuffer(pem) {
+  const clean = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function getGoogleAccessToken(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = encodeBase64Url(
+    new TextEncoder().encode(JSON.stringify({ alg: "RS256", typ: "JWT" }))
+  );
+  const claim = encodeBase64Url(
+    new TextEncoder().encode(
+      JSON.stringify({
+        iss: serviceAccount.client_email,
+        scope: "https://www.googleapis.com/auth/identitytoolkit",
+        aud: "https://oauth2.googleapis.com/token",
+        iat: now,
+        exp: now + 3600,
+      })
+    )
+  );
+  const unsigned = `${header}.${claim}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(serviceAccount.private_key),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  const assertion = `${unsigned}.${encodeBase64Url(new Uint8Array(sig))}`;
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+  const tokenJson = await tokenRes.json().catch(() => null);
+  if (!tokenRes.ok || !tokenJson?.access_token) {
+    throw new Error(tokenJson?.error_description || "Failed to get Google access token");
+  }
+  return tokenJson.access_token;
+}
+
+async function requireStaffManager(request) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const idToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+  if (!idToken) {
+    return { error: json({ error: "Missing authorization token." }, 401) };
+  }
+
+  let uid;
+  try {
+    uid = await verifyFirebaseIdToken(idToken);
+  } catch (err) {
+    return { error: json({ error: `Unauthorized: ${err.message}` }, 401) };
+  }
+
+  const allowed = await assertStaffManager(uid, idToken);
+  if (!allowed) {
+    return { error: json({ error: "Forbidden: staff manager access required." }, 403) };
+  }
+  return { uid };
+}
+
 async function handleSendOfficerEmail(request, env) {
   const mailEndpoint = String(env.GMAIL_MAIL_ENDPOINT || "").trim();
   const mailSecret = String(env.GMAIL_MAIL_SECRET || "").trim();
@@ -129,25 +219,8 @@ async function handleSendOfficerEmail(request, env) {
     return json({ error: "Mail service is not configured on worker." }, 500);
   }
 
-  const authHeader = request.headers.get("Authorization") || "";
-  const idToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  if (!idToken) {
-    return json({ error: "Missing authorization token." }, 401);
-  }
-
-  let uid;
-  try {
-    uid = await verifyFirebaseIdToken(idToken);
-  } catch (err) {
-    return json({ error: `Unauthorized: ${err.message}` }, 401);
-  }
-
-  const allowed = await assertStaffManager(uid, idToken);
-  if (!allowed) {
-    return json({ error: "Forbidden: staff manager access required." }, 403);
-  }
+  const auth = await requireStaffManager(request);
+  if (auth.error) return auth.error;
 
   let body;
   try {
@@ -193,6 +266,72 @@ async function handleSendOfficerEmail(request, env) {
   return json({ sent: true });
 }
 
+async function handleDeleteOfficerAuth(request, env) {
+  const rawAccount = String(env.FIREBASE_SERVICE_ACCOUNT || "").trim();
+  if (!rawAccount) {
+    return json({ error: "FIREBASE_SERVICE_ACCOUNT is not configured." }, 500);
+  }
+
+  const auth = await requireStaffManager(request);
+  if (auth.error) return auth.error;
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body." }, 400);
+  }
+
+  const email = String(body?.email || "").trim().toLowerCase();
+  const uid = String(body?.uid || "").trim();
+  if (!email && !uid) {
+    return json({ error: "Field 'email' or 'uid' is required." }, 400);
+  }
+
+  const serviceAccount = JSON.parse(rawAccount);
+  const projectId = serviceAccount.project_id || FIREBASE_PROJECT_ID;
+  const accessToken = await getGoogleAccessToken(serviceAccount);
+
+  let targetUid = uid && !uid.startsWith("officer_") ? uid : "";
+  if (!targetUid && isValidEmail(email)) {
+    const lookupRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:lookup`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ email: [email] }),
+      }
+    );
+    const lookupJson = await lookupRes.json().catch(() => null);
+    targetUid = lookupJson?.users?.[0]?.localId || "";
+  }
+
+  if (!targetUid) {
+    return json({ deleted: false, reason: "user-not-found" });
+  }
+
+  const delRes = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:delete`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ localId: targetUid }),
+    }
+  );
+  if (!delRes.ok) {
+    const detail = await delRes.text().catch(() => "");
+    return json({ error: "Failed to delete Firebase Auth user.", detail }, 502);
+  }
+
+  return json({ deleted: true, uid: targetUid });
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -206,6 +345,9 @@ export default {
       const url = new URL(request.url);
       if (url.pathname === "/send-officer-email") {
         return await handleSendOfficerEmail(request, env);
+      }
+      if (url.pathname === "/delete-officer-auth") {
+        return await handleDeleteOfficerAuth(request, env);
       }
       return json({ error: "Not found." }, 404);
     } catch (err) {

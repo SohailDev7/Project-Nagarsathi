@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -77,8 +78,11 @@ class _WardOfficerManagementScreenState
     _loadData();
   }
 
+  Timer? _toastTimer;
+
   @override
   void dispose() {
+    _toastTimer?.cancel();
     _searchController
       ..removeListener(_handleSearchChanged)
       ..dispose();
@@ -227,7 +231,9 @@ class _WardOfficerManagementScreenState
     messenger.showSnackBar(
       SnackBar(
         content: Text(message),
-        duration: const Duration(seconds: 6),
+        duration: const Duration(seconds: 4),
+        showCloseIcon: true,
+        dismissDirection: DismissDirection.horizontal,
         action: actionLabel == null
             ? null
             : SnackBarAction(
@@ -237,6 +243,10 @@ class _WardOfficerManagementScreenState
               ),
       ),
     );
+    _toastTimer?.cancel();
+    _toastTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) messenger.hideCurrentSnackBar();
+    });
   }
 
   void _showError(Object error, String fallback) {

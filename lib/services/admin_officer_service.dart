@@ -450,6 +450,10 @@ class AdminOfficerService {
         // Notification write is best-effort.
       }
 
+      // Best-effort: delete the officer's Firebase Auth account via worker
+      // so the same email can be re-added later without email-already-in-use.
+      await _deleteOfficerAuthAccount(uid: existing.id, email: existing.email);
+
       await _sendRealEmail(notification);
     });
   }
@@ -676,7 +680,13 @@ class AdminOfficerService {
 
     final emailError = await _sendRealEmail(notification);
     final finalNotification = emailError == null
-        ? notification
+        ? OfficerNotification(
+            recipientEmail: notification.recipientEmail,
+            subject: notification.subject,
+            body: notification.body,
+            status: OfficerNotificationStatus.sent,
+            dispatchedAt: notification.dispatchedAt,
+          )
         : OfficerNotification(
             recipientEmail: notification.recipientEmail,
             subject: notification.subject,
@@ -691,6 +701,37 @@ class AdminOfficerService {
       auditLog: auditLog,
       notification: finalNotification,
     );
+  }
+
+  Future<void> _deleteOfficerAuthAccount({
+    required String uid,
+    required String email,
+  }) async {
+    if (_mailWorkerUrl.isEmpty || !FirebaseBootstrap.isReady) return;
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) return;
+
+      final response = await http
+          .post(
+            Uri.parse('$_mailWorkerUrl/delete-officer-auth'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({'uid': uid, 'email': email}),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (kDebugMode && response.statusCode != 200) {
+        debugPrint(
+          'Delete officer auth returned ${response.statusCode}: ${response.body}',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Delete officer auth error: $e');
+      }
+    }
   }
 
   Future<String?> _sendRealEmail(OfficerNotification notification) async {

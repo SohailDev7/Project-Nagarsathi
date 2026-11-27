@@ -7,11 +7,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/wards_catalog.dart';
 import '../l10n/app_strings.dart';
 import '../models/citizen_avatar.dart';
 import '../models/citizen_location.dart';
+import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
@@ -19,7 +22,6 @@ import '../widgets/ns_app_lock_prompt.dart';
 import '../widgets/ns_background.dart';
 import '../widgets/ns_bottom_nav.dart';
 import '../widgets/ns_chip.dart';
-import '../widgets/ns_citizen_avatar.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
@@ -30,11 +32,13 @@ import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
 import '../widgets/ns_route.dart';
+import '../widgets/ns_user_avatar.dart';
 import '../widgets/ns_ward_picker.dart';
 import '../widgets/update_dialog.dart';
 import 'citizen_profile_screen.dart';
 import 'delete_profile_screen.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'settings_screen.dart';
 
 /// Citizen home. A community reporting feed with the four primary
@@ -85,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _name = widget.initialName;
     _email = widget.initialEmail;
     _loadProfile();
+    ProfileService.instance.loadProfile(fallbackName: widget.initialName);
     _loadVersion();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _maybeCompleteProfile();
@@ -480,6 +485,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadProfile(force: true);
   }
 
+  void _openProfileScreen() {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+    );
+  }
+
   Future<void> _showAccountSheet() async {
     HapticFeedback.selectionClick();
     await _loadProfile();
@@ -493,7 +505,11 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Firebase Auth is not available in local/widget tests.
     }
-    final displayName = (_name != null && _name!.trim().isNotEmpty)
+    final liveProfile = ProfileService.instance.notifier.value;
+    final liveName = liveProfile?.displayName.trim();
+    final displayName = (liveName != null && liveName.isNotEmpty)
+        ? liveName
+        : (_name != null && _name!.trim().isNotEmpty)
         ? _name!.trim()
         : (user?.displayName?.trim().isNotEmpty == true
               ? user!.displayName!.trim()
@@ -515,6 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
         email: context.l10n.citizenAccount,
         initials: _initials,
         avatarColor: _avatarColor,
+        profile: liveProfile,
         version: _version,
         onSignOut: () {
           Navigator.of(sheetContext).pop();
@@ -533,6 +550,10 @@ class _HomeScreenState extends State<HomeScreen> {
         onCheckForUpdates: () {
           Navigator.of(sheetContext).pop();
           _checkForUpdates();
+        },
+        onOpenProfile: () {
+          Navigator.of(sheetContext).pop();
+          _openProfileScreen();
         },
         onOpenSettings: () {
           Navigator.of(sheetContext).pop();
@@ -560,78 +581,111 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = context.l10n;
-    return Scaffold(
-      bottomNavigationBar: NsBottomNav(
-        activeIndex: 0,
-        onSelect: _onNavSelected,
-      ),
-      body: NsBackground(
-        ambientGlow: true,
-        child: SafeArea(
-          bottom: false,
-          child: NsEntrance(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildTopBar(),
-                      const SizedBox(height: 26),
-                      _buildGreeting(),
-                      const SizedBox(height: 14),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _LocationPill(
-                          label: _location?.label ?? strings.setYourLocation,
-                          locating: _locating,
-                          onTap: _locating ? null : _detectLocation,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _ReportHero(onTap: _comingSoon),
-                      const SizedBox(height: 26),
-                      _SectionTitle(strings.reportInOneTap),
-                      const SizedBox(height: 12),
-                      _CategoryRow(onTap: _comingSoon),
-                      const SizedBox(height: 26),
-                      _SectionTitle(
-                        strings.aroundYou,
-                        action: strings.seeAll,
-                        onAction: _comingSoon,
-                      ),
-                      const SizedBox(height: 12),
-                      _ReportList(onTap: _comingSoon),
-                      const SizedBox(height: 18),
-                      Center(
-                        child: Text(
-                          _version == null
-                              ? strings.appTagline
-                              : strings.versionText(_version!),
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: NsColors.of(context).muted,
+    return ValueListenableBuilder<UserProfile?>(
+      valueListenable: ProfileService.instance.notifier,
+      builder: (context, profile, _) {
+        final savedHomeWard = profile?.homeWard ?? _location?.ward;
+        final wardLabel = savedHomeWard != null
+            ? (WardsCatalog.byNumber(savedHomeWard)?.shortLabel ??
+                  'Ward $savedHomeWard')
+            : null;
+        final locationLabel =
+            _location?.label ?? wardLabel ?? strings.setYourLocation;
+
+        return Scaffold(
+          bottomNavigationBar: NsBottomNav(
+            activeIndex: 0,
+            onSelect: _onNavSelected,
+          ),
+          body: NsBackground(
+            ambientGlow: true,
+            child: SafeArea(
+              bottom: false,
+              child: NsEntrance(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 430),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildTopBar(profile),
+                          const SizedBox(height: 26),
+                          _buildGreeting(profile),
+                          const SizedBox(height: 14),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _LocationPill(
+                              label: locationLabel,
+                              locating: _locating,
+                              onTap: _locating ? null : _detectLocation,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 20),
+                          _ReportHero(onTap: _comingSoon),
+                          const SizedBox(height: 26),
+                          _SectionTitle(strings.reportInOneTap),
+                          const SizedBox(height: 12),
+                          _CategoryRow(onTap: _comingSoon),
+                          const SizedBox(height: 26),
+                          _SectionTitle(
+                            savedHomeWard == null
+                                ? strings.aroundYou
+                                : '${strings.aroundYou} · Ward $savedHomeWard',
+                            action: strings.seeAll,
+                            onAction: _comingSoon,
+                          ),
+                          const SizedBox(height: 12),
+                          _ReportList(
+                            homeWard: savedHomeWard,
+                            profile: profile,
+                            onTapReport: _openReportDetail,
+                          ),
+                          const SizedBox(height: 18),
+                          Center(
+                            child: Text(
+                              _version == null
+                                  ? strings.appTagline
+                                  : strings.versionText(_version!),
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: NsColors.of(context).muted,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildTopBar() {
+  void _openReportDetail(_CommunityReport report) {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NsColors.of(context).surface,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => _ReportDetailSheet(report: report),
+    );
+  }
+
+  Widget _buildTopBar([UserProfile? profile]) {
     final tokens = NsColors.of(context);
 
     return Row(
@@ -662,15 +716,20 @@ class _HomeScreenState extends State<HomeScreen> {
           key: const Key('home-avatar'),
           initials: _initials,
           color: _avatarColor,
+          profile: profile,
           onTap: _showAccountSheet,
         ),
       ],
     );
   }
 
-  Widget _buildGreeting() {
+  Widget _buildGreeting([UserProfile? profile]) {
     final tokens = NsColors.of(context);
     final strings = context.l10n;
+    final liveName = profile?.displayName.trim();
+    final firstName = (liveName != null && liveName.isNotEmpty)
+        ? liveName.split(RegExp(r'\s+')).first
+        : _firstName;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -680,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                strings.greeting(_firstName),
+                strings.greeting(firstName),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1145,49 +1204,102 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
-class _ReportList extends StatelessWidget {
-  const _ReportList({required this.onTap});
+class _CommunityReport {
+  const _CommunityReport({
+    required this.id,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.status,
+    required this.tone,
+    required this.wardNumber,
+    this.isCurrentUserAuthor = false,
+  });
 
-  final VoidCallback onTap;
+  final String id;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String status;
+  final NsChipTone tone;
+  final int wardNumber;
+  final bool isCurrentUserAuthor;
+}
+
+class _ReportList extends StatelessWidget {
+  const _ReportList({
+    required this.homeWard,
+    required this.profile,
+    required this.onTapReport,
+  });
+
+  final int? homeWard;
+  final UserProfile? profile;
+  final ValueChanged<_CommunityReport> onTapReport;
 
   @override
   Widget build(BuildContext context) {
     final strings = context.l10n;
-    final reports = [
-      (
-        Icons.delete_outline_rounded,
-        strings.reportOverflowBin,
-        strings.reportOverflowBinMeta,
-        strings.statusInProgress,
-        NsChipTone.sky,
+    final activeWard = homeWard;
+    final wardInfo = WardsCatalog.byNumber(activeWard);
+    final wardLandmark = wardInfo?.landmarks.split(',').first.trim();
+
+    final allReports = <_CommunityReport>[
+      _CommunityReport(
+        id: 'rep_ward_${activeWard ?? 10}_1',
+        icon: Icons.delete_outline_rounded,
+        title: strings.reportOverflowBin,
+        subtitle: activeWard == null
+            ? strings.reportOverflowBinMeta
+            : 'Ward $activeWard (${wardLandmark ?? 'Main Chowk'}) · 2h ago',
+        status: strings.statusInProgress,
+        tone: NsChipTone.sky,
+        wardNumber: activeWard ?? 10,
+        isCurrentUserAuthor: true,
       ),
-      (
-        Icons.construction_rounded,
-        strings.reportPotholeTitle,
-        strings.reportPotholeMeta,
-        strings.statusReported,
-        NsChipTone.sun,
+      _CommunityReport(
+        id: 'rep_ward_${activeWard ?? 11}_2',
+        icon: Icons.construction_rounded,
+        title: strings.reportPotholeTitle,
+        subtitle: activeWard == null
+            ? strings.reportPotholeMeta
+            : 'Ward $activeWard · Yesterday',
+        status: strings.statusReported,
+        tone: NsChipTone.sun,
+        wardNumber: activeWard ?? 11,
       ),
-      (
-        Icons.lightbulb_outline_rounded,
-        strings.reportStreetlightTitle,
-        strings.reportStreetlightMeta,
-        strings.statusResolved,
-        NsChipTone.green,
+      _CommunityReport(
+        id: 'rep_ward_${activeWard ?? 12}_3',
+        icon: Icons.lightbulb_outline_rounded,
+        title: strings.reportStreetlightTitle,
+        subtitle: activeWard == null
+            ? strings.reportStreetlightMeta
+            : 'Ward $activeWard · 2 days ago',
+        status: strings.statusResolved,
+        tone: NsChipTone.green,
+        wardNumber: activeWard ?? 12,
       ),
     ];
 
+    final filtered = activeWard == null
+        ? allReports
+        : allReports.where((r) => r.wardNumber == activeWard).toList();
+
     return Column(
       children: [
-        for (var index = 0; index < reports.length; index++) ...[
+        for (var index = 0; index < filtered.length; index++) ...[
           if (index > 0) const SizedBox(height: 10),
           _ReportRow(
-            icon: reports[index].$1,
-            title: reports[index].$2,
-            subtitle: reports[index].$3,
-            status: reports[index].$4,
-            tone: reports[index].$5,
-            onTap: onTap,
+            icon: filtered[index].icon,
+            title: filtered[index].title,
+            subtitle: filtered[index].isCurrentUserAuthor &&
+                    profile != null &&
+                    profile!.displayName.trim().isNotEmpty
+                ? '${profile!.displayName.trim()} · ${filtered[index].subtitle}'
+                : filtered[index].subtitle,
+            status: filtered[index].status,
+            tone: filtered[index].tone,
+            onTap: () => onTapReport(filtered[index]),
           ),
         ],
       ],
@@ -1327,11 +1439,13 @@ class _AvatarButton extends StatelessWidget {
     required this.initials,
     required this.color,
     required this.onTap,
+    this.profile,
   });
 
   final String initials;
   final CitizenAvatarColor color;
   final VoidCallback onTap;
+  final UserProfile? profile;
 
   @override
   Widget build(BuildContext context) {
@@ -1340,7 +1454,12 @@ class _AvatarButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
-        child: NsCitizenAvatar(initials: initials, color: color, size: 40),
+        child: NsUserAvatar(
+          initials: initials,
+          color: color,
+          profile: profile,
+          size: 40,
+        ),
       ),
     );
   }
@@ -1355,8 +1474,10 @@ class _AccountSheet extends StatelessWidget {
     required this.onSignOut,
     required this.onDeleteProfile,
     required this.onCheckForUpdates,
+    required this.onOpenProfile,
     required this.onOpenSettings,
     required this.checkingForUpdate,
+    this.profile,
     this.version,
   });
 
@@ -1364,10 +1485,12 @@ class _AccountSheet extends StatelessWidget {
   final String email;
   final String initials;
   final CitizenAvatarColor avatarColor;
+  final UserProfile? profile;
   final String? version;
   final VoidCallback onSignOut;
   final VoidCallback onDeleteProfile;
   final VoidCallback onCheckForUpdates;
+  final VoidCallback onOpenProfile;
   final VoidCallback onOpenSettings;
   final bool checkingForUpdate;
 
@@ -1386,10 +1509,11 @@ class _AccountSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                NsCitizenAvatar(
-                  initials: initials,
+                NsUserAvatar(
+                  profile: profile,
                   color: avatarColor,
                   size: 50,
+                  fallbackInitials: initials,
                 ),
                 const SizedBox(width: 13),
                 Expanded(
@@ -1426,6 +1550,13 @@ class _AccountSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
+            NsOutlineButton(
+              key: const Key('open-profile-settings'),
+              label: 'Edit profile',
+              icon: Icons.person_outline_rounded,
+              onPressed: onOpenProfile,
+            ),
+            const SizedBox(height: 12),
             NsOutlineButton(
               label: checkingForUpdate
                   ? '${strings.checkForUpdates}…'
@@ -1574,6 +1705,187 @@ class _ConfirmWardDialog extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReportDetailSheet extends StatefulWidget {
+  const _ReportDetailSheet({required this.report});
+
+  final _CommunityReport report;
+
+  @override
+  State<_ReportDetailSheet> createState() => _ReportDetailSheetState();
+}
+
+class _ReportDetailSheetState extends State<_ReportDetailSheet> {
+  final _commentController = TextEditingController();
+  final List<({String text, bool isCurrentUser, String authorName})> _comments =
+      [
+        (
+          text: 'Thanks for reporting this to the ward office!',
+          isCurrentUser: true,
+          authorName: '',
+        ),
+        (
+          text: 'Ward crew has been notified and will inspect today.',
+          isCurrentUser: false,
+          authorName: 'Ward Office',
+        ),
+      ];
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  void _addComment() {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _comments.insert(0, (text: text, isCurrentUser: true, authorName: ''));
+      _commentController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final viewInsets = MediaQuery.of(context).viewInsets;
+
+    return ValueListenableBuilder<UserProfile?>(
+      valueListenable: ProfileService.instance.notifier,
+      builder: (context, profile, _) {
+        final myName = (profile?.displayName.trim().isNotEmpty == true)
+            ? profile!.displayName.trim()
+            : 'NagarSathi citizen';
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  widget.report.isCurrentUserAuthor
+                      ? NsUserAvatar(profile: profile, size: 42)
+                      : CircleAvatar(
+                          radius: 21,
+                          backgroundColor: tokens.mint,
+                          child: Icon(
+                            widget.report.icon,
+                            color: tokens.accentText,
+                          ),
+                        ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.report.title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: tokens.heading,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.report.isCurrentUserAuthor
+                              ? '$myName · ${widget.report.subtitle}'
+                              : widget.report.subtitle,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Public comments',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.heading,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final comment in _comments) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    comment.isCurrentUser
+                        ? NsUserAvatar(profile: profile, size: 32)
+                        : CircleAvatar(
+                            radius: 16,
+                            backgroundColor: tokens.mint,
+                            child: Icon(
+                              Icons.apartment_rounded,
+                              size: 16,
+                              color: tokens.accentText,
+                            ),
+                          ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            comment.isCurrentUser ? myName : comment.authorName,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: tokens.heading,
+                            ),
+                          ),
+                          Text(
+                            comment.text,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _commentController,
+                      decoration: const InputDecoration(
+                        hintText: 'Write a public comment…',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => _addComment(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _addComment,
+                    icon: const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
