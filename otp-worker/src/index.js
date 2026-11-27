@@ -549,6 +549,238 @@ async function firestoreHasDocument(env, accessToken, collection, field, value) 
   return Array.isArray(rows) && rows.some((row) => row?.document);
 }
 
+function firestoreValueToJs(field) {
+  if (!field || typeof field !== "object") return null;
+  if ("stringValue" in field) return field.stringValue;
+  if ("integerValue" in field) return Number(field.integerValue);
+  if ("doubleValue" in field) return Number(field.doubleValue);
+  if ("booleanValue" in field) return Boolean(field.booleanValue);
+  if ("mapValue" in field) return firestoreFieldsToObject(field.mapValue?.fields);
+  return null;
+}
+
+function firestoreFieldsToObject(fields) {
+  if (!fields || typeof fields !== "object") return {};
+  const result = {};
+  for (const [key, value] of Object.entries(fields)) {
+    result[key] = firestoreValueToJs(value);
+  }
+  return result;
+}
+
+async function firestoreFindDocument(env, accessToken, collection, field, value) {
+  const account = readServiceAccount(env);
+  if (!account?.project_id) return null;
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${account.project_id}/databases/(default)/documents:runQuery`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: collection }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: field },
+              op: "EQUAL",
+              value: { stringValue: value },
+            },
+          },
+          limit: 1,
+        },
+      }),
+    },
+  );
+  if (!response.ok) return null;
+
+  const rows = await response.json().catch(() => null);
+  const row = Array.isArray(rows) ? rows.find((item) => item?.document) : null;
+  return row?.document ? firestoreFieldsToObject(row.document.fields) : null;
+}
+
+// ─── Public profile link ──────────────────────────────────────────────────
+//
+// `/u/{username}` is the page citizens share from their profile. It is public
+// and read-only: only the display name, handle and confirmed ward are shown.
+
+function htmlPage(title, body) {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+      `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+      `<title>${title}</title><style>` +
+      `:root{color-scheme:light}body{margin:0;min-height:100vh;display:flex;` +
+      `align-items:center;justify-content:center;background:#EAF7E2;font-family:` +
+      `system-ui,-apple-system,'Segoe UI',sans-serif;color:#12321F;padding:24px}` +
+      `.card{background:#fff;border:1.5px solid #C9E3B8;border-radius:24px;` +
+      `padding:28px 24px;max-width:360px;width:100%;text-align:center;` +
+      `box-shadow:0 18px 40px rgba(18,50,31,.12)}` +
+      `.avatar{width:76px;height:76px;border-radius:50%;margin:0 auto 14px;` +
+      `display:flex;align-items:center;justify-content:center;background:#14472A;` +
+      `color:#EAF7E2;font-size:26px;font-weight:800;letter-spacing:.5px}` +
+      `h1{font-size:20px;margin:0 0 4px;letter-spacing:-.4px}` +
+      `.handle{color:#5B7166;font-weight:600;margin:0 0 14px}` +
+      `.ward{display:inline-block;background:#F1F8EC;border-radius:999px;` +
+      `padding:7px 14px;font-size:13px;font-weight:700;color:#14472A}` +
+      `.foot{margin-top:20px;font-size:12px;color:#7C8E84}` +
+      `</style></head><body><main class="card">${body}</main></body></html>`,
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+      },
+    },
+  );
+}
+
+function initialsFor(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "NS";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return (
+    parts[0].slice(0, 1) + parts[parts.length - 1].slice(0, 1)
+  ).toUpperCase();
+}
+
+async function publicProfile(env, rawHandle) {
+  const handle = String(rawHandle || "").trim().toLowerCase();
+  if (!/^[a-z0-9._]{3,20}$/.test(handle)) {
+    return htmlPage(
+      "NagarSathi",
+      "<h1>Profile not found</h1><p class=\"handle\">That handle is not valid.</p>",
+    );
+  }
+
+  let profile = null;
+  try {
+    const accessToken = await getGoogleAccessToken(env);
+    profile = await firestoreFindDocument(
+      env,
+      accessToken,
+      "users",
+      "usernameLower",
+      handle,
+    );
+  } catch {
+    profile = null;
+  }
+
+  if (!profile) {
+    return htmlPage(
+      "NagarSathi",
+      "<h1>Profile not found</h1>" +
+        `<p class=\"handle\">@${escapeHtml(handle)} is not on NagarSathi yet.</p>` +
+        '<p class="foot">NagarSathi · report civic issues</p>',
+    );
+  }
+
+  const name = String(profile.name || "NagarSathi citizen");
+  const username = String(profile.username || handle);
+  const location =
+    profile.location && typeof profile.location === "object"
+      ? profile.location
+      : null;
+  const ward =
+    location && location.ward
+      ? `${location.municipality || ""} · Ward ${location.ward}`
+      : "";
+
+  return htmlPage(
+    `${escapeHtml(name)} (@${escapeHtml(username)}) · NagarSathi`,
+    `<div class="avatar">${escapeHtml(initialsFor(name))}</div>` +
+      `<h1>${escapeHtml(name)}</h1>` +
+      `<p class="handle">@${escapeHtml(username)}</p>` +
+      (ward ? `<span class="ward">${escapeHtml(ward)}</span>` : "") +
+      '<p class="foot">NagarSathi citizen · report civic issues</p>',
+  );
+}
+
+// Marks the signed-in citizen's email as verified. The app calls this only
+// after the OTP worker has confirmed a 6-digit code for that address.
+async function markEmailVerified(request, env) {
+  const account = readServiceAccount(env);
+  if (!account?.project_id) {
+    return json({ error: "Email verification is not configured." }, 500);
+  }
+  const idToken = readBearerToken(request);
+  if (!idToken) {
+    return json({ error: "Sign in to verify your email." }, 401);
+  }
+
+  let accessToken;
+  try {
+    accessToken = await getGoogleAccessToken(env);
+  } catch {
+    return json({ error: "Email verification is not available right now." }, 503);
+  }
+
+  const authBase = `https://identitytoolkit.googleapis.com/v1/projects/${account.project_id}`;
+  const lookup = await fetch(`${authBase}/accounts:lookup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!lookup.ok) {
+    return json({ error: "Your session has expired. Sign in again." }, 401);
+  }
+
+  const payload = await lookup.json().catch(() => null);
+  const user = Array.isArray(payload?.users) ? payload.users[0] : null;
+  const uid = String(user?.localId || "").trim();
+  if (!uid) {
+    return json({ error: "Sign in to verify your email." }, 401);
+  }
+
+  if (!user?.emailVerified) {
+    const update = await fetch(`${authBase}/accounts:update`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ localId: uid, emailVerified: true }),
+    });
+    if (!update.ok) {
+      return json(
+        { error: "We could not mark this email as verified. Try again." },
+        502,
+      );
+    }
+  }
+
+  // Mirror the flag on the profile so staff tools can trust it too. Best
+  // effort: Firebase Auth is the source of truth for sign-in.
+  try {
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${account.project_id}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=emailVerified`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          fields: { emailVerified: { booleanValue: true } },
+        }),
+      },
+    );
+  } catch {
+    // The Auth flag is enough for the app gate.
+  }
+
+  return json({ verified: true });
+}
+
 async function verifyStaffManager(request, env, accessToken) {
   const idToken = readBearerToken(request);
   if (!idToken) {
@@ -919,26 +1151,29 @@ export default {
     if (request.method === "OPTIONS") {
       return json({});
     }
+    const url = new URL(request.url);
+
+    // Public profile link shared from a citizen's profile screen.
+    if (request.method === "GET") {
+      const profileMatch = /^\/u\/([A-Za-z0-9._]{1,30})\/?$/.exec(
+        url.pathname,
+      );
+      if (profileMatch) return publicProfile(env, profileMatch[1]);
+      return json({ error: "Not found." }, 404);
+    }
+
     if (request.method !== "POST") {
       return json({ error: "Method not allowed." }, 405);
     }
 
-    const url = new URL(request.url);
     if (url.pathname === "/request-email-otp") {
       return requestOtp(request, env);
     }
     if (url.pathname === "/verify-email-otp") {
       return verifyOtp(request, env);
     }
-    if (url.pathname === "/request-admin-otp") {
-      return requestOtp(request, env, { digits: 4, purpose: "admin" });
-    }
-    if (url.pathname === "/verify-admin-otp") {
-      return verifyOtp(request, env, {
-        digits: 4,
-        mintToken: false,
-        singleUse: true,
-      });
+    if (url.pathname === "/mark-email-verified") {
+      return markEmailVerified(request, env);
     }
     if (url.pathname === "/admin/delete-staff-account") {
       return deleteStaffAccount(request, env);
