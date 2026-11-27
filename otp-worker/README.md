@@ -11,7 +11,8 @@ Firebase custom token so the app can call `signInWithCustomToken`.
 | `POST /verify-email-otp` | `{ "email": "...", "otp": "123456" }` | `{ verified: true, token, verificationToken }` |
 | `POST /admin/delete-staff-account` | `{ "uid"?, "email"? }` | `{ deleted, uid }` |
 | `POST /admin/send-staff-invite` | `{ "email", "name", "ward", "tempPassword" }` | `{ sent: true }` |
-| `POST /delete-citizen-profile` | `{ "confirm": true }` | `{ status: "deleted" \| "pending", emailStatus }` |
+| `POST /delete-citizen-profile` | `{ "confirm": true, "immediate"?: true }` | `{ status: "deactivated" \| "deleted", deleteAt, emailStatus }` |
+| `POST /cancel-citizen-deletion` | `{ "confirm": true }` | `{ status: "active" }` |
 
 The two `/admin/*` endpoints require an `Authorization: Bearer <Firebase ID token>`
 header from a verified super-admin (or an active staff manager) and are used by
@@ -20,12 +21,29 @@ the Ward Officer Management screen.
 `/delete-citizen-profile` performs the US-13 profile deletion. It needs the
 service account secret (`FIREBASE_SERVICE_ACCOUNT`) and the citizen's freshly
 verified ID token: the app reauthenticates first, then sends the token. The
-worker derives the account from that token, refuses staff/administrator
-accounts, disables the account and revokes its refresh tokens, anonymizes its
-reports and comments, deletes the `users/{uid}` document tree, removes the
-Firebase OTP challenge and the Auth account, and finally emails the
-confirmation. A `citizen_deletions` row keeps the request durable, and the
-hourly cron resumes anything that failed. Cloud Functions were not used because
+worker derives the account from that token and refuses staff/administrator
+accounts.
+
+Confirming now **deactivates** the account instead of removing it:
+
+- `users/{uid}` gets `deletionStatus: "deactivated"`,
+  `deletionRequestedAt` and `deletionScheduledFor` (epoch milliseconds). The app
+  reads those fields on sign-in and shows the deletion notice, so the citizen is
+  told about the deletion and can keep the account.
+- A `citizen_deletions` row holds the 30-day deadline and the confirmation
+  address. The worker emails the date once and drops the address from D1.
+- The account keeps working and can sign in during the window.
+  `POST /cancel-citizen-deletion` sets the row to `cancelled` and the profile
+  back to `active`, which the dialog's "Keep my account" option calls.
+- When the deadline passes, the hourly cron (or `immediate: true` in the
+  request) runs the final purge: disable and revoke, anonymize reports and
+  comments, delete the `users/{uid}` document tree, remove the Firebase OTP
+  challenge and the Auth account. A failed purge stays queued and is retried
+  every hour.
+
+The worker creates `citizen_deletions` and its index on first use
+(`CREATE TABLE IF NOT EXISTS`), so a database whose schema predates this
+endpoint cannot fail the request with a missing table. Cloud Functions were not used because
 the Firebase project is on the Spark plan, which cannot deploy them. `delete-staff-account` removes the Firebase
 Auth account so an email can be reused after an officer is deleted;
 `send-staff-invite` emails the officer their temporary password through the

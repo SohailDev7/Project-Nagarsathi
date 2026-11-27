@@ -35,10 +35,32 @@ class CitizenDeletionResult {
   const CitizenDeletionResult({
     required this.completed,
     required this.emailStatus,
+    this.scheduled = false,
+    this.deleteAt,
   });
 
+  /// True only when the profile is already gone.
   final bool completed;
+
+  /// True when the account is deactivated and awaiting its scheduled purge.
+  final bool scheduled;
+
+  /// When the scheduled purge removes the account, if known.
+  final DateTime? deleteAt;
+
   final DeletionEmailStatus emailStatus;
+}
+
+/// The deletion stage stored on the citizen's profile.
+class CitizenDeletionState {
+  const CitizenDeletionState({required this.deactivated, this.deleteAt});
+
+  static const active = CitizenDeletionState(deactivated: false);
+
+  final bool deactivated;
+
+  /// When the account is permanently removed, if the server reported it.
+  final DateTime? deleteAt;
 }
 
 /// Thrown when an auth request cannot be completed. The message is already
@@ -566,13 +588,18 @@ class AuthService {
       final data = firebaseFunctions != null
           ? await _deleteViaCallable()
           : await _deleteViaWorker(user);
-      if (data['status'] != 'deleted' && data['status'] != 'pending') {
+      final status = data['status'];
+      if (status != 'deleted' &&
+          status != 'deactivated' &&
+          status != 'pending') {
         throw const AuthFailure(
           'We could not confirm deletion. Please sign in again to check.',
         );
       }
       final result = CitizenDeletionResult(
-        completed: data['status'] == 'deleted',
+        completed: status == 'deleted',
+        scheduled: status == 'deactivated' || status == 'pending',
+        deleteAt: _readTimestamp(data['deleteAt']),
         emailStatus: switch (data['emailStatus']) {
           'sent' => DeletionEmailStatus.sent,
           'pending' => DeletionEmailStatus.pending,
@@ -646,7 +673,10 @@ class AuthService {
   /// Asks the OTP worker to delete the profile. The worker holds the Firebase
   /// service account and derives the account from the ID token, so the app
   /// never sends a user id or an email.
-  Future<Map<String, dynamic>> _deleteViaWorker(User user) async {
+  Future<Map<String, dynamic>> _deleteViaWorker(
+    User user, {
+    bool immediate = false,
+  }) async {
     final token = await user.getIdToken();
     final http.Response response;
     try {
@@ -658,7 +688,10 @@ class AuthService {
               if (token != null && token.isNotEmpty)
                 'Authorization': 'Bearer $token',
             },
-            body: jsonEncode({'confirm': true}),
+            body: jsonEncode({
+              'confirm': true,
+              if (immediate) 'immediate': true,
+            }),
           )
           .timeout(const Duration(seconds: 90));
     } on TimeoutException {
@@ -705,6 +738,140 @@ class AuthService {
               : 'We could not confirm deletion. Please sign in again to check.',
         );
     }
+  }
+
+  /// Finishes a deactivated account's deletion right away instead of waiting
+  /// for its 30-day deadline. The worker accepts this only while the current
+  /// sign-in is recent, so the caller may need to verify again.
+  Future<CitizenDeletionResult> finishDeletionNow() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (!isConfigured || user == null) {
+      throw const AuthFailure('Sign in to manage your account.');
+    }
+    final Map<String, dynamic> data;
+    try {
+      data = await _deleteViaWorker(user, immediate: true);
+    } on AuthFailure catch (error) {
+      // The worker only deletes on demand while the sign-in is recent.
+      if (error.message.toLowerCase().contains('verify')) {
+        throw const AuthFailure(
+          'Sign in again to delete immediately. Otherwise the deletion '
+          'finishes on its own within 30 days.',
+        );
+      }
+      rethrow;
+    }
+    final status = data['status'];
+    if (status != 'deleted' && status != 'deactivated') {
+      throw const AuthFailure(
+        'We could not confirm deletion. Please sign in again to check.',
+      );
+    }
+    if (status == 'deleted') {
+      await signOut();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(SessionService.rememberKey);
+      } catch (_) {}
+    }
+    return CitizenDeletionResult(
+      completed: status == 'deleted',
+      scheduled: status == 'deactivated',
+      deleteAt: _readTimestamp(data['deleteAt']),
+      emailStatus: switch (data['emailStatus']) {
+        'sent' => DeletionEmailStatus.sent,
+        'pending' => DeletionEmailStatus.pending,
+        _ => DeletionEmailStatus.unavailable,
+      },
+    );
+  }
+
+  /// Cancels a scheduled deletion and restores the deactivated account.
+  Future<void> cancelProfileDeletion() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (!isConfigured || user == null) {
+      throw const AuthFailure('Sign in to manage your account.');
+    }
+    final token = await user.getIdToken();
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_otpWorkerUrl/cancel-citizen-deletion'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'confirm': true}),
+          )
+          .timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      throw const AuthFailure(
+        'The request timed out. Check your connection and try again.',
+      );
+    } catch (_) {
+      throw const AuthFailure(
+        'Could not reach the account service. Check your connection and try again.',
+      );
+    }
+
+    var payload = const <String, dynamic>{};
+    if (response.body.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) payload = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        // The status code still tells us whether the request worked.
+      }
+    }
+    if (response.statusCode == 200) return;
+
+    final message = payload['error'];
+    if (response.statusCode == 401) {
+      throw const AuthFailure('Your session has expired. Sign in again.');
+    }
+    throw AuthFailure(
+      message is String && message.trim().isNotEmpty
+          ? message
+          : 'We could not restore your account. Please try again.',
+    );
+  }
+
+  /// Reads the account's deletion stage from its Firestore profile.
+  ///
+  /// Returns [CitizenDeletionState.active] for a normal account, an
+  /// unconfigured app or a read failure, so callers never block sign-in.
+  Future<CitizenDeletionState> loadDeletionState() async {
+    if (!isConfigured) return CitizenDeletionState.active;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return CitizenDeletionState.active;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(_users)
+          .doc(user.uid)
+          .get();
+      final data = snapshot.data();
+      if (data == null) return CitizenDeletionState.active;
+      if (data['deletionStatus'] != 'deactivated') {
+        return CitizenDeletionState.active;
+      }
+      return CitizenDeletionState(
+        deactivated: true,
+        deleteAt: _readTimestamp(data['deletionScheduledFor']),
+      );
+    } catch (_) {
+      return CitizenDeletionState.active;
+    }
+  }
+
+  static DateTime? _readTimestamp(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   /// Reads the confirmed ward from the citizen's Firestore profile.

@@ -858,19 +858,23 @@ async function sendStaffInvite(request, env) {
 // the free Firebase plan and cannot deploy them. The same trusted cleanup runs
 // here with the worker's Firebase service account.
 
-async function sendCitizenDeletionConfirmation(env, email) {
+async function sendCitizenDeletionConfirmation(env, email, deleteAt) {
   if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET) {
     throw new Error("mail-not-configured");
   }
 
+  const when = new Date(Number(deleteAt) || Date.now()).toUTCString();
   const text =
-    "Your NagarSathi profile, personal data and sign-in credentials have " +
-    "been permanently removed. Public reports and comments remain without " +
-    "your identity. All account sessions have been revoked.";
+    "Your NagarSathi account has been deactivated and is scheduled for " +
+    `permanent deletion on ${when}. Sign in with your account before then and ` +
+    "choose \"Keep my account\" to cancel the deletion. After that date your " +
+    "profile, personal data and sign-in credentials are removed and your " +
+    "public reports and comments remain without your identity.";
   const html =
     "<div style='font-family:sans-serif;padding:20px;max-width:480px;" +
     "border:1px solid #e0e0e0;border-radius:12px;'>" +
-    "<h2 style='color:#163B2B;margin-top:0;'>Profile deleted</h2>" +
+    "<h2 style='color:#163B2B;margin-top:0;'>Your account is scheduled for " +
+    "deletion</h2>" +
     `<p style='font-size:14px;color:#333;'>${escapeHtml(text)}</p>` +
     "</div>";
 
@@ -880,7 +884,7 @@ async function sendCitizenDeletionConfirmation(env, email) {
     body: JSON.stringify({
       apiKey: env.GMAIL_MAIL_SECRET,
       to: email,
-      subject: "Your NagarSathi profile has been deleted",
+      subject: "Your NagarSathi account is scheduled for deletion",
       text,
       html,
     }),
@@ -944,6 +948,9 @@ export default {
     }
     if (url.pathname === "/delete-citizen-profile") {
       return citizenDeletion.deleteCitizenProfile(request, env);
+    }
+    if (url.pathname === "/cancel-citizen-deletion") {
+      return citizenDeletion.cancelCitizenDeletion(request, env);
     }
     return json({ error: "Not found." }, 404);
   },

@@ -139,6 +139,26 @@ class _DeleteProfileScreenState extends State<DeleteProfileScreen> {
     }
   }
 
+  static const _months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    return '${local.day} ${_months[local.month - 1]} ${local.year}';
+  }
+
   void _backToSignIn() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
@@ -197,11 +217,11 @@ class _DeleteProfileScreenState extends State<DeleteProfileScreen> {
           NsCard(
             borderColor: tokens.errorBorder,
             child: Text(
-              'Your profile, phone number, email and sign-in credentials will '
-              'be permanently removed. This cannot be undone.\n\n'
-              'Public reports and comments remain, with your identity removed. '
-              'You will be signed out on all devices. Any remaining cleanup '
-              'will finish within 30 days.',
+              'Your account is deactivated now and permanently deleted after '
+              '30 days. Sign in within that time to keep it.\n\n'
+              'After deletion your profile, phone number, email and sign-in '
+              'credentials are removed, and your public reports and comments '
+              'remain without your identity. Deletion cannot be undone.',
               style: TextStyle(color: tokens.ink, height: 1.5),
             ),
           ),
@@ -313,17 +333,23 @@ class _DeleteProfileScreenState extends State<DeleteProfileScreen> {
 
   Widget _buildResult(CitizenDeletionResult result) {
     final tokens = NsColors.of(context);
+    final deleteAt = result.deleteAt;
+    final title = result.completed
+        ? 'Profile deleted'
+        : (result.scheduled ? 'Account deactivated' : 'Deletion requested');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Icon(
-          Icons.check_circle_outline_rounded,
+          result.completed
+              ? Icons.check_circle_outline_rounded
+              : Icons.hourglass_bottom_rounded,
           size: 58,
-          color: tokens.accentText,
+          color: result.completed ? tokens.accentText : tokens.errorBorder,
         ),
         const SizedBox(height: 18),
         Text(
-          result.completed ? 'Profile deleted' : 'Deletion requested',
+          title,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 27,
@@ -337,6 +363,9 @@ class _DeleteProfileScreenState extends State<DeleteProfileScreen> {
               ? 'Your profile and personal data have been removed. '
                     'Your public contributions no longer identify you. '
                     'You have been signed out.'
+              : result.scheduled
+              ? 'Your account is deactivated and you have been signed out. '
+                    '${deleteAt == null ? 'It will be permanently deleted when the 30-day window ends.' : 'It will be permanently deleted on ${_formatDate(deleteAt)} unless you sign in before then and choose "Keep my account".'}' 
               : 'Your request is saved and you have been signed out. '
                     'We will finish removing your personal data within 30 days '
                     'and remove your identity from public contributions.',

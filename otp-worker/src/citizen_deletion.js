@@ -1,16 +1,26 @@
 // Citizen profile deletion on Cloudflare Workers.
 //
 // The Firebase project is on the Spark plan, so the equivalent Cloud Functions
-// callable cannot be deployed. This module performs the same trusted cleanup
+// callable cannot be deployed. This module performs the same trusted lifecycle
 // through Google's REST APIs with the worker's Firebase service account:
-// disable + revoke the account, anonymize its public contributions, remove the
-// Firestore profile tree, delete the Firebase Auth user, then email the
-// confirmation. D1 keeps the request durable so an interrupted run resumes on
-// the hourly cron.
+//
+// 1. Confirming deletion deactivates the account for 30 days. Nothing is
+//    removed yet, the citizen can still sign in, and the profile carries the
+//    schedule so the app can show its deactivation dialog.
+// 2. Signing in during that window offers to restore the account, which the
+//    /cancel-citizen-deletion endpoint performs.
+// 3. When the deadline passes (hourly cron) or the citizen asks for it, the
+//    cleanup runs: disable + revoke, anonymize public contributions, remove the
+//    Firestore profile tree, delete the Firebase Auth user, then email the
+//    confirmation.
+//
+// D1 keeps the schedule durable so an interrupted purge resumes on the hourly
+// cron.
 
 const HOUR_MS = 60 * 60 * 1000;
-// Leave a day's margin for the hourly purge before the 30-day maximum.
-const RETENTION_MS = 29 * 24 * HOUR_MS;
+// A citizen account stays deactivated for the full 30 days. The hourly cron
+// performs the final purge once the deadline passes.
+const RETENTION_MS = 30 * 24 * HOUR_MS;
 const VERIFICATION_WINDOW_MS = 5 * 60 * 1000;
 const VERIFIED_PROVIDERS = new Set([
   "password",
@@ -59,8 +69,43 @@ function decodeTokenPayload(idToken) {
 }
 
 export function createD1Jobs(db) {
+  // The table is created on first use: the worker may be deployed to a D1
+  // database whose schema was applied before deletion existed, and a missing
+  // table would otherwise fail the whole request with an empty 500.
+  let schemaReady = false;
+
+  async function ensureSchema() {
+    if (schemaReady) return;
+    const statements = [
+      db.prepare(
+        `CREATE TABLE IF NOT EXISTS citizen_deletions (
+          uid TEXT PRIMARY KEY,
+          email TEXT,
+          status TEXT NOT NULL,
+          email_status TEXT NOT NULL,
+          requested_at INTEGER NOT NULL,
+          purge_deadline INTEGER NOT NULL,
+          deleted_at INTEGER,
+          next_attempt_at INTEGER,
+          lease_until INTEGER
+        )`,
+      ),
+      db.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_citizen_deletions_due
+         ON citizen_deletions(next_attempt_at)`,
+      ),
+    ];
+    if (typeof db.batch === "function") {
+      await db.batch(statements);
+    } else {
+      for (const statement of statements) await statement.run();
+    }
+    schemaReady = true;
+  }
+
   return {
     async get(uid) {
+      await ensureSchema();
       return db
         .prepare("SELECT * FROM citizen_deletions WHERE uid = ?")
         .bind(uid)
@@ -68,6 +113,7 @@ export function createD1Jobs(db) {
     },
 
     async insert(row) {
+      await ensureSchema();
       await db
         .prepare(
           `INSERT INTO citizen_deletions (
@@ -92,12 +138,14 @@ export function createD1Jobs(db) {
     // Only one run may own a job at a time, and a finished job is never
     // claimed again.
     async claim(uid, leaseUntil, nextAttemptAt, at) {
+      await ensureSchema();
       const result = await db
         .prepare(
           `UPDATE citizen_deletions
            SET lease_until = ?, next_attempt_at = ?
            WHERE uid = ?
              AND (lease_until IS NULL OR lease_until <= ?)
+             AND status != 'cancelled'
              AND NOT (status = 'deleted' AND email_status != 'pending')`,
         )
         .bind(leaseUntil, nextAttemptAt, uid, at)
@@ -106,6 +154,7 @@ export function createD1Jobs(db) {
     },
 
     async update(uid, patch) {
+      await ensureSchema();
       const columns = Object.keys(patch);
       if (!columns.length) return;
       const assignments = columns.map((column) => `${column} = ?`).join(", ");
@@ -116,6 +165,7 @@ export function createD1Jobs(db) {
     },
 
     async due(at, limit) {
+      await ensureSchema();
       const result = await db
         .prepare(
           `SELECT uid FROM citizen_deletions
@@ -276,6 +326,49 @@ export function createCitizenDeletionHandlers({
     await deleteDocument(env, token, path);
   }
 
+  // PATCH (rather than a commit update) also creates the profile when the
+  // account has none, so the app can always read the deletion state.
+  async function patchProfile(env, token, uid, fields, fieldPaths) {
+    const mask = fieldPaths
+      .map((path) => `updateMask.fieldPaths=${encodeURIComponent(path)}`)
+      .join("&");
+    const response = await fetchImpl(
+      documentsUrl(env, `users/${uid}`, `?${mask}`),
+      {
+        method: "PATCH",
+        headers: { ...authHeader(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ fields }),
+      },
+    );
+    if (!response.ok) throw new Error(`firestore-patch-${response.status}`);
+  }
+
+  // The profile carries the schedule so a signed-in citizen sees the dialog
+  // without calling the worker.
+  async function markProfileDeactivated(env, token, uid, requestedAt, deleteAt) {
+    await patchProfile(
+      env,
+      token,
+      uid,
+      {
+        deletionStatus: { stringValue: "deactivated" },
+        deletionRequestedAt: { integerValue: String(requestedAt) },
+        deletionScheduledFor: { integerValue: String(deleteAt) },
+      },
+      ["deletionStatus", "deletionRequestedAt", "deletionScheduledFor"],
+    );
+  }
+
+  async function markProfileActive(env, token, uid) {
+    await patchProfile(
+      env,
+      token,
+      uid,
+      { deletionStatus: { stringValue: "active" } },
+      ["deletionStatus"],
+    );
+  }
+
   async function anonymizeContributions(env, token, uid, deadline) {
     const fields = {
       authorId: { nullValue: null },
@@ -352,7 +445,9 @@ export function createCitizenDeletionHandlers({
     throw new Error("auth-delete-failed");
   }
 
-  async function verifyCaller(request, env, token) {
+  // [fresh] is true for deletion, which needs a reauthentication from the last
+  // five minutes, and false for cancelling, which only needs a session.
+  async function verifyCaller(request, env, token, { fresh = true } = {}) {
     const header = request.headers.get("Authorization") || "";
     const match = /^Bearer\s+(.+)$/i.exec(header.trim());
     const idToken = match ? match[1].trim() : "";
@@ -385,10 +480,11 @@ export function createCitizenDeletionHandlers({
     const verifiedAt = Number(claims.auth_time) * 1000;
     const provider = claims?.firebase?.sign_in_provider;
     if (
-      !Number.isFinite(verifiedAt) ||
-      verifiedAt > now() + 30000 ||
-      now() - verifiedAt > VERIFICATION_WINDOW_MS ||
-      !VERIFIED_PROVIDERS.has(provider)
+      fresh &&
+      (!Number.isFinite(verifiedAt) ||
+        verifiedAt > now() + 30000 ||
+        now() - verifiedAt > VERIFICATION_WINDOW_MS ||
+        !VERIFIED_PROVIDERS.has(provider))
     ) {
       return {
         error: json({ error: "Verify your account again." }, 401),
@@ -405,11 +501,43 @@ export function createCitizenDeletionHandlers({
     });
   }
 
-  async function processDeletion(env, token, uid) {
+  // The one email the citizen gets when the account is deactivated. The address
+  // is dropped from D1 as soon as it is delivered.
+  async function deliverDeactivationEmail(env, jobs, job) {
+    if (!job.email || job.email_status !== "pending") return job.email_status;
+    try {
+      await sendConfirmation(env, job.email, Number(job.purge_deadline));
+      await jobs.update(job.uid, { email: null, email_status: "sent" });
+      return "sent";
+    } catch (error) {
+      logger.error("Citizen deletion email will be retried.", {
+        code: error?.message || "unknown",
+      });
+      return "pending";
+    }
+  }
+
+  // The final purge. It runs once the 30-day deactivation window has passed, or
+  // immediately when the citizen asks for it from the deactivation dialog.
+  async function processDeletion(env, token, uid, { force = false } = {}) {
     const jobs = jobsFor(env);
     const job = await jobs.get(uid);
     if (!job) return null;
     if (job.status === "deleted" && job.email_status !== "pending") return job;
+    if (job.status === "cancelled") return job;
+
+    // Any row still inside its window is left alone, including rows written by
+    // the previous release, which used a `pending` status.
+    if (job.status !== "deleted" && Number(job.purge_deadline) > now()) {
+      if (!force) {
+        // Still inside the window: only the confirmation email may be due.
+        await deliverDeactivationEmail(env, jobs, job);
+        return await jobs.get(uid);
+      }
+      // The citizen chose to finish now; the window no longer applies.
+      await jobs.update(uid, { purge_deadline: now() });
+    }
+
     if (job.lease_until && Number(job.lease_until) > now()) return job;
 
     const claimed = await jobs.claim(
@@ -449,33 +577,19 @@ export function createCitizenDeletionHandlers({
         await jobs.update(uid, {
           status: "deleted",
           deleted_at: now(),
-        });
-      }
-
-      if (job.email && Number(job.purge_deadline) > now()) {
-        await sendConfirmation(env, job.email);
-        await jobs.update(uid, {
-          email: null,
-          email_status: "sent",
-          lease_until: null,
-          next_attempt_at: null,
-        });
-      } else {
-        await jobs.update(uid, {
           email: null,
           email_status: "unavailable",
           lease_until: null,
           next_attempt_at: null,
         });
+      } else {
+        await jobs.update(uid, { lease_until: null, next_attempt_at: null });
       }
     } catch (error) {
-      // Keep the request durable; email survives only while it can still be
-      // used to send the confirmation, which is at most 30 days.
-      const expired = Number(job.purge_deadline) <= now();
+      // The purge stays queued and the hourly cron retries it.
       await jobs.update(uid, {
         lease_until: null,
         next_attempt_at: now() + HOUR_MS,
-        ...(expired ? { email: null, email_status: "unavailable" } : {}),
       });
       logger.error("Citizen profile deletion will be retried.", {
         code: error?.message || "unknown",
@@ -485,7 +599,7 @@ export function createCitizenDeletionHandlers({
     return await jobs.get(uid);
   }
 
-  async function deleteCitizenProfile(request, env) {
+  async function handleDeleteRequest(request, env) {
     const token = await accessToken(env);
     if (!token) return json({ error: "Server is not configured." }, 500);
     if (!projectId(env)) return json({ error: "Server is not configured." }, 500);
@@ -527,29 +641,167 @@ export function createCitizenDeletionHandlers({
 
     const jobs = jobsFor(env);
     const existing = await jobs.get(uid);
+    if (existing?.status === "deleted") {
+      return json({
+        status: "deleted",
+        emailStatus: existing.email_status || "unavailable",
+      });
+    }
+
+    const email = String(profile.document?.fields?.email?.stringValue || "")
+      .trim()
+      .toLowerCase();
+    const usable = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+    const deleteAt = now() + RETENTION_MS;
+
+    // The request no longer deletes anything right away: the account goes to a
+    // deactivation stage, signs in normally, and is purged after 30 days.
     if (!existing) {
-      const email = String(profile.document?.fields?.email?.stringValue || "")
-        .trim()
-        .toLowerCase();
-      const usable = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
       await jobs.insert({
         uid,
         email: usable,
-        status: "pending",
+        status: "deactivated",
         email_status: usable ? "pending" : "unavailable",
         requested_at: now(),
-        purge_deadline: now() + RETENTION_MS,
-        next_attempt_at: now(),
+        purge_deadline: deleteAt,
+        next_attempt_at: deleteAt,
+        lease_until: null,
+      });
+    } else if (existing.status === "cancelled") {
+      // A new request after cancelling starts a fresh 30-day window.
+      await jobs.update(uid, {
+        status: "deactivated",
+        email: usable ?? existing.email,
+        email_status: usable || existing.email ? "pending" : "unavailable",
+        requested_at: now(),
+        purge_deadline: deleteAt,
+        next_attempt_at: deleteAt,
+        deleted_at: null,
         lease_until: null,
       });
     }
 
-    const job = await processDeletion(env, token, uid);
-    if (!job) return json({ error: "Could not save the deletion request." }, 500);
+    const job = await jobs.get(uid);
+    if (!job) {
+      return json({ error: "Could not save the deletion request." }, 500);
+    }
+
+    // Signing in reads the schedule from the profile, so the dialog appears
+    // even when the app never calls the worker again.
+    try {
+      await markProfileDeactivated(
+        env,
+        token,
+        uid,
+        Number(job.requested_at) || now(),
+        Number(job.purge_deadline) || deleteAt,
+      );
+    } catch (error) {
+      logger.error("Could not mark the profile as deactivated.", {
+        code: error?.message || "unknown",
+      });
+    }
+
+    if (body?.immediate === true) {
+      const purged = await processDeletion(env, token, uid, { force: true });
+      if (purged?.status === "deleted") {
+        return json({
+          status: "deleted",
+          emailStatus: purged.email_status || "unavailable",
+        });
+      }
+    }
+
+    const emailStatus = await deliverDeactivationEmail(env, jobs, job);
     return json({
-      status: job.status === "deleted" ? "deleted" : "pending",
-      emailStatus: job.email_status || "unavailable",
+      status: "deactivated",
+      deleteAt: Number(job.purge_deadline) || deleteAt,
+      emailStatus: emailStatus || "unavailable",
     });
+  }
+
+  // Restores a deactivated account before its 30-day deadline.
+  async function handleCancelRequest(request, env) {
+    const token = await accessToken(env);
+    if (!token) return json({ error: "Server is not configured." }, 500);
+    if (!projectId(env)) return json({ error: "Server is not configured." }, 500);
+
+    const caller = await verifyCaller(request, env, token, { fresh: false });
+    if (caller.error) return caller.error;
+    const uid = caller.uid;
+
+    const jobs = jobsFor(env);
+    const job = await jobs.get(uid);
+    if (job?.status === "deleted") {
+      return json({ error: "This profile has already been deleted." }, 410);
+    }
+    if (job?.lease_until && Number(job.lease_until) > now()) {
+      return json(
+        {
+          error:
+            "Deletion is already in progress and can no longer be cancelled.",
+        },
+        409,
+      );
+    }
+
+    if (job) {
+      await jobs.update(uid, {
+        status: "cancelled",
+        email: null,
+        email_status: "unavailable",
+        next_attempt_at: null,
+        lease_until: null,
+      });
+    }
+
+    // Only report the account as restored once the profile says so.
+    try {
+      await markProfileActive(env, token, uid);
+    } catch (error) {
+      logger.error("Could not restore the citizen profile.", {
+        code: error?.message || "unknown",
+      });
+      return json(
+        { error: "We could not restore your account. Please try again." },
+        500,
+      );
+    }
+
+    return json({ status: "active" });
+  }
+
+  async function cancelCitizenDeletion(request, env) {
+    try {
+      return await handleCancelRequest(request, env);
+    } catch (error) {
+      logger.error("Citizen deletion cancellation failed.", {
+        code: error?.message || "unknown",
+      });
+      return json(
+        { error: "We could not restore your account. Please try again." },
+        500,
+      );
+    }
+  }
+
+  // Every failure answers with JSON, so the app can show the real reason
+  // instead of its generic "could not confirm deletion" fallback.
+  async function deleteCitizenProfile(request, env) {
+    try {
+      return await handleDeleteRequest(request, env);
+    } catch (error) {
+      logger.error("Citizen profile deletion failed.", {
+        code: error?.message || "unknown",
+      });
+      return json(
+        {
+          error:
+            "We could not finish deleting your profile. Please try again in a moment.",
+        },
+        500,
+      );
+    }
   }
 
   async function retryCitizenDeletions(env) {
@@ -561,5 +813,9 @@ export function createCitizenDeletionHandlers({
     }
   }
 
-  return { deleteCitizenProfile, retryCitizenDeletions };
+  return {
+    deleteCitizenProfile,
+    cancelCitizenDeletion,
+    retryCitizenDeletions,
+  };
 }

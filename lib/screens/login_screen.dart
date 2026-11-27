@@ -17,6 +17,7 @@ import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
+import '../widgets/ns_deactivated_account_dialog.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_google_button.dart';
 import '../widgets/ns_logo.dart';
@@ -34,11 +35,19 @@ import 'sign_up_screen.dart';
 import 'staff_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.themeController, this.languageController});
+  const LoginScreen({
+    super.key,
+    this.themeController,
+    this.languageController,
+    this.authService = const AuthService(),
+  });
 
   /// Injectable for tests; defaults to the app-wide controller.
   final ThemeController? themeController;
   final LanguageController? languageController;
+
+  /// Injectable for tests; checks the account's deletion stage on sign-in.
+  final AuthService authService;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -230,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
 
     try {
-      await const AuthService()
+      await widget.authService
           .signIn(
             identifier: _identifierController.text,
             password: _passwordController.text,
@@ -364,6 +373,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<void> _finishSignIn({String? name, String? email}) async {
     await const SessionService().clearStaffSession();
     if (!mounted) return;
+
+    // A deactivated account chooses what happens before the app opens.
+    final canEnter = await _confirmActiveAccount();
+    if (!mounted) return;
+    if (!canEnter) {
+      setState(() {
+        _isLoading = false;
+        _googleLoading = false;
+        _facebookLoading = false;
+        _celebrating = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = false;
       _celebrating = true;
@@ -386,6 +409,51 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       ),
       (route) => false,
     );
+  }
+
+  /// Tells a citizen whose account is inside its 30-day deletion window that
+  /// it is being deleted, before they reach the app. Logging in cancels the
+  /// deletion; continuing it leaves the citizen signed out.
+  ///
+  /// Returns true when the citizen may enter the app.
+  Future<bool> _confirmActiveAccount() async {
+    final CitizenDeletionState state;
+    try {
+      state = await widget.authService.loadDeletionState();
+    } catch (_) {
+      return true;
+    }
+    if (!mounted || !state.deactivated) return true;
+
+    setState(() {
+      _isLoading = false;
+      _googleLoading = false;
+      _facebookLoading = false;
+    });
+    final choice = await showDeactivatedAccountDialog(
+      context: context,
+      state: state,
+      authService: widget.authService,
+    );
+    if (!mounted) return false;
+    if (choice != DeactivatedAccountChoice.continueDeactivation) return true;
+
+    await widget.authService.signOut();
+    if (!mounted) return false;
+    final deleteAt = state.deleteAt;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleteAt == null
+              ? 'Your account stays deactivated and will be deleted when the '
+                    '30 days end.'
+              : 'Your account stays deactivated and will be deleted on '
+                    '${formatDeletionDate(deleteAt)}.',
+        ),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+    return false;
   }
 
   Future<void> _signInWithGoogle() async {

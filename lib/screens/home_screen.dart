@@ -74,11 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadProfile();
     _loadVersion();
     _restoreLocation();
-    if (widget.showRememberMePrompt) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _maybePromptRememberMe();
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.showRememberMePrompt) _maybePromptRememberMe();
+    });
   }
 
   Future<void> _maybePromptRememberMe() async {
