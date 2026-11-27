@@ -30,3 +30,24 @@ CREATE TABLE IF NOT EXISTS citizen_deletions (
 
 CREATE INDEX IF NOT EXISTS idx_citizen_deletions_due
 ON citizen_deletions(next_attempt_at);
+
+CREATE TABLE IF NOT EXISTS data_exports (
+  export_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email_hash TEXT NOT NULL,
+  recipient_email TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ready',
+  encrypted_payload TEXT NOT NULL,
+  payload_iv TEXT NOT NULL,
+  report_count INTEGER NOT NULL DEFAULT 0,
+  comment_count INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  delivered_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_exports_expiry
+ON data_exports(expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_data_exports_user
+ON data_exports(user_id, created_at);

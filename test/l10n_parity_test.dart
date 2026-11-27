@@ -112,6 +112,40 @@ void main() {
       }
     });
 
+    test('all privacy and data export strings are localized in Nepali', () {
+      final pairs = <(String, String)>[
+        (en.privacyTitle, ne.privacyTitle),
+        (en.privacySubtitle, ne.privacySubtitle),
+        (en.dataExportCardTitle, ne.dataExportCardTitle),
+        (en.dataExportCardDesc, ne.dataExportCardDesc),
+        (en.downloadMyData, ne.downloadMyData),
+        (en.dataExportFormatsLine, ne.dataExportFormatsLine),
+        (en.dataExportDeliveryLine, ne.dataExportDeliveryLine),
+        (en.dataExportExpiryLine, ne.dataExportExpiryLine),
+        (en.dataExportFootnote, ne.dataExportFootnote),
+        (en.dataExportEmailSentBadge, ne.dataExportEmailSentBadge),
+        (en.dataExportRequestedBadge, ne.dataExportRequestedBadge),
+        (en.dataExportExpiredBadge, ne.dataExportExpiredBadge),
+        (
+          en.dataExportSuccessMessage('user@example.com'),
+          ne.dataExportSuccessMessage('user@example.com'),
+        ),
+        (
+          en.dataExportSentTo('user@example.com'),
+          ne.dataExportSentTo('user@example.com'),
+        ),
+        (en.dataExportExpiresIn(47, 59), ne.dataExportExpiresIn(47, 59)),
+        (en.dataExportExpiredNotice, ne.dataExportExpiredNotice),
+        (en.dataExportCounts(2, 3), ne.dataExportCounts(2, 3)),
+      ];
+
+      for (final (e, n) in pairs) {
+        expect(e.isNotEmpty, isTrue);
+        expect(n.isNotEmpty, isTrue);
+        expect(e != n, isTrue);
+      }
+    });
+
     test('forLocale correctly resolves matching dictionary instance', () {
       expect(AppStrings.forLocale(AppLocale.en), isA<EnglishStrings>());
       expect(AppStrings.forLocale(AppLocale.ne), isA<NepaliStrings>());

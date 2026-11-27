@@ -1,10 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../l10n/app_locale.dart';
 import '../l10n/app_strings.dart';
 import '../l10n/language_controller.dart';
+import '../models/data_export_request.dart';
 import '../services/auth_service.dart';
 import '../services/biometric_service.dart';
+import '../services/data_export_demo_service.dart';
+import '../services/data_export_service.dart';
 import '../services/session_service.dart';
 import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
@@ -12,7 +17,7 @@ import '../theme/theme_controller.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_primary_button.dart';
 
-/// Preferences for language, appearance, and App Lock.
+/// Preferences for language, appearance, App Lock, and privacy data export.
 ///
 /// The lock section is deliberately separate from the sign-in flow: a citizen
 /// or staff member can enable or remove the device check without signing out,
@@ -24,6 +29,7 @@ class SettingsScreen extends StatefulWidget {
     this.languageController,
     this.sessionService = const SessionService(),
     this.biometricService,
+    this.dataExportService,
   });
 
   /// Injectable for tests; defaults to the app-wide controller.
@@ -32,6 +38,7 @@ class SettingsScreen extends StatefulWidget {
 
   final SessionService sessionService;
   final BiometricService? biometricService;
+  final DataExportService? dataExportService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -41,6 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     with WidgetsBindingObserver {
   late final BiometricService _biometrics =
       widget.biometricService ?? BiometricService();
+  late final DataExportService _dataExportService =
+      widget.dataExportService ?? DataExportService();
+  late final DataExportDemoService _dataExportDemoService =
+      const DataExportDemoService();
 
   ThemeController get _controller =>
       widget.controller ?? ThemeController.instance;
@@ -58,11 +69,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// they have a password that can be changed from here.
   StaffSession? _staffSession;
 
+  DataExportRequest? _latestExport;
+  String? _registeredEmail;
+  bool _exportLoading = true;
+  bool _exportBusy = false;
+  bool _demoRunning = false;
+  String? _exportError;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadSecurity();
+    _loadExportState();
   }
 
   @override
@@ -73,9 +92,10 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Refresh device security options when returning from phone Settings.
-    if (state == AppLifecycleState.resumed && !_securityBusy) {
-      _loadSecurity();
+    // Refresh device security and export expiry state when returning to the app.
+    if (state == AppLifecycleState.resumed) {
+      if (!_securityBusy) _loadSecurity();
+      if (!_exportBusy) _loadExportState();
     }
   }
 
@@ -182,6 +202,93 @@ class _SettingsScreenState extends State<SettingsScreen>
       ..showSnackBar(
         SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
       );
+  }
+
+  Future<void> _loadExportState() async {
+    final latestFuture = _dataExportService.loadLatestExport();
+    final emailFuture = _dataExportService.resolveRegisteredEmail();
+
+    final latest = await latestFuture;
+    final email = await emailFuture;
+    if (!mounted) return;
+
+    setState(() {
+      _latestExport = latest;
+      _registeredEmail = email;
+      _exportLoading = false;
+    });
+  }
+
+  Future<void> _requestDataExport() async {
+    if (_exportBusy) return;
+    setState(() {
+      _exportBusy = true;
+      _exportError = null;
+    });
+
+    final strings = AppStrings.forLocale(_languageController.value);
+    try {
+      final exportRequest = await _dataExportService.requestExport(
+        locale: _languageController.value.code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _exportBusy = false;
+        _latestExport = exportRequest;
+        _registeredEmail = exportRequest.email;
+      });
+      _showSecurityMessage(strings.dataExportSuccessMessage(exportRequest.email));
+    } on DataExportFailure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _exportBusy = false;
+        _exportError = error.message;
+      });
+      _showSecurityMessage(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _exportBusy = false;
+        _exportError = strings.errUnknown;
+      });
+      _showSecurityMessage(strings.errUnknown);
+    }
+  }
+
+  /// TEMPORARY DEMO: builds a real JSON + PDF package locally and shows the
+  /// simulated emailed link and its 48-hour expiry, without the backend.
+  Future<void> _runDemoExport() async {
+    if (_demoRunning) return;
+    setState(() => _demoRunning = true);
+    try {
+      final email =
+          _registeredEmail ??
+          await _dataExportService.resolveRegisteredEmail();
+      final result = await _dataExportDemoService.run(
+        email: email,
+        locale: _languageController.value.code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _demoRunning = false;
+        _latestExport = result.request;
+        _registeredEmail = result.request.email;
+      });
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: NsColors.of(context).surface,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        builder: (_) => _DemoExportSheet(result: result),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _demoRunning = false);
+      _showSecurityMessage('Could not build the demo export. Try again.');
+    }
   }
 
   @override
@@ -346,6 +453,51 @@ class _SettingsScreenState extends State<SettingsScreen>
                         onPressed: _openChangePassword,
                       ),
                     ],
+                    const SizedBox(height: 32),
+
+                    // -- Privacy & Data Export Section ------------------------
+                    Text(
+                      strings.privacyTitle,
+                      style: TextStyle(
+                        fontSize: 26,
+                        height: 1.15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.7,
+                        color: tokens.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      strings.privacySubtitle,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _PrivacyExportCard(
+                      strings: strings,
+                      latestExport: _latestExport,
+                      registeredEmail: _registeredEmail,
+                      loading: _exportLoading,
+                      busy: _exportBusy,
+                      error: _exportError,
+                      onDownloadMyData: _requestDataExport,
+                      onRunDemo: _runDemoExport,
+                      demoBusy: _demoRunning,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      strings.dataExportFootnote,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.muted,
+                      ),
+                    ),
                   ],
                 );
               },
@@ -1025,6 +1177,609 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             isLoading: _busy,
             onPressed: _submit,
             icon: Icons.lock_reset_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyExportCard extends StatelessWidget {
+  const _PrivacyExportCard({
+    required this.strings,
+    required this.latestExport,
+    required this.registeredEmail,
+    required this.loading,
+    required this.busy,
+    required this.error,
+    required this.onDownloadMyData,
+    this.onRunDemo,
+    this.demoBusy = false,
+  });
+
+  final AppStrings strings;
+  final DataExportRequest? latestExport;
+  final String? registeredEmail;
+  final bool loading;
+  final bool busy;
+  final String? error;
+  final VoidCallback onDownloadMyData;
+  final VoidCallback? onRunDemo;
+  final bool demoBusy;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final export = latestExport;
+    final isExpired = export != null && export.isExpiredAt();
+    final hasActiveExport = export != null && !isExpired;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: hasActiveExport ? scheme.primary : tokens.border,
+          width: hasActiveExport ? 2 : 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: tokens.mint,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(
+                  Icons.archive_rounded,
+                  size: 23,
+                  color: tokens.accentText,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            strings.dataExportCardTitle,
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w900,
+                              color: tokens.ink,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        if (export != null) ...[
+                          const SizedBox(width: 8),
+                          _ExportStatusBadge(
+                            strings: strings,
+                            export: export,
+                            isExpired: isExpired,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      strings.dataExportCardDesc,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _InfoLine(
+            icon: Icons.data_object_rounded,
+            color: tokens.accentText,
+            text: strings.dataExportFormatsLine,
+          ),
+          const SizedBox(height: 6),
+          _InfoLine(
+            icon: Icons.mark_email_read_rounded,
+            color: tokens.accentText,
+            text: registeredEmail != null && registeredEmail!.isNotEmpty
+                ? '${strings.dataExportDeliveryLine} ($registeredEmail)'
+                : strings.dataExportDeliveryLine,
+          ),
+          const SizedBox(height: 6),
+          _InfoLine(
+            icon: Icons.timer_outlined,
+            color: tokens.muted,
+            text: strings.dataExportExpiryLine,
+          ),
+          if (!loading && export != null) ...[
+            const SizedBox(height: 12),
+            _ExportSummaryBox(
+              strings: strings,
+              export: export,
+              isExpired: isExpired,
+            ),
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            _InfoLine(
+              icon: Icons.error_outline_rounded,
+              color: tokens.errorBorder,
+              text: error!,
+            ),
+          ],
+          const SizedBox(height: 14),
+          NsPrimaryButton(
+            key: const Key('download-my-data-button'),
+            label: strings.downloadMyData,
+            icon: Icons.download_rounded,
+            isLoading: busy,
+            onPressed: busy ? null : onDownloadMyData,
+          ),
+          if (onRunDemo != null) ...[
+            const SizedBox(height: 10),
+            Material(
+              color: tokens.surfaceSoft,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                key: const Key('download-my-data-demo-button'),
+                onTap: demoBusy ? null : onRunDemo,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: tokens.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.science_outlined,
+                        size: 18,
+                        color: tokens.accentText,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              demoBusy
+                                  ? 'Generating demo package…'
+                                  : 'Demo: run export now',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: tokens.ink,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              'Temporary preview - sample data, no email',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: tokens.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (demoBusy)
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              tokens.accentText,
+                            ),
+                          ),
+                        )
+                      else
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 20,
+                          color: tokens.muted,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ExportStatusBadge extends StatelessWidget {
+  const _ExportStatusBadge({
+    required this.strings,
+    required this.export,
+    required this.isExpired,
+  });
+
+  final AppStrings strings;
+  final DataExportRequest export;
+  final bool isExpired;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    final label = isExpired
+        ? strings.dataExportExpiredBadge
+        : export.status == DataExportStatus.sent
+        ? strings.dataExportEmailSentBadge
+        : strings.dataExportRequestedBadge;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: isExpired ? tokens.surfaceSoft : tokens.mint,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isExpired
+              ? tokens.errorBorder
+              : scheme.primary.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.6,
+          color: isExpired ? scheme.error : tokens.accentText,
+        ),
+      ),
+    );
+  }
+}
+
+class _ExportSummaryBox extends StatelessWidget {
+  const _ExportSummaryBox({
+    required this.strings,
+    required this.export,
+    required this.isExpired,
+  });
+
+  final AppStrings strings;
+  final DataExportRequest export;
+  final bool isExpired;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final remaining = export.remainingAt();
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes.remainder(60);
+
+    return Container(
+      key: const Key('data-export-summary-box'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            strings.dataExportSentTo(export.email),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: tokens.ink,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            isExpired
+                ? strings.dataExportExpiredNotice
+                : strings.dataExportExpiresIn(hours, minutes),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: isExpired
+                  ? Theme.of(context).colorScheme.error
+                  : tokens.accentText,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            strings.dataExportCounts(export.reportCount, export.commentCount),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: tokens.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// TEMPORARY DEMO ONLY: shows a generated export package and the simulated
+/// emailed download link with its 48-hour expiry, for reviewing the feature.
+class _DemoExportSheet extends StatelessWidget {
+  const _DemoExportSheet({required this.result});
+
+  final DataExportDemoResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final request = result.request;
+    final remaining = request.remainingAt();
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: tokens.mint,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.45),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Text(
+                    'DEMO PREVIEW',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.7,
+                      color: tokens.accentText,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _clock(request.requestedAt),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.muted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Export package ready',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+                color: tokens.ink,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${request.reportCount} reports and ${request.commentCount} '
+              'comments were packed for ${request.email}.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: tokens.muted,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _DemoStep(
+              icon: Icons.check_circle_rounded,
+              title: '1. Request received',
+              detail:
+                  'Export ${request.exportId} created securely for your account.',
+            ),
+            _DemoStep(
+              icon: Icons.description_rounded,
+              title: '2. Package generated',
+              detail:
+                  'JSON ${_kb(result.jsonBytes)} - machine readable\n'
+                  'PDF ${_kb(result.pdfBytes)} - human readable',
+            ),
+            _DemoStep(
+              icon: Icons.email_rounded,
+              title: '3. Link emailed',
+              detail:
+                  'Delivered ${_elapsed(result.deliveredAfter)} after the '
+                  'request (SLA ${request.deliverySlaMinutes} min).',
+            ),
+            _DemoStep(
+              icon: Icons.timer_outlined,
+              title: '4. Link expires in 48 hours',
+              detail:
+                  'Expires ${_clock(request.expiresAt)} - about '
+                  '${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m '
+                  'left. After that the link stops working.',
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: tokens.surfaceSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: tokens.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SECURE DOWNLOAD LINK',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.7,
+                      color: tokens.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    result.secureLink,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.4,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            NsPrimaryButton(
+              key: const Key('demo-open-pdf-button'),
+              label: 'Open PDF',
+              icon: Icons.picture_as_pdf_rounded,
+              onPressed: () => _open(context, result.pdfPath),
+            ),
+            const SizedBox(height: 10),
+            NsOutlineButton(
+              key: const Key('demo-open-json-button'),
+              label: 'Open JSON',
+              icon: Icons.data_object_rounded,
+              onPressed: () => _open(context, result.jsonPath),
+            ),
+            const SizedBox(height: 10),
+            NsOutlineButton(
+              key: const Key('demo-copy-link-button'),
+              label: 'Copy secure link',
+              icon: Icons.link_rounded,
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: result.secureLink),
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Demo link copied.')),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Demo only: no real email was sent and this link is simulated. '
+              'The JSON and PDF files above were really generated by the same '
+              'code the production export uses.',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+                color: tokens.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context, String path) async {
+    final result = await OpenFilex.open(path);
+    if (!context.mounted) return;
+    if (result.type != ResultType.done) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open file: ${result.message}\n$path')),
+      );
+    }
+  }
+
+  static String _kb(int bytes) => '${(bytes / 1024).toStringAsFixed(1)} KB';
+
+  static String _elapsed(Duration duration) {
+    if (duration.inSeconds < 60) return '${duration.inSeconds}s';
+    return '${duration.inMinutes}m';
+  }
+
+  static String _clock(DateTime value) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${value.day}/${two(value.month)}/${value.year} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+}
+
+class _DemoStep extends StatelessWidget {
+  const _DemoStep({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: tokens.accentText),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: tokens.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.muted,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

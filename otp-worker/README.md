@@ -13,6 +13,8 @@ Firebase custom token so the app can call `signInWithCustomToken`.
 | `POST /admin/send-staff-invite` | `{ "email", "name", "ward", "tempPassword" }` | `{ sent: true }` |
 | `POST /delete-citizen-profile` | `{ "confirm": true, "immediate"?: true }` | `{ status: "deactivated" \| "deleted", deleteAt, emailStatus }` |
 | `POST /cancel-citizen-deletion` | `{ "confirm": true }` | `{ status: "active" }` |
+| `POST /request-data-export` | `Authorization: Bearer <firebaseIdToken>`, `{ "locale": "en\|ne", "demo"?: true }` | `{ exportId, status, email, formats, reportCount, commentCount, requestedAt, expiresAt }` |
+| `GET /data-export/download?token=...` | Encrypted AES-256-GCM token (`&format=zip\|json\|pdf`) | Encrypted-at-rest ZIP (JSON + PDF), JSON, or PDF download; expires in 48 hours |
 
 The two `/admin/*` endpoints require an `Authorization: Bearer <Firebase ID token>`
 header from a verified super-admin (or an active staff manager) and are used by

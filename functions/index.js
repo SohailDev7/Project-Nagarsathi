@@ -6,6 +6,18 @@ const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const { createCitizenDeletionHandlers } = require("./citizen_deletion");
+const {
+  EXPORT_EXPIRY_MS,
+  DELIVERY_SLA_MINUTES,
+  encryptDownloadToken,
+  decryptDownloadToken,
+  encryptExportBundle,
+  decryptExportBundle,
+  normalizeFirestoreData,
+  buildExportDocument,
+  buildExportPdf,
+  buildZipArchive,
+} = require("./export_helpers");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -309,4 +321,271 @@ exports.githubReleaseWebhook = onRequest(async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: String(error?.message || error) });
   }
+});
+
+function emailKey(email) {
+  return crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+}
+
+async function collectUserDocs(queries) {
+  const byId = new Map();
+  const snapshots = await Promise.all(
+    queries.map((q) => q.get().catch(() => null)),
+  );
+  for (const snap of snapshots) {
+    if (!snap) continue;
+    for (const doc of snap.docs) {
+      if (!byId.has(doc.id)) {
+        byId.set(doc.id, { id: doc.id, ...normalizeFirestoreData(doc.data()) });
+      }
+    }
+  }
+  return Array.from(byId.values());
+}
+
+exports.requestDataExport = onCall(
+  { secrets: [gmailUser, gmailAppPassword, otpPepper] },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Sign in to request your data export.");
+    }
+
+    const uid = request.auth.uid;
+    const authUser = await admin.auth().getUser(uid);
+    const [userSnap, staffSnap] = await Promise.all([
+      db.collection("users").doc(uid).get().catch(() => null),
+      db.collection("staff").doc(uid).get().catch(() => null),
+    ]);
+
+    const userData = userSnap?.exists ? normalizeFirestoreData(userSnap.data()) : {};
+    const staffData = staffSnap?.exists ? normalizeFirestoreData(staffSnap.data()) : {};
+    const recipientEmail = String(
+      authUser.email || userData.email || staffData.email || "",
+    ).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "A registered email address is required to receive your export.",
+      );
+    }
+
+    const [reports, comments] = await Promise.all([
+      collectUserDocs([
+        db.collection("reports").where("userId", "==", uid),
+        db.collection("reports").where("authorId", "==", uid),
+        db.collection("reports").where("reporterId", "==", uid),
+        db.collection("users").doc(uid).collection("reports"),
+      ]),
+      collectUserDocs([
+        db.collection("comments").where("userId", "==", uid),
+        db.collection("comments").where("authorId", "==", uid),
+        db.collection("users").doc(uid).collection("comments"),
+      ]),
+    ]);
+
+    const profile = {
+      uid,
+      name: userData.name || staffData.name || authUser.displayName || null,
+      email: recipientEmail,
+      emailVerified: Boolean(authUser.emailVerified),
+      phone: userData.phone || staffData.phone || authUser.phoneNumber || null,
+      role: userData.role || staffData.role || "citizen",
+      preferredLanguage: userData.preferredLanguage || null,
+      location: userData.location || null,
+      createdAt: userData.createdAt || authUser.metadata?.creationTime || null,
+      updatedAt: userData.updatedAt || null,
+    };
+
+    const exportId = crypto.randomUUID();
+    const requestedAt = Date.now();
+    const expiresAt = requestedAt + EXPORT_EXPIRY_MS;
+
+    const exportDoc = buildExportDocument({
+      exportId,
+      profile,
+      reports,
+      comments,
+      requestedAt,
+      expiresAt,
+    });
+    const jsonString = JSON.stringify(exportDoc, null, 2);
+    const pdfBuffer = buildExportPdf({
+      exportId,
+      profile,
+      reports,
+      comments,
+      requestedAt,
+      expiresAt,
+    });
+
+    const envelope = Buffer.from(
+      JSON.stringify({ json: jsonString, pdfBase64: pdfBuffer.toString("base64") }),
+      "utf8",
+    );
+    const encrypted = encryptExportBundle(otpPepper.value(), exportId, envelope);
+    const emailHash = emailKey(recipientEmail);
+
+    await db.collection("dataExportPackages").doc(exportId).set({
+      exportId,
+      userId: uid,
+      emailHash,
+      recipientEmail,
+      status: "ready",
+      encryptedPayload: encrypted.ciphertextBase64,
+      payloadIv: encrypted.ivBase64,
+      reportCount: reports.length,
+      commentCount: comments.length,
+      createdAt: requestedAt,
+      expiresAt,
+    });
+
+    const token = encryptDownloadToken(otpPepper.value(), {
+      exportId,
+      userId: uid,
+      emailHash,
+      expiresAt,
+    });
+    const projectId = process.env.GCLOUD_PROJECT || "nagar-sathi-23080";
+    const downloadUrl = `https://us-central1-${projectId}.cloudfunctions.net/downloadDataExport?token=${encodeURIComponent(token)}`;
+    const isNepali = String(request.data?.locale || "").toLowerCase() === "ne";
+    const expiryIso = new Date(expiresAt).toISOString();
+
+    await mailer(gmailUser.value(), gmailAppPassword.value()).sendMail({
+      from: `NagarSathi <${gmailUser.value()}>`,
+      to: recipientEmail,
+      subject: isNepali
+        ? "तपाईंको नगरसाथी व्यक्तिगत डाटा निर्यात तयार छ"
+        : "Your NagarSathi personal data export is ready",
+      text: isNepali
+        ? `तपाईंको नगरसाथी निर्यात प्याकेज (JSON र PDF) तयार छ:\n${downloadUrl}\n\nयो इन्क्रिप्ट गरिएको लिङ्क ४८ घण्टापछि (${expiryIso}) स्वतः निष्क्रिय हुनेछ।`
+        : `Your NagarSathi export package (JSON & PDF) is ready:\n${downloadUrl}\n\nThis encrypted link expires in 48 hours (${expiryIso}).`,
+      html: isNepali
+        ? `<p>तपाईंको नगरसाथी निर्यात प्याकेज (<strong>JSON</strong> र <strong>PDF</strong>) तयार छ।</p><p><a href="${downloadUrl}">इन्क्रिप्ट गरिएको डाटा प्याकेज डाउनलोड गर्नुहोस्</a></p><p>यो लिङ्क <strong>४८ घण्टा</strong>पछि (${expiryIso}) स्वतः निष्क्रिय हुनेछ।</p>`
+        : `<p>Your NagarSathi export package (<strong>JSON</strong> &amp; <strong>PDF</strong>) is ready.</p><p><a href="${downloadUrl}">Download My Encrypted Data Package</a></p><p>This link expires automatically after <strong>48 hours</strong> (${expiryIso}).</p>`,
+    });
+
+    const deliveredAt = Date.now();
+    await db.collection("dataExportPackages").doc(exportId).update({
+      status: "sent",
+      deliveredAt,
+    });
+
+    return {
+      exportId,
+      status: "sent",
+      email: recipientEmail,
+      formats: ["json", "pdf"],
+      reportCount: reports.length,
+      commentCount: comments.length,
+      requestedAt,
+      expiresAt,
+      deliveredAt,
+      expiresInSeconds: EXPORT_EXPIRY_MS / 1000,
+      deliverySlaMinutes: DELIVERY_SLA_MINUTES,
+    };
+  },
+);
+
+exports.downloadDataExport = onRequest(
+  { secrets: [otpPepper] },
+  async (req, res) => {
+    const token = String(req.query.token || "").trim();
+    const format = String(req.query.format || "zip").toLowerCase();
+    if (!token) {
+      res.status(400).json({ error: "Missing export download token." });
+      return;
+    }
+
+    const tokenPayload = decryptDownloadToken(otpPepper.value(), token);
+    if (!tokenPayload || !tokenPayload.exportId || !tokenPayload.userId) {
+      res.status(403).json({ error: "This download link is invalid." });
+      return;
+    }
+
+    const now = Date.now();
+    const docRef = db.collection("dataExportPackages").doc(tokenPayload.exportId);
+    if (Number(tokenPayload.expiresAt || 0) <= now) {
+      await docRef.delete().catch(() => {});
+      res.status(410).json({ error: "This export download link has expired after 48 hours." });
+      return;
+    }
+
+    const snap = await docRef.get();
+    if (!snap.exists) {
+      res.status(410).json({ error: "This export is no longer available or has expired." });
+      return;
+    }
+
+    const row = snap.data();
+    if (Number(row.expiresAt || 0) <= now) {
+      await docRef.delete().catch(() => {});
+      res.status(410).json({ error: "This export download link has expired after 48 hours." });
+      return;
+    }
+
+    if (row.userId !== tokenPayload.userId || row.emailHash !== tokenPayload.emailHash) {
+      res.status(403).json({ error: "This download link is invalid." });
+      return;
+    }
+
+    let envelope;
+    try {
+      const decrypted = decryptExportBundle(
+        otpPepper.value(),
+        row.exportId,
+        row.payloadIv,
+        row.encryptedPayload,
+      );
+      envelope = JSON.parse(decrypted.toString("utf8"));
+    } catch {
+      res.status(500).json({ error: "Could not decrypt export package." });
+      return;
+    }
+    const shortId = String(row.exportId).slice(0, 8);
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (format === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="nagarsathi-data-export-${shortId}.json"`);
+      res.status(200).send(envelope.json);
+      return;
+    }
+
+    const pdfBuf = Buffer.from(envelope.pdfBase64, "base64");
+    if (format === "pdf") {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="nagarsathi-data-export-${shortId}.pdf"`);
+      res.status(200).send(pdfBuf);
+      return;
+    }
+
+    const zipBuf = buildZipArchive([
+      {
+        name: "README.txt",
+        data: Buffer.from(`NagarSathi Personal Data Export\nExport ID: ${row.exportId}\nExpires At: ${new Date(row.expiresAt).toISOString()}\n`, "utf8"),
+      },
+      { name: "nagarsathi-data-export.json", data: Buffer.from(envelope.json, "utf8") },
+      { name: "nagarsathi-data-export.pdf", data: pdfBuf },
+    ]);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="nagarsathi-data-export-${shortId}.zip"`);
+    res.status(200).send(zipBuf);
+  },
+);
+
+exports.cleanupExpiredDataExports = onSchedule("every 6 hours", async () => {
+  const now = Date.now();
+  const expired = await db
+    .collection("dataExportPackages")
+    .where("expiresAt", "<=", now)
+    .limit(200)
+    .get();
+  if (expired.empty) return;
+  const batch = db.batch();
+  for (const doc of expired.docs) {
+    batch.delete(doc.ref);
+  }
+  await batch.commit();
 });
