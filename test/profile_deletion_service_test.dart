@@ -232,7 +232,8 @@ void main() {
         isA<AuthFailure>().having(
           (error) => error.message,
           'message',
-          'Email or password is incorrect.',
+          'Email or password is incorrect. If you never set a password, '
+              'use the email code option instead.',
         ),
       ),
     );

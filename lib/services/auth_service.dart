@@ -63,6 +63,20 @@ class CitizenDeletionState {
   final DateTime? deleteAt;
 }
 
+/// Thrown when a citizen tries to claim a username that already belongs to
+/// someone else.
+class UsernameUnavailable implements Exception {
+  const UsernameUnavailable();
+}
+
+/// Thrown when a citizen renames their username before the seven-day window
+/// has passed. [availableAt] is the moment the next change unlocks.
+class UsernameCooldown implements Exception {
+  const UsernameCooldown(this.availableAt);
+
+  final DateTime availableAt;
+}
+
 /// Thrown when an auth request cannot be completed. The message is already
 /// citizen-friendly, so screens can show it directly.
 class AuthFailure implements Exception {
@@ -147,6 +161,11 @@ class AuthService {
   }
 
   Future<void> requestEmailOtp(String email, {String? locale}) async {
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Account creation is unavailable.',
+      );
+    }
     await _postOtp('/request-email-otp', {
       'email': email.trim(),
       'locale': locale ?? LanguageController.instance.value.code,
@@ -911,7 +930,7 @@ class AuthService {
   }
 
   Future<void> createCitizenAccount({
-    required String name,
+    String? name,
     required String email,
     required String password,
     String? phone,
@@ -923,8 +942,8 @@ class AuthService {
     }
 
     final cleanEmail = email.trim().toLowerCase();
-    final cleanName = name.trim().isNotEmpty
-        ? name.trim()
+    final cleanName = (name ?? '').trim().isNotEmpty
+        ? name!.trim()
         : cleanEmail.split('@').first;
 
     try {
@@ -960,6 +979,125 @@ class AuthService {
     } on FirebaseAuthException catch (error) {
       throw AuthFailure(friendlyMessage(error));
     }
+  }
+
+  /// Reads the signed-in citizen's own profile document.
+  ///
+  /// Returns `null` when nobody is signed in; read failures are rethrown so a
+  /// caller never mistakes them for a missing profile.
+  Future<Map<String, dynamic>?> loadCitizenProfile() async {
+    if (!isConfigured) return null;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    final snapshot = await FirebaseFirestore.instance
+        .collection(_users)
+        .doc(user.uid)
+        .get();
+    return snapshot.data();
+  }
+
+  /// Usernames are compared and reserved in lowercase.
+  static String normalizeUsername(String value) => value.trim().toLowerCase();
+
+  /// How long a citizen must keep a username before they may rename it.
+  static const usernameChangeInterval = Duration(days: 7);
+
+  /// Saves the details the short sign-up no longer asks for, and later edits.
+  ///
+  /// The username is reserved in `usernames/{lowercase}` inside the same
+  /// transaction that writes the profile, so two citizens cannot claim the
+  /// same one. Throws [UsernameUnavailable] when it is already taken and
+  /// [UsernameCooldown] when a rename comes before [usernameChangeInterval].
+  /// The first username a citizen sets never starts a cooldown.
+  Future<void> saveCitizenProfile({
+    required String name,
+    required String username,
+    String? phone,
+  }) async {
+    if (!isConfigured) {
+      throw const AuthFailure(
+        'Firebase is not connected. Profile saving is unavailable.',
+      );
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw const AuthFailure('Please sign in again to save your profile.');
+    }
+
+    final cleanName = name.trim();
+    final cleanUsername = username.trim();
+    final usernameKey = normalizeUsername(cleanUsername);
+    final cleanPhone = phone?.trim() ?? '';
+    final db = FirebaseFirestore.instance;
+    final userRef = db.collection(_users).doc(user.uid);
+    final usernameRef = db.collection('usernames').doc(usernameKey);
+
+    try {
+      await db.runTransaction((transaction) async {
+        final profileSnapshot = await transaction.get(userRef);
+        final existing = profileSnapshot.data();
+        final previousKey =
+            (existing?['usernameLower'] as String?)?.trim().toLowerCase() ?? '';
+        final renaming = previousKey.isNotEmpty && previousKey != usernameKey;
+
+        // A rename is allowed once every seven days. Not having a username yet
+        // (first-time setup) never starts a cooldown.
+        if (renaming) {
+          final lastChange = _readTimestamp(existing?['usernameChangedAt']);
+          if (lastChange != null) {
+            final nextAllowed = lastChange.add(usernameChangeInterval);
+            if (DateTime.now().isBefore(nextAllowed)) {
+              throw UsernameCooldown(nextAllowed);
+            }
+          }
+        }
+
+        final reservation = await transaction.get(usernameRef);
+        if (reservation.exists && reservation.data()?['uid'] != user.uid) {
+          throw const UsernameUnavailable();
+        }
+        if (!reservation.exists) {
+          transaction.set(usernameRef, {
+            'uid': user.uid,
+            'username': cleanUsername,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+        if (renaming) {
+          // Release the old handle so another citizen can claim it.
+          transaction.delete(db.collection('usernames').doc(previousKey));
+        }
+        transaction.set(userRef, {
+          'uid': user.uid,
+          'name': cleanName,
+          'username': cleanUsername,
+          'usernameLower': usernameKey,
+          'phone': cleanPhone.isEmpty ? null : cleanPhone,
+          'role': 'citizen',
+          'profileComplete': true,
+          if (renaming) 'usernameChangedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+    } on UsernameUnavailable {
+      rethrow;
+    } on UsernameCooldown {
+      rethrow;
+    } catch (_) {
+      throw const AuthFailure(
+        'We could not save your profile. Check your connection and try again.',
+      );
+    }
+
+    try {
+      await user.updateDisplayName(cleanName);
+    } catch (_) {
+      // The Firestore copy is the source of truth for the profile.
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cached_display_name', cleanName);
+    } catch (_) {}
   }
 
   Future<void> signIn({

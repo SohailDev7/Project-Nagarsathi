@@ -44,8 +44,11 @@ properly (Android Studio SDK Manager), that block can be removed.
 - Compact single-viewport layout: brand and the always-visible **Staff portal**
   entry sit in a pinned top bar, so no auth action needs scrolling on a small phone
 - Forgot-password flow that sends a reset link to an email or phone number
-- Four-step sign-up: name → email → optional phone → password, confirm password
-  and terms (phone can be skipped without skipping the password step)
+- Two-step sign-up: email, password and confirm password (plus terms), then the
+  6-digit email OTP
+- After the first sign-in the app asks for the full name, a unique username and
+  an optional phone number (only the phone can be skipped); the same form appears
+  for anyone whose profile is still missing them
 - Separate staff sign-in with a work-email/password portal, staff badge and staff
   workspace; staff sign-out returns to the staff login screen
 - Shared green theme: vivid lime actions, forest ink and cream paper, bundled
@@ -61,7 +64,8 @@ Citizen sign-up, sign-in and password resets are wired to Firebase:
   demo mode** and the UI behaves exactly as before.
 - `lib/services/auth_service.dart` creates accounts with Firebase Authentication
   and writes a `users/{uid}` profile (`name`, `email`, `phone`, `role: citizen`,
-  timestamps) to Cloud Firestore.
+  timestamps) to Cloud Firestore. The post-login profile form adds `username`,
+  reserving it in `usernames/{lowercase}` so two citizens cannot share one.
 - Sign-in refreshes that profile document; password resets use
   `sendPasswordResetEmail`.
 - Citizen passwordless sign-in ("Try another way" → **Sign in with an email

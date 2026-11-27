@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:projectnagarsathi/screens/citizen_profile_screen.dart';
 import 'package:projectnagarsathi/screens/home_screen.dart';
 import 'package:projectnagarsathi/theme/app_theme.dart';
 
@@ -54,7 +55,7 @@ void main() {
     expect(find.text('Delete my profile'), findsOneWidget);
   });
 
-  testWidgets('the Profile tab opens the account sheet with Settings', (
+  testWidgets('the Profile tab opens the citizen profile screen', (
     tester,
   ) async {
     await _pumpHome(tester);
@@ -62,6 +63,13 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(CitizenProfileScreen), findsOneWidget);
+    expect(find.text('NagarSathi citizen'), findsWidgets);
+    expect(find.text('Edit profile'), findsOneWidget);
+
+    // The account actions stay reachable from the profile's menu.
+    await tester.tap(find.byKey(const Key('profile-menu')));
+    await tester.pumpAndSettle();
     expect(find.text('Check for updates'), findsOneWidget);
     expect(find.text('Dark mode'), findsNothing);
 

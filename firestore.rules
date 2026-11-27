@@ -62,6 +62,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Usernames are reserved once, by their owner, so two citizens cannot
+    // claim the same handle. Any signed-in citizen may check a name; nobody
+    // may release or reassign one.
+    match /usernames/{username} {
+      allow get: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      // A citizen may release only their own handle when renaming; nobody may
+      // reassign or overwrite one.
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
     // A server-owned marker blocks stale ID tokens from recreating a profile.
     // Email is removed after confirmation delivery, or after 30 days.
     match /citizenDeletions/{uid} {

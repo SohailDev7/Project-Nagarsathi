@@ -111,24 +111,12 @@ Future<void> _signUpWithErrors(WidgetTester tester) async {
 }
 
 Future<void> _fillSignUpDetails(WidgetTester tester) async {
-  await tester.enterText(find.byType(TextFormField).at(0), 'Sita Sharma');
   await tester.enterText(
-    find.byType(TextFormField).at(1),
+    find.byType(TextFormField).at(0),
     'sita@nagarsathi.app',
   );
-  await tester.enterText(find.byType(TextFormField).at(2), '+977 9812345678');
-  await tester.pumpAndSettle();
-}
-
-Future<void> _reachPasswordStep(WidgetTester tester) async {
-  await _fillSignUpDetails(tester);
-  await tester.ensureVisible(find.text('Continue'));
-  await tester.tap(find.text('Continue'));
-  await tester.pumpAndSettle();
-  expect(find.text('2 of 3'), findsOneWidget);
-
-  await tester.enterText(find.byType(TextFormField).at(0), 'password123');
   await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+  await tester.enterText(find.byType(TextFormField).at(2), 'password123');
   await tester.pumpAndSettle();
 }
 
@@ -202,18 +190,13 @@ void main() {
       'SignUpScreen step 1 of 2 (details filled)',
       () => const SignUpScreen(),
       interact: _fillSignUpDetails,
+      note: 'Password strength label and terms row are visible.',
     );
     _auditBothModes(
       'SignUpScreen step 1 of 2 (errors)',
       () => const SignUpScreen(),
       interact: _signUpWithErrors,
       note: 'Validation errors and error borders are visible.',
-    );
-    _auditBothModes(
-      'SignUpScreen step 2 of 2',
-      () => const SignUpScreen(),
-      interact: _reachPasswordStep,
-      note: 'Password strength label and terms row are visible.',
     );
   });
 

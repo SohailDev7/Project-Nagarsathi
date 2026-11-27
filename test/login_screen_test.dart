@@ -71,68 +71,64 @@ void main() {
     expect(find.byType(StaffLoginScreen), findsOneWidget);
   });
 
-  testWidgets('single-screen sign-in shows email and password immediately and blocks when Firebase is unavailable', (
-    tester,
-  ) async {
-    disableAnimations(tester);
-    await tester.pumpWidget(const NagarSathiApp());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'single-screen sign-in shows email and password immediately and blocks when Firebase is unavailable',
+    (tester) async {
+      disableAnimations(tester);
+      await tester.pumpWidget(const NagarSathiApp());
+      await tester.pumpAndSettle();
 
-    // Both identifier and password fields are immediately visible
-    expect(find.byType(TextFormField), findsNWidgets(2));
+      // Both identifier and password fields are immediately visible
+      expect(find.byType(TextFormField), findsNWidgets(2));
 
-    await tester.enterText(
-      find.byType(TextFormField).at(0),
-      'citizen@nagarsathi.app',
-    );
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      'password123',
-    );
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.tap(find.text('Sign in'));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'citizen@nagarsathi.app',
+      );
+      await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+      await tester.ensureVisible(find.text('Sign in'));
+      await tester.tap(find.text('Sign in'));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'Firebase is not connected. Sign-in is unavailable.',
-      ),
-      findsAtLeastNWidgets(1),
-    );
-  });
+      expect(
+        find.text('Firebase is not connected. Sign-in is unavailable.'),
+        findsAtLeastNWidgets(1),
+      );
+    },
+  );
 
-  testWidgets('sign-up password step shows live checklist and validates terms', (
-    tester,
-  ) async {
-    disableAnimations(tester);
-    await tester.pumpWidget(const NagarSathiApp());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'sign-up password step shows live checklist and validates terms',
+    (tester) async {
+      disableAnimations(tester);
+      await tester.pumpWidget(const NagarSathiApp());
+      await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Sign up'));
-    await tester.tap(find.text('Sign up'));
-    await tester.pumpAndSettle();
-    expect(find.byType(SignUpScreen), findsOneWidget);
+      await tester.ensureVisible(find.text('Sign up'));
+      await tester.tap(find.text('Sign up'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SignUpScreen), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).at(0), 'Sita Sharma');
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      'citizen@nagarsathi.app',
-    );
-    await tester.ensureVisible(find.text('Continue'));
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('2 of 3'), findsOneWidget);
-    expect(find.text('8+ characters'), findsOneWidget);
+      expect(find.text('1 of 2'), findsOneWidget);
+      expect(find.text('8+ characters'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).at(0), 'Password123!');
-    await tester.enterText(find.byType(TextFormField).at(1), 'Password123!');
-    await tester.pumpAndSettle();
-    expect(find.text('Strong'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'citizen@nagarsathi.app',
+      );
+      await tester.enterText(find.byType(TextFormField).at(1), 'Password123!');
+      await tester.enterText(find.byType(TextFormField).at(2), 'Password123!');
+      await tester.pumpAndSettle();
+      expect(find.text('Strong'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Continue'));
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Accept the terms to continue.'), findsAtLeastNWidgets(1));
-  });
+      expect(
+        find.text('Accept the terms to continue.'),
+        findsAtLeastNWidgets(1),
+      );
+    },
+  );
 }

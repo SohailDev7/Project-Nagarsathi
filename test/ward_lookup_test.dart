@@ -10,6 +10,14 @@ void main() {
       expect(WardLookup.wardFrom(['WARD - 6']), 6);
       expect(WardLookup.wardFrom(['ward-31, Kathmandu']), 31);
       expect(WardLookup.wardFrom([null, '', 'Ward Number 4']), 4);
+      expect(WardLookup.wardFrom(['Ward16']), 16);
+    });
+
+    test('reads Nepali and keyword-less ward text', () {
+      expect(WardLookup.wardFrom(['वडा १६']), 16);
+      expect(WardLookup.wardFrom(['काठमाडौं वडा नं. १६']), 16);
+      expect(WardLookup.wardFrom(['16, Kathmandu']), 16);
+      expect(WardLookup.wardFrom(['Kathmandu, 16']), 16);
     });
 
     test('ignores numbers that are not wards', () {

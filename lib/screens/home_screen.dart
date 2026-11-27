@@ -16,17 +16,20 @@ import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ns_app_lock_prompt.dart';
 import '../widgets/ns_background.dart';
+import '../widgets/ns_bottom_nav.dart';
 import '../widgets/ns_chip.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_logo.dart';
 import '../widgets/ns_mascot.dart';
 import '../widgets/ns_outline_button.dart';
 import '../widgets/ns_pressable.dart';
+import '../widgets/ns_profile_setup_dialog.dart';
 import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
 import '../widgets/ns_route.dart';
 import '../widgets/update_dialog.dart';
+import 'citizen_profile_screen.dart';
 import 'delete_profile_screen.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
@@ -66,6 +69,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _locationAsked = false;
   bool _checkingForUpdate = false;
 
+  /// Set once the profile dialog has answered the remember-me question, so the
+  /// standalone remember-me popup is not shown a second time.
+  bool _rememberAnsweredInProfile = false;
+  bool _rememberFromProfile = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,10 +81,82 @@ class _HomeScreenState extends State<HomeScreen> {
     _email = widget.initialEmail;
     _loadProfile();
     _loadVersion();
-    _restoreLocation();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.showRememberMePrompt) _maybePromptRememberMe();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _maybeCompleteProfile();
+      if (!mounted) return;
+
+      // Citizens who did not see the profile dialog are asked about remembering
+      // right away; waiting behind the ward prompt made the notification feel
+      // like it arrived late.
+      if (widget.showRememberMePrompt && !_rememberAnsweredInProfile) {
+        await _maybePromptRememberMe();
+        if (!mounted) return;
+      }
+
+      // Ask for the ward only once the profile is done, so the system location
+      // prompt never appears behind a dialog.
+      await _restoreLocation();
+      if (!mounted || !widget.showRememberMePrompt) return;
+      if (_rememberAnsweredInProfile && _rememberFromProfile) {
+        await _offerAppLock();
+      }
     });
+  }
+
+  /// Asks brand-new citizens (and anyone who signed in before the profile
+  /// step existed) for the name, unique username and optional phone that the
+  /// shortened sign-up no longer collects.
+  Future<void> _maybeCompleteProfile() async {
+    if (!AuthService.isConfigured) return;
+
+    User? user;
+    try {
+      user = FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return;
+    }
+    if (user == null) return;
+
+    final Map<String, dynamic>? profile;
+    try {
+      profile = await const AuthService().loadCitizenProfile();
+    } catch (_) {
+      // Network or rules failure: do not block the citizen behind a form we
+      // cannot save.
+      return;
+    }
+    if (!mounted) return;
+
+    final name = (profile?['name'] as String?)?.trim() ?? '';
+    final username = (profile?['username'] as String?)?.trim() ?? '';
+    if (name.isNotEmpty && username.isNotEmpty) return;
+
+    final result = await showProfileSetupDialog(
+      context: context,
+      profile: profile,
+      onSignOut: _signOut,
+    );
+    if (!mounted || result == null || result.name.isEmpty) return;
+
+    // First-time citizens choose "Remember me" inside this same dialog, so
+    // persist it here and keep the separate popup from appearing.
+    _rememberAnsweredInProfile = true;
+    _rememberFromProfile = result.rememberMe;
+    await const SessionService().saveRememberMe(result.rememberMe);
+    if (!result.rememberMe) {
+      await const SessionService().saveAppLock(false);
+    }
+
+    if (!mounted) return;
+    setState(() => _name = result.name);
+  }
+
+  /// Offers to protect the remembered session with the device lock once the
+  /// profile dialog (or the remember-me popup) has enabled remembering.
+  Future<void> _offerAppLock() async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await showAppLockOffer(context: context);
   }
 
   Future<void> _maybePromptRememberMe() async {
@@ -90,9 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Remember me is now on. Offer the device-lock layer while the choice is
     // still fresh, but never insist: a user can enable it later in Settings.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    await showAppLockOffer(context: context);
+    await _offerAppLock();
   }
 
   @override
@@ -210,6 +288,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() => _locating = false);
       _showMessage(error.message);
+      // Never leave the citizen stuck: let them pick the ward by hand.
+      await _offerWardPicker();
       return;
     } catch (_) {
       // No platform plugin (widget tests) or an unexpected platform error.
@@ -232,9 +312,15 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     if (confirmed != true) {
       _showMessage(context.l10n.wardNotConfirmed);
+      await _offerWardPicker(initialMunicipality: location.municipality);
       return;
     }
 
+    await _applyLocation(location);
+  }
+
+  /// Saves a confirmed or hand-picked ward and reports the outcome.
+  Future<void> _applyLocation(CitizenLocation location) async {
     setState(() => _location = location);
     final saved = await const AuthService().saveLocation(location);
     if (!mounted) return;
@@ -247,6 +333,22 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _showMessage(strings.wardSyncFailed);
     }
+  }
+
+  /// Manual fallback for reverse geocoders that omit the ward name, which is
+  /// common on Nepali addresses. The citizen picks their ward and it is saved
+  /// exactly like a detected one.
+  Future<void> _offerWardPicker({String? initialMunicipality}) async {
+    final picked = await showModalBottomSheet<CitizenLocation>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WardPickerSheet(
+        initialMunicipality: initialMunicipality ?? _location?.municipality,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _applyLocation(picked);
   }
 
   void _showMessage(String message) {
@@ -303,6 +405,17 @@ class _HomeScreenState extends State<HomeScreen> {
         .toUpperCase();
   }
 
+  void _onNavSelected(int index) {
+    switch (index) {
+      case 0:
+        break;
+      case 3:
+        _openProfile();
+      default:
+        _comingSoon();
+    }
+  }
+
   void _comingSoon() {
     HapticFeedback.selectionClick();
     final messenger = ScaffoldMessenger.of(context);
@@ -313,6 +426,23 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 1600),
       ),
     );
+  }
+
+  Future<void> _openProfile() async {
+    HapticFeedback.selectionClick();
+    await Navigator.of(context).push(
+      NsPageRoute<void>(
+        builder: (_) => CitizenProfileScreen(
+          initialName: _name,
+          onOpenAccountMenu: _showAccountSheet,
+          onProfileChanged: (name) {
+            if (mounted) setState(() => _name = name);
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await _loadProfile();
   }
 
   Future<void> _showAccountSheet() async {
@@ -370,9 +500,8 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         onOpenSettings: () {
           Navigator.of(sheetContext).pop();
-          Navigator.of(context).push(
-            NsPageRoute<void>(builder: (_) => const SettingsScreen()),
-          );
+          Navigator.of(context)
+              .push(NsPageRoute<void>(builder: (_) => const SettingsScreen()));
         },
       ),
     );
@@ -396,10 +525,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final strings = context.l10n;
     return Scaffold(
-      bottomNavigationBar: _BottomNavBar(
-        onHome: () {},
-        onComingSoon: _comingSoon,
-        onProfile: _showAccountSheet,
+      bottomNavigationBar: NsBottomNav(
+        activeIndex: 0,
+        onSelect: _onNavSelected,
       ),
       body: NsBackground(
         ambientGlow: true,
@@ -1223,165 +1351,6 @@ class _AvatarButton extends StatelessWidget {
   }
 }
 
-class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({
-    required this.onHome,
-    required this.onComingSoon,
-    required this.onProfile,
-  });
-
-  final VoidCallback onHome;
-  final VoidCallback onComingSoon;
-  final VoidCallback onProfile;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-    final strings = context.l10n;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Floating plate instead of a flat edge-to-edge strip: it picks up the
-    // login screen's rounded, chunky surfaces and lifts off the dark page.
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-        child: Container(
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: tokens.border.withValues(alpha: 0.85),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.48 : 0.08),
-                offset: const Offset(0, 8),
-                blurRadius: 22,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(6),
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.home_rounded,
-                label: strings.navHome,
-                active: true,
-                onTap: onHome,
-              ),
-              _NavItem(
-                icon: Icons.assignment_outlined,
-                activeIcon: Icons.assignment_rounded,
-                label: strings.navReports,
-                active: false,
-                onTap: onComingSoon,
-              ),
-              _NavItem(
-                icon: Icons.map_outlined,
-                activeIcon: Icons.map_rounded,
-                label: strings.navMap,
-                active: false,
-                onTap: onComingSoon,
-              ),
-              _NavItem(
-                icon: Icons.person_outline_rounded,
-                activeIcon: Icons.person_rounded,
-                label: strings.navProfile,
-                active: false,
-                onTap: onProfile,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.activeIcon,
-  });
-
-  final IconData icon;
-  final IconData? activeIcon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NsColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = active ? tokens.accentText : tokens.muted;
-
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: active,
-        label: label,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(18),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 17,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active ? tokens.mint : Colors.transparent,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: active
-                            ? AppColors.primary.withValues(
-                                alpha: isDark ? 0.65 : 0.4,
-                              )
-                            : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Icon(
-                      active ? (activeIcon ?? icon) : icon,
-                      size: 21,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: active ? FontWeight.w900 : FontWeight.w700,
-                      color: color,
-                      letterSpacing: 0.1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AccountSheet extends StatelessWidget {
   const _AccountSheet({
     required this.name,
@@ -1627,6 +1596,325 @@ class _ConfirmWardDialog extends StatelessWidget {
               child: Text(strings.notQuite),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets a citizen pick their ward when the phone's geocoder gives no ward.
+///
+/// Only KMC and LMC are served by the app, so the sheet offers their official
+/// ward counts. The returned location uses the municipality's centre as its
+/// coordinate, because the citizen's own GPS fix was never usable here.
+class _WardPickerSheet extends StatefulWidget {
+  const _WardPickerSheet({this.initialMunicipality});
+
+  final String? initialMunicipality;
+
+  @override
+  State<_WardPickerSheet> createState() => _WardPickerSheetState();
+}
+
+class _WardPickerSheetState extends State<_WardPickerSheet> {
+  late _MunicipalityOption _municipality;
+  int? _ward;
+
+  @override
+  void initState() {
+    super.initState();
+    final hint = widget.initialMunicipality?.toLowerCase() ?? '';
+    _municipality = _municipalities.firstWhere(
+      (option) => hint.contains(option.name.toLowerCase().split(' ').first),
+      orElse: () => _municipalities.first,
+    );
+  }
+
+  void _selectMunicipality(_MunicipalityOption option) {
+    if (option.code == _municipality.code) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _municipality = option;
+      _ward = null;
+    });
+  }
+
+  void _save() {
+    final ward = _ward;
+    if (ward == null) return;
+    Navigator.of(context).pop(
+      CitizenLocation(
+        latitude: _municipality.latitude,
+        longitude: _municipality.longitude,
+        municipality: _municipality.name,
+        ward: ward,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border.all(color: tokens.border, width: 2),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: tokens.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                strings.chooseWardTitle,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  color: tokens.heading,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                strings.chooseWardSubtitle,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.muted,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  for (
+                    var index = 0;
+                    index < _municipalities.length;
+                    index++
+                  ) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _MunicipalityChoice(
+                        key: Key(
+                          'ward-picker-${_municipalities[index].code.toLowerCase()}',
+                        ),
+                        option: _municipalities[index],
+                        selected:
+                            _municipalities[index].code == _municipality.code,
+                        onTap: () =>
+                            _selectMunicipality(_municipalities[index]),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 14),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                ),
+                child: SingleChildScrollView(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const spacing = 8.0;
+                      final columns = 6;
+                      final width =
+                          (constraints.maxWidth - spacing * (columns - 1)) /
+                          columns;
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: [
+                          for (
+                            var ward = 1;
+                            ward <= _municipality.wardCount;
+                            ward++
+                          )
+                            SizedBox(
+                              width: width,
+                              child: _WardChoice(
+                                key: Key('ward-choice-$ward'),
+                                ward: ward,
+                                selected: ward == _ward,
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _ward = ward);
+                                },
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              NsPrimaryButton(
+                key: const Key('ward-picker-save'),
+                label: strings.saveWard,
+                icon: Icons.check_rounded,
+                onPressed: _ward == null ? null : _save,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MunicipalityOption {
+  const _MunicipalityOption({
+    required this.name,
+    required this.code,
+    required this.wardCount,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String name;
+  final String code;
+  final int wardCount;
+  final double latitude;
+  final double longitude;
+}
+
+const _municipalities = [
+  _MunicipalityOption(
+    name: 'Kathmandu Metropolitan City',
+    code: 'KMC',
+    wardCount: 32,
+    latitude: 27.7172,
+    longitude: 85.3240,
+  ),
+  _MunicipalityOption(
+    name: 'Lalitpur Metropolitan City',
+    code: 'LMC',
+    wardCount: 29,
+    latitude: 27.6667,
+    longitude: 85.3167,
+  ),
+];
+
+class _MunicipalityChoice extends StatelessWidget {
+  const _MunicipalityChoice({
+    super.key,
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _MunicipalityOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? tokens.mint : tokens.surfaceSoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? tokens.accentText : tokens.controlBorder,
+              width: selected ? 1.8 : 1.2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                option.code,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: tokens.heading,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                option.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WardChoice extends StatelessWidget {
+  const _WardChoice({
+    super.key,
+    required this.ward,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int ward;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? tokens.accentText : tokens.surfaceSoft,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? tokens.accentText : tokens.controlBorder,
+              width: 1.4,
+            ),
+          ),
+          child: Text(
+            '$ward',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: selected ? tokens.surface : tokens.heading,
+            ),
+          ),
         ),
       ),
     );

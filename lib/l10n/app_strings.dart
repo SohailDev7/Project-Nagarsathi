@@ -109,6 +109,39 @@ abstract class AppStrings {
   String get andLabel;
   String get privacyPolicyLabel;
 
+  // ── Post sign-up profile setup ────────────────────────────────────────────
+  String get profileSetupTitle;
+  String get profileSetupSubtitle;
+  String get username;
+  String get usernameHint;
+  String get usernameHelper;
+  String get profileSetupSave;
+  String get profileSetupSignOut;
+  String get rememberMeHelper;
+  String get errUsername;
+  String get errUsernameLength;
+  String get errUsernameFormat;
+  String get usernameTaken;
+
+  // ── Citizen profile & edit profile ────────────────────────────────────────
+  String get editProfile;
+  String get shareProfile;
+  String get profileReports;
+  String get profileWard;
+  String get profileSince;
+  String get profileActivity;
+  String get profileActivityEmptyTitle;
+  String get profileActivityEmptyBody;
+  String profileCitizenSince(String year);
+  String get profileEditTitle;
+  String get profileSaved;
+  String get profileLinkCopied;
+  String usernameLocked(String days);
+  String get usernameChangeReady;
+  String get chooseWardTitle;
+  String get chooseWardSubtitle;
+  String get saveWard;
+
   // ── Mascot Speeches & Guidance ────────────────────────────────────────────
   String get mascotDefaultLogin;
   String get mascotDefaultSignUp;
@@ -628,6 +661,69 @@ class EnglishStrings extends AppStrings {
   String get andLabel => ' and ';
   @override
   String get privacyPolicyLabel => 'Privacy Policy';
+  @override
+  String get profileSetupTitle => 'Complete your profile';
+  @override
+  String get profileSetupSubtitle =>
+      'Your name and a unique username are all that is left.';
+  @override
+  String get username => 'Username';
+  @override
+  String get usernameHint => 'e.g. sita_sharma';
+  @override
+  String get usernameHelper => 'Other citizens see this. It must be unique.';
+  @override
+  String get profileSetupSave => 'Save and continue';
+  @override
+  String get profileSetupSignOut => 'Sign out';
+  @override
+  String get rememberMeHelper => 'Stay signed in so you do not type your password next time.';
+  @override
+  String get errUsername => 'Enter a username.';
+  @override
+  String get errUsernameLength => 'Use 3–20 characters.';
+  @override
+  String get errUsernameFormat =>
+      'Start with a letter; use letters, numbers, dots or underscores.';
+  @override
+  String get usernameTaken => 'That username is already taken. Try another.';
+  @override
+  String get editProfile => 'Edit profile';
+  @override
+  String get shareProfile => 'Share profile';
+  @override
+  String get profileReports => 'Reports';
+  @override
+  String get profileWard => 'Ward';
+  @override
+  String get profileSince => 'Since';
+  @override
+  String get profileActivity => 'Civic activity';
+  @override
+  String get profileActivityEmptyTitle => 'No reports yet';
+  @override
+  String get profileActivityEmptyBody =>
+      'Issues you report will show up here with their live status.';
+  @override
+  String profileCitizenSince(String year) => 'Citizen since $year';
+  @override
+  String get profileEditTitle => 'Edit profile';
+  @override
+  String get profileSaved => 'Profile updated.';
+  @override
+  String get profileLinkCopied => 'Profile link copied.';
+  @override
+  String usernameLocked(String days) =>
+      'You can change your username again in $days ${days == '1' ? 'day' : 'days'}.';
+  @override
+  String get usernameChangeReady => 'You can change your username now.';
+  @override
+  String get chooseWardTitle => 'Choose your ward';
+  @override
+  String get chooseWardSubtitle =>
+      "We couldn't read the ward from this spot. Pick it below and we'll save it.";
+  @override
+  String get saveWard => 'Save ward';
 
   @override
   String get mascotDefaultLogin =>
@@ -646,7 +742,7 @@ class EnglishStrings extends AppStrings {
   String get mascotForgotFocused => 'Email or phone — either one works.';
   @override
   String get mascotStepYourDetails =>
-      'Tell me who you are and where to reach you.';
+      'Start with your email and a password only you know.';
   @override
   String get mascotStepSecure => 'Set a strong password for your account.';
   @override
@@ -1443,6 +1539,73 @@ class NepaliStrings extends AppStrings {
   String get andLabel => ' र ';
   @override
   String get privacyPolicyLabel => 'गोपनीयता नीति';
+  @override
+  String get profileSetupTitle => 'आफ्नो प्रोफाइल पूरा गर्नुहोस्';
+  @override
+  String get profileSetupSubtitle =>
+      'अब नाम र एउटा अद्वितीय प्रयोगकर्ता नाम मात्र बाँकी छ।';
+  @override
+  String get username => 'प्रयोगकर्ता नाम';
+  @override
+  String get usernameHint => 'जस्तै: sita_sharma';
+  @override
+  String get usernameHelper =>
+      'अरू नागरिकले यही देख्छन्। यो अद्वितीय हुनुपर्छ।';
+  @override
+  String get profileSetupSave => 'सुरक्षित गरी अगाडि बढ्नुहोस्';
+  @override
+  String get profileSetupSignOut => 'साइन आउट';
+  @override
+  String get rememberMeHelper =>
+      'साइन इन रहिरहनुहोस्, अर्को पटक पासवर्ड लेख्नु पर्दैन।';
+  @override
+  String get errUsername => 'प्रयोगकर्ता नाम लेख्नुहोस्।';
+  @override
+  String get errUsernameLength =>
+      '${AppLocale.ne.formatDigits('3')}–${AppLocale.ne.formatDigits('20')} अक्षर प्रयोग गर्नुहोस्।';
+  @override
+  String get errUsernameFormat =>
+      'पहिलो अक्षर अंग्रेजी अक्षर हुनुपर्छ; अक्षर, अंक, बिन्दु वा अन्डरस्कोर मात्र।';
+  @override
+  String get usernameTaken =>
+      'यो प्रयोगकर्ता नाम पहिले नै लिइसकिएको छ। अर्को प्रयास गर्नुहोस्।';
+  @override
+  String get editProfile => 'प्रोफाइल सम्पादन';
+  @override
+  String get shareProfile => 'प्रोफाइल साझा गर्नुहोस्';
+  @override
+  String get profileReports => 'रिपोर्टहरू';
+  @override
+  String get profileWard => 'वडा';
+  @override
+  String get profileSince => 'देखि';
+  @override
+  String get profileActivity => 'नागरिक गतिविधि';
+  @override
+  String get profileActivityEmptyTitle => 'अहिलेसम्म कुनै रिपोर्ट छैन';
+  @override
+  String get profileActivityEmptyBody =>
+      'तपाईंले दर्ता गर्नुभएका समस्या र तिनको अवस्था यहाँ देखिनेछ।';
+  @override
+  String profileCitizenSince(String year) => '$year देखि नागरिक';
+  @override
+  String get profileEditTitle => 'प्रोफाइल सम्पादन';
+  @override
+  String get profileSaved => 'प्रोफाइल अद्यावधिक भयो।';
+  @override
+  String get profileLinkCopied => 'प्रोफाइल लिंक कपी भयो।';
+  @override
+  String usernameLocked(String days) =>
+      '$days दिनपछि प्रयोगकर्ता नाम फेरि परिवर्तन गर्न सक्नुहुन्छ।';
+  @override
+  String get usernameChangeReady => 'अब प्रयोगकर्ता नाम परिवर्तन गर्न सक्नुहुन्छ।';
+  @override
+  String get chooseWardTitle => 'आफ्नो वडा छान्नुहोस्';
+  @override
+  String get chooseWardSubtitle =>
+      'यो स्थानबाट वडा पढ्न सकिएन। तलबाट छान्नुहोस्, हामी सुरक्षित गर्नेछौं।';
+  @override
+  String get saveWard => 'वडा सुरक्षित गर्नुहोस्';
 
   @override
   String get mascotDefaultLogin =>
@@ -1462,7 +1625,7 @@ class NepaliStrings extends AppStrings {
   String get mascotForgotFocused => 'इमेल वा फोन — जे भए पनि हुन्छ।';
   @override
   String get mascotStepYourDetails =>
-      'तपाईं को हुनुहुन्छ र कसरी सम्पर्क गर्ने बताउनुहोस्।';
+      'इमेल र तपाईंलाई मात्र थाहा हुने पासवर्डबाट सुरु गर्नुहोस्।';
   @override
   String get mascotStepSecure =>
       'आफ्नो खाता सुरक्षित गर्न बलियो पासवर्ड राख्नुहोस्।';

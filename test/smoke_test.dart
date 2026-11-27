@@ -35,9 +35,7 @@ void main() {
 
     // Firebase is not connected in unit widget tests, so sign-in reports error.
     expect(
-      find.text(
-        'Firebase is not connected. Sign-in is unavailable.',
-      ),
+      find.text('Firebase is not connected. Sign-in is unavailable.'),
       findsAtLeastNWidgets(1),
     );
 
@@ -47,30 +45,20 @@ void main() {
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
     expect(find.text('Create your account'), findsOneWidget);
-    expect(find.text('1 of 3'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
 
-    // Details are validated together, so the first tap reports both errors.
+    // Email and both passwords are validated together.
     await tester.ensureVisible(find.text('Continue'));
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('Enter your full name'), findsOneWidget);
     expect(find.text('Enter your email address'), findsOneWidget);
+    expect(find.text('This field is required'), findsNWidgets(2));
 
-    await tester.enterText(find.byType(TextFormField).at(0), 'Sita Sharma');
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      'sita@nagarsathi.app',
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Continue'));
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('2 of 3'), findsOneWidget);
-
-    final passwordFields = find.byType(TextFormField);
-    expect(passwordFields, findsNWidgets(2));
-    await tester.enterText(passwordFields.at(0), 'password123');
-    await tester.enterText(passwordFields.at(1), 'password123');
+    final signUpFields = find.byType(TextFormField);
+    expect(signUpFields, findsNWidgets(3));
+    await tester.enterText(signUpFields.at(0), 'sita@nagarsathi.app');
+    await tester.enterText(signUpFields.at(1), 'password123');
+    await tester.enterText(signUpFields.at(2), 'password123');
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.byType(Checkbox));
@@ -78,7 +66,15 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
 
-    expect(find.text('2 of 3'), findsOneWidget);
-    expect(find.text('Continue'), findsOneWidget);
+    // Firebase is not connected, so the OTP request reports an error instead
+    // of advancing to step 2.
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 2'), findsOneWidget);
+    expect(
+      find.text('Firebase is not connected. Account creation is unavailable.'),
+      findsAtLeastNWidgets(1),
+    );
   });
 }

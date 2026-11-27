@@ -12,6 +12,7 @@ abstract final class Validators {
   static final _devanagariDigits = RegExp(r'[०-९]');
   static final _nepaliMobilePattern = RegExp(r'^9[6-8]\d{8}$');
   static final _otpPattern = RegExp(r'^\d{6}$');
+  static final _usernamePattern = RegExp(r'^[a-zA-Z][a-zA-Z0-9._]{2,19}$');
 
   static AppStrings _resolveStrings([AppStrings? strings]) =>
       strings ?? AppStrings.forLocale(LanguageController.instance.value);
@@ -62,6 +63,17 @@ abstract final class Validators {
     if (digits.length < 7 || digits.length > 15) {
       return s.errInvalidPhone;
     }
+    return null;
+  }
+
+  /// Public handle: 3–20 characters, starting with a letter, then letters,
+  /// digits, dots or underscores.
+  static String? username(String? value, {AppStrings? strings}) {
+    final s = _resolveStrings(strings);
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return s.errUsername;
+    if (trimmed.length < 3 || trimmed.length > 20) return s.errUsernameLength;
+    if (!_usernamePattern.hasMatch(trimmed)) return s.errUsernameFormat;
     return null;
   }
 

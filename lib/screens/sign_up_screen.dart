@@ -26,7 +26,9 @@ import '../widgets/ns_text_field.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 
-/// Three streamlined steps: details, password + checklist, and 6-digit email OTP.
+/// Two streamlined steps: email + password (with checklist), then the
+/// 6-digit email OTP. Name, username and phone are collected once, after the
+/// first sign-in, so the sign-up itself stays short.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -35,14 +37,11 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  static const _totalSteps = 3;
-  static const _passwordStep = 1;
-  static const _lastStep = 2;
+  static const _totalSteps = 2;
+  static const _lastStep = 1;
   static const _resendCooldownSeconds = 45;
 
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _otpController = TextEditingController();
@@ -69,9 +68,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   void dispose() {
     _resendTimer?.cancel();
-    _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     _otpController.dispose();
@@ -99,17 +96,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   NsMascotMood get _mood {
     if (_celebrating) return NsMascotMood.celebrate;
     if (_showError) return NsMascotMood.sad;
-    if (_fieldFocused && _step == 1) {
-      // Eyes shut while the new password is typed.
-      return NsMascotMood.sleepy;
-    }
     if (_fieldFocused) return NsMascotMood.curious;
     return NsMascotMood.happy;
   }
 
   (String, String) _copy(AppStrings s) => switch (_step) {
     0 => (s.createAccount, s.mascotStepYourDetails),
-    1 => (s.password, s.mascotPasswordPrompt),
     _ => (s.verificationCode, s.mascotStepVerify),
   };
 
@@ -133,29 +125,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _next() {
     FocusScope.of(context).unfocus();
-    if (_step != _lastStep &&
-        !(_formKeys[_step].currentState?.validate() ?? false)) {
-      _triggerError();
-      return;
-    }
-
     if (_step == _lastStep) {
       _createAccount();
       return;
     }
-    if (_step == _passwordStep) {
-      _requestOtp();
+    if (!(_formKeys[0].currentState?.validate() ?? false)) {
+      _triggerError();
       return;
     }
-
+    if (!_acceptedTerms) {
+      _triggerError(context.l10n.acceptTermsNotice);
+      return;
+    }
     HapticFeedback.selectionClick();
-    setState(() {
-      _direction = 1;
-      _step += 1;
-      _showError = false;
-      _errorMessage = null;
-      _fieldFocused = false;
-    });
+    _requestOtp();
   }
 
   void _back() {
@@ -185,18 +168,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _requestOtp() async {
-    final strings = context.l10n;
-    if (_step == _passwordStep) {
-      if (!(_formKeys[_passwordStep].currentState?.validate() ?? false)) {
-        _triggerError();
-        return;
-      }
-      if (!_acceptedTerms) {
-        _triggerError(strings.acceptTermsNotice);
-        return;
-      }
-    }
-
+    if (_isLoading) return;
     setState(() {
       _isLoading = true;
       _showError = false;
@@ -226,11 +198,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    if (!_acceptedTerms) {
-      _triggerError(strings.acceptTermsNotice);
-      return;
-    }
-
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
@@ -244,10 +211,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         otp: _otpController.text,
       );
       await const AuthService().createCitizenAccount(
-        name: _nameController.text,
         email: _emailController.text,
         password: _passwordController.text,
-        phone: _phoneController.text,
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
@@ -302,9 +267,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     Navigator.of(context).pushAndRemoveUntil(
       NsPageRoute<void>(
         style: NsTransitionStyle.fade,
-        builder: (_) => const AppLockGate(
-          child: HomeScreen(showRememberMePrompt: true),
-        ),
+        builder: (_) =>
+            const AppLockGate(child: HomeScreen(showRememberMePrompt: true)),
       ),
       (route) => false,
     );
@@ -449,11 +413,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ],
         ),
         const SizedBox(height: 10),
-        NsStepProgress(
-          step: _step,
-          total: _totalSteps,
-          height: 10,
-        ),
+        NsStepProgress(step: _step, total: _totalSteps, height: 10),
         const SizedBox(height: 16),
         NsShake(
           controller: _shakeController,
@@ -543,7 +503,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _buildStep(),
         const SizedBox(height: 16),
         NsPrimaryButton(
-          label: _step == _lastStep ? strings.createAccount : strings.continueText,
+          label: _step == _lastStep
+              ? strings.createAccount
+              : strings.continueText,
           isLoading: _isLoading,
           onPressed: _next,
           icon: _step == _lastStep
@@ -565,7 +527,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline_rounded, size: 18, color: tokens.errorBorder),
+          Icon(
+            Icons.error_outline_rounded,
+            size: 18,
+            color: tokens.errorBorder,
+          ),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
@@ -586,65 +552,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildStep() {
     final strings = context.l10n;
     final tokens = NsColors.of(context);
-
-    if (_step == 0) {
-      return Form(
-        key: _formKeys[0],
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            NsTextField(
-              controller: _nameController,
-              label: strings.fullName,
-              hint: 'Sita Sharma',
-              icon: Icons.person_rounded,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
-              validator: (v) => Validators.name(v, strings: strings),
-              autofillHints: const [AutofillHints.name],
-              autofocus: true,
-              onChanged: (_) => _clearError(),
-              onFocusChange: _setFieldFocus,
-            ),
-            const SizedBox(height: 13),
-            NsTextField(
-              controller: _emailController,
-              label: strings.email,
-              hint: 'you@example.com',
-              icon: Icons.mail_rounded,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              validator: (v) => Validators.email(v, strings: strings),
-              autocorrect: false,
-              autofillHints: const [AutofillHints.email],
-              inputFormatters: [
-                FilteringTextInputFormatter.deny(RegExp(r'\s')),
-              ],
-              onChanged: (_) => _clearError(),
-              onFocusChange: _setFieldFocus,
-            ),
-            const SizedBox(height: 13),
-            NsTextField(
-              controller: _phoneController,
-              label: '${strings.phone} (${strings.optional})',
-              hint: '+977 98XXXXXXXX',
-              icon: Icons.phone_iphone_rounded,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.done,
-              validator: (v) => Validators.optionalPhone(v, strings: strings),
-              autofillHints: const [AutofillHints.telephoneNumber],
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s()]')),
-              ],
-              helper: strings.signUpPhoneHelper,
-              onChanged: (_) => _clearError(),
-              onFocusChange: _setFieldFocus,
-              onFieldSubmitted: (_) => _next(),
-            ),
-          ],
-        ),
-      );
-    }
 
     if (_step == _lastStep) {
       return Form(
@@ -765,10 +672,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     return Form(
-      key: _formKeys[_passwordStep],
+      key: _formKeys[0],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          NsTextField(
+            controller: _emailController,
+            label: strings.email,
+            hint: 'you@example.com',
+            icon: Icons.mail_rounded,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            validator: (v) => Validators.email(v, strings: strings),
+            autocorrect: false,
+            autofillHints: const [AutofillHints.email],
+            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+            autofocus: true,
+            onChanged: (_) => _clearError(),
+            onFocusChange: _setFieldFocus,
+          ),
+          const SizedBox(height: 13),
           NsTextField(
             controller: _passwordController,
             label: strings.password,

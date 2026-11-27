@@ -28,7 +28,7 @@ class NsRememberMeNotification extends StatelessWidget {
 
     return Dismissible(
       key: const ValueKey('ns_remember_me_notification_dismissible'),
-      direction: DismissDirection.up,
+      direction: DismissDirection.down,
       onDismissed: (_) => onDismiss(),
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -225,7 +225,8 @@ class NsRememberMeNotification extends StatelessWidget {
   }
 }
 
-/// Displays the top floating "Remember me" notification right after sign-in.
+/// Slides the "Remember me" notification up from the bottom of the screen
+/// right after sign-in.
 ///
 /// Returns `true` if the user enabled remember me, `false` if dismissed, or
 /// `null` if dismissed via barrier tap.
@@ -245,10 +246,11 @@ Future<bool?> showRememberMeNotification({
     transitionDuration: const Duration(milliseconds: 320),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       return Align(
-        alignment: Alignment.topCenter,
+        alignment: Alignment.bottomCenter,
         child: SafeArea(
+          top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
             child: Material(
               color: Colors.transparent,
               child: ConstrainedBox(
@@ -301,7 +303,7 @@ Future<bool?> showRememberMeNotification({
       );
       return SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(0, -0.65),
+          begin: const Offset(0, 1),
           end: Offset.zero,
         ).animate(curved),
         child: FadeTransition(
