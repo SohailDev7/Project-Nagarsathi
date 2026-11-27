@@ -11,6 +11,7 @@ import '../utils/validators.dart';
 import '../widgets/app_lock_gate.dart';
 import '../widgets/ns_auth_controls.dart';
 import '../widgets/ns_back_button.dart';
+import '../widgets/ns_chip.dart';
 import '../widgets/ns_confetti.dart';
 import '../widgets/ns_entrance.dart';
 import '../widgets/ns_otp_input.dart';
@@ -21,8 +22,6 @@ import '../widgets/ns_text_field.dart';
 import 'login_screen.dart';
 import 'staff_home_screen.dart';
 import 'superadmin_home_screen.dart';
-
-enum _StaffMethod { email, phone }
 
 enum _PhoneStep { phone, code }
 
@@ -37,15 +36,15 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   static const _resendCooldownSeconds = 45;
 
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _passwordFocusNode = FocusNode();
   final _otpController = TextEditingController();
   final _shakeController = NsShakeController();
   final _staffAuth = const StaffAuthService();
 
-  _StaffMethod _method = _StaffMethod.email;
   _PhoneStep _phoneStep = _PhoneStep.phone;
+  IdentifierKind _kind = IdentifierKind.empty;
   StaffPhoneChallenge? _challenge;
 
   bool _isLoading = false;
@@ -59,9 +58,9 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   @override
   void dispose() {
     _resendTimer?.cancel();
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
-    _phoneController.dispose();
+    _passwordFocusNode.dispose();
     _otpController.dispose();
     _shakeController.dispose();
     super.dispose();
@@ -118,20 +117,24 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     });
   }
 
-  void _switchMethod(_StaffMethod method) {
-    if (_isLoading || method == _method) return;
-    FocusScope.of(context).unfocus();
-    HapticFeedback.selectionClick();
-    _resendTimer?.cancel();
+  bool get _isPhoneFlow => _kind == IdentifierKind.phone;
+
+  /// The single identifier box detects an email (password sign-in) or a phone
+  /// number (SMS code sign-in) as it is typed, so no method tab is needed.
+  void _onIdentifierChanged(String value) {
+    final kind = Validators.identifierKind(value);
+    if (kind == _kind && !_showError) return;
     setState(() {
-      _method = method;
-      _phoneStep = _PhoneStep.phone;
-      _challenge = null;
-      _otpController.clear();
-      _resendRemaining = 0;
+      _kind = kind;
       _showError = false;
       _errorMessage = null;
-      _errorMessage = null;
+      if (kind != IdentifierKind.phone && _phoneStep == _PhoneStep.code) {
+        _resendTimer?.cancel();
+        _phoneStep = _PhoneStep.phone;
+        _challenge = null;
+        _otpController.clear();
+        _resendRemaining = 0;
+      }
     });
   }
 
@@ -143,7 +146,11 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       return;
     }
 
-    final staffEmail = _emailController.text.trim();
+    final staffEmail = _identifierController.text.trim();
+    if (Validators.identifierKind(staffEmail) != IdentifierKind.email) {
+      _failValidation();
+      return;
+    }
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
@@ -178,7 +185,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     if (_isLoading) return;
     FocusScope.of(context).unfocus();
     final strings = context.l10n;
-    final email = _emailController.text.trim();
+    final email = _identifierController.text.trim();
     if (Validators.email(email, strings: strings) != null) {
       _fail(strings.staffPasswordResetNeedsEmail);
       return;
@@ -217,7 +224,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
     try {
       final challenge = await _staffAuth.sendPhoneCode(
-        _phoneController.text,
+        _identifierController.text,
         previous: resending ? _challenge : null,
       );
       if (!mounted) return;
@@ -804,7 +811,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildMethodTabs(palette),
+                  _buildIdentifierField(),
                   if (_showError && _errorMessage != null) ...[
                     const SizedBox(height: 14),
                     Container(
@@ -843,25 +850,10 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  if (_method == _StaffMethod.email) ...[
-                    NsTextField(
-                      controller: _emailController,
-                      label: strings.staffWorkEmail,
-                      hint: strings.staffWorkEmailHint,
-                      icon: Icons.mail_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => Validators.email(v, strings: strings),
-                      autocorrect: false,
-                      autofillHints: const [AutofillHints.username],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                      ],
-                      onChanged: (_) => _clearError(),
-                    ),
-                    const SizedBox(height: 14),
+                  if (!_isPhoneFlow) ...[
                     NsTextField(
                       controller: _passwordController,
+                      focusNode: _passwordFocusNode,
                       label: strings.password,
                       hint: strings.passwordHint,
                       icon: Icons.lock_rounded,
@@ -908,29 +900,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       foregroundColor: palette.ctaForeground,
                     ),
                   ] else ...[
-                    NsTextField(
-                      controller: _phoneController,
-                      label: strings.phone,
-                      hint: strings.staffMobileNumberHint,
-                      icon: Icons.phone_android_rounded,
-                      keyboardType: TextInputType.phone,
-                      textInputAction: _phoneStep == _PhoneStep.phone
-                          ? TextInputAction.done
-                          : TextInputAction.next,
-                      validator: (v) =>
-                          Validators.nepaliPhone(v, strings: strings),
-                      autocorrect: false,
-                      enabled: _phoneStep == _PhoneStep.phone,
-                      autofillHints: const [AutofillHints.telephoneNumber],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9०-९+\s()\-]'),
-                        ),
-                      ],
-                      helper: strings.staffNepaliMobileOnly,
-                      onFieldSubmitted: (_) => _sendCode(),
-                      onChanged: (_) => _clearError(),
-                    ),
                     if (_phoneStep == _PhoneStep.code) ...[
                       const SizedBox(height: 14),
                       NsOtpInput(
@@ -1013,71 +982,59 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     );
   }
 
-  Widget _buildMethodTabs(_StaffPalette palette) {
+  Widget _buildIdentifierField() {
     final strings = context.l10n;
-    final isPhone = _method == _StaffMethod.phone;
+    final isPhone = _isPhoneFlow;
 
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: palette.tabTrackBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.cardBorder, width: 1.1),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final tabWidth = constraints.maxWidth / 2;
-          return Stack(
-            children: [
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                left: isPhone ? tabWidth : 0,
-                top: 0,
-                bottom: 0,
-                width: tabWidth,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: palette.tabActiveBg,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: palette.tabActiveShadow,
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SlidingMethodTab(
-                      icon: Icons.mail_outline_rounded,
-                      label: strings.email,
-                      selected: !isPhone,
-                      activeColor: palette.tabActiveFg,
-                      idleColor: palette.tabIdleFg,
-                      onTap: () => _switchMethod(_StaffMethod.email),
-                    ),
-                  ),
-                  Expanded(
-                    child: _SlidingMethodTab(
-                      icon: Icons.phone_iphone_rounded,
-                      label: strings.phone,
-                      selected: isPhone,
-                      activeColor: palette.tabActiveFg,
-                      idleColor: palette.tabIdleFg,
-                      onTap: () => _switchMethod(_StaffMethod.phone),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
+    return NsTextField(
+      controller: _identifierController,
+      label: strings.emailOrPhone,
+      hint: isPhone
+          ? strings.staffMobileNumberHint
+          : strings.emailOrPhoneHint,
+      icon: isPhone
+          ? Icons.phone_android_rounded
+          : Icons.alternate_email_rounded,
+      keyboardType: TextInputType.emailAddress,
+      textInputAction: isPhone ? TextInputAction.done : TextInputAction.next,
+      validator: (value) {
+        if (Validators.identifierKind(value) == IdentifierKind.phone) {
+          return Validators.nepaliPhone(value, strings: strings);
+        }
+        return Validators.identifier(value, strings: strings);
+      },
+      autocorrect: false,
+      enabled: _phoneStep == _PhoneStep.phone,
+      autofillHints: isPhone
+          ? const [AutofillHints.telephoneNumber]
+          : const [AutofillHints.username],
+      helper: isPhone ? strings.staffNepaliMobileOnly : null,
+      onChanged: _onIdentifierChanged,
+      onFieldSubmitted: (_) {
+        if (isPhone) {
+          _sendCode();
+        } else {
+          _passwordFocusNode.requestFocus();
+        }
+      },
+      labelTrailing: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        child: isPhone
+            ? NsChip(
+                key: const ValueKey('phone'),
+                label: strings.phone,
+                icon: Icons.smartphone_rounded,
+                tone: NsChipTone.sky,
+                compact: true,
+              )
+            : _kind == IdentifierKind.email
+            ? NsChip(
+                key: const ValueKey('email'),
+                label: strings.email,
+                icon: Icons.mail_rounded,
+                compact: true,
+              )
+            : const SizedBox.shrink(key: ValueKey('empty')),
       ),
     );
   }
@@ -1137,53 +1094,6 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 }
 
-class _SlidingMethodTab extends StatelessWidget {
-  const _SlidingMethodTab({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.activeColor,
-    required this.idleColor,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final Color activeColor;
-  final Color idleColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = selected ? activeColor : idleColor;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: fg),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w800,
-                color: fg,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StaffPalette {
   const _StaffPalette({
     required this.isDark,
@@ -1205,11 +1115,6 @@ class _StaffPalette {
     required this.cardBg,
     required this.cardBorder,
     required this.cardShadow,
-    required this.tabTrackBg,
-    required this.tabActiveBg,
-    required this.tabActiveShadow,
-    required this.tabActiveFg,
-    required this.tabIdleFg,
     required this.ctaColors,
     required this.ctaForeground,
     required this.securityStripBg,
@@ -1237,11 +1142,6 @@ class _StaffPalette {
   final Color cardBg;
   final Color cardBorder;
   final Color cardShadow;
-  final Color tabTrackBg;
-  final Color tabActiveBg;
-  final Color tabActiveShadow;
-  final Color tabActiveFg;
-  final Color tabIdleFg;
   final List<Color> ctaColors;
   final Color ctaForeground;
   final Color securityStripBg;
@@ -1271,11 +1171,6 @@ class _StaffPalette {
         cardBg: const Color(0xFF12211B),
         cardBorder: const Color(0xFF233B31),
         cardShadow: Colors.black.withValues(alpha: 0.4),
-        tabTrackBg: const Color(0xFF0B1612),
-        tabActiveBg: const Color(0xFF2EC285),
-        tabActiveShadow: const Color(0xFF2EC285).withValues(alpha: 0.25),
-        tabActiveFg: const Color(0xFF062016),
-        tabIdleFg: const Color(0xFF9AB5A8),
         ctaColors: const [Color(0xFF36D395), Color(0xFF22B57A)],
         ctaForeground: const Color(0xFF062016),
         securityStripBg: const Color(0xFF101D18),
@@ -1305,11 +1200,6 @@ class _StaffPalette {
       cardBg: const Color(0xFFB9DFD2),
       cardBorder: const Color(0xFF7BB19E),
       cardShadow: const Color(0xFF0F3B2A).withValues(alpha: 0.12),
-      tabTrackBg: const Color(0xFF9ECAC0),
-      tabActiveBg: const Color(0xFF0E6B47),
-      tabActiveShadow: const Color(0xFF0E6B47).withValues(alpha: 0.24),
-      tabActiveFg: Colors.white,
-      tabIdleFg: const Color(0xFF133629),
       ctaColors: const [Color(0xFF0E6B47), Color(0xFF095035)],
       ctaForeground: Colors.white,
       securityStripBg: const Color(0xFFACD5C7),

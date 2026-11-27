@@ -563,19 +563,9 @@ class AuthService {
 
       await user.reauthenticateWithCredential(credential);
       await user.getIdToken(true);
-      final response = await (firebaseFunctions ?? FirebaseFunctions.instance)
-          .httpsCallable(
-            'deleteCitizenProfile',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
-          )
-          .call<Object?>({'confirm': true});
-      final payload = response.data;
-      if (payload is! Map) {
-        throw const AuthFailure(
-          'We could not confirm deletion. Please sign in again to check.',
-        );
-      }
-      final data = Map<String, dynamic>.from(payload);
+      final data = firebaseFunctions != null
+          ? await _deleteViaCallable()
+          : await _deleteViaWorker(user);
       if (data['status'] != 'deleted' && data['status'] != 'pending') {
         throw const AuthFailure(
           'We could not confirm deletion. Please sign in again to check.',
@@ -606,6 +596,31 @@ class AuthService {
         );
       }
       throw AuthFailure(_googleSignInMessage(error));
+    } catch (_) {
+      throw const AuthFailure(
+        'We could not confirm deletion. Please sign in again to check.',
+      );
+    }
+  }
+
+  /// Deletes through the Cloud Functions callable. The app does not use this
+  /// path in production (Cloud Functions needs the Blaze plan); the worker
+  /// endpoint below performs the same trusted cleanup on the free plan.
+  Future<Map<String, dynamic>> _deleteViaCallable() async {
+    try {
+      final response = await firebaseFunctions!
+          .httpsCallable(
+            'deleteCitizenProfile',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
+          )
+          .call<Object?>({'confirm': true});
+      final payload = response.data;
+      if (payload is! Map) {
+        throw const AuthFailure(
+          'We could not confirm deletion. Please sign in again to check.',
+        );
+      }
+      return Map<String, dynamic>.from(payload);
     } on FirebaseFunctionsException catch (error) {
       switch (error.code) {
         case 'not-found':
@@ -625,10 +640,70 @@ class AuthService {
             'We could not confirm deletion. Please sign in again to check.',
           );
       }
+    }
+  }
+
+  /// Asks the OTP worker to delete the profile. The worker holds the Firebase
+  /// service account and derives the account from the ID token, so the app
+  /// never sends a user id or an email.
+  Future<Map<String, dynamic>> _deleteViaWorker(User user) async {
+    final token = await user.getIdToken();
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_otpWorkerUrl/delete-citizen-profile'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'confirm': true}),
+          )
+          .timeout(const Duration(seconds: 90));
+    } on TimeoutException {
+      throw const AuthFailure(
+        'Deletion timed out. Check your connection and try again.',
+      );
     } catch (_) {
       throw const AuthFailure(
-        'We could not confirm deletion. Please sign in again to check.',
+        'Could not reach the deletion service. Check your connection and try again.',
       );
+    }
+
+    var payload = const <String, dynamic>{};
+    if (response.body.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) payload = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        // The status code still tells us whether the request worked.
+      }
+    }
+
+    if (response.statusCode == 200) return payload;
+    final message = payload['error'];
+    switch (response.statusCode) {
+      case 401:
+        throw const AuthFailure(
+          'Please verify your account again to continue.',
+        );
+      case 403:
+        throw AuthFailure(
+          message is String && message.trim().isNotEmpty
+              ? message
+              : 'Only citizen accounts can use this option.',
+        );
+      case 404:
+        throw const AuthFailure(
+          'Profile deletion is not available yet. Please try again later.',
+        );
+      default:
+        throw AuthFailure(
+          message is String && message.trim().isNotEmpty
+              ? message
+              : 'We could not confirm deletion. Please sign in again to check.',
+        );
     }
   }
 

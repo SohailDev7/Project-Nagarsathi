@@ -11,10 +11,22 @@ Firebase custom token so the app can call `signInWithCustomToken`.
 | `POST /verify-email-otp` | `{ "email": "...", "otp": "123456" }` | `{ verified: true, token, verificationToken }` |
 | `POST /admin/delete-staff-account` | `{ "uid"?, "email"? }` | `{ deleted, uid }` |
 | `POST /admin/send-staff-invite` | `{ "email", "name", "ward", "tempPassword" }` | `{ sent: true }` |
+| `POST /delete-citizen-profile` | `{ "confirm": true }` | `{ status: "deleted" \| "pending", emailStatus }` |
 
 The two `/admin/*` endpoints require an `Authorization: Bearer <Firebase ID token>`
 header from a verified super-admin (or an active staff manager) and are used by
-the Ward Officer Management screen. `delete-staff-account` removes the Firebase
+the Ward Officer Management screen.
+
+`/delete-citizen-profile` performs the US-13 profile deletion. It needs the
+service account secret (`FIREBASE_SERVICE_ACCOUNT`) and the citizen's freshly
+verified ID token: the app reauthenticates first, then sends the token. The
+worker derives the account from that token, refuses staff/administrator
+accounts, disables the account and revokes its refresh tokens, anonymizes its
+reports and comments, deletes the `users/{uid}` document tree, removes the
+Firebase OTP challenge and the Auth account, and finally emails the
+confirmation. A `citizen_deletions` row keeps the request durable, and the
+hourly cron resumes anything that failed. Cloud Functions were not used because
+the Firebase project is on the Spark plan, which cannot deploy them. `delete-staff-account` removes the Firebase
 Auth account so an email can be reused after an officer is deleted;
 `send-staff-invite` emails the officer their temporary password through the
 Gmail Apps Script endpoint.
@@ -32,7 +44,13 @@ open a session from it and falls back to the password/reset message.
    npx wrangler d1 execute nagarsathi-otp --remote --file=schema.sql
    ```
 
-2. **Set the existing secrets**: `OTP_PEPPER`, `GMAIL_MAIL_ENDPOINT`,
+2. **Apply the schema** (creates `citizen_deletions` as well):
+
+   ```bash
+   npm run d1:init
+   ```
+
+3. **Set the existing secrets**: `OTP_PEPPER`, `GMAIL_MAIL_ENDPOINT`,
    `GMAIL_MAIL_SECRET`.
 
    ```bash
@@ -41,7 +59,7 @@ open a session from it and falls back to the password/reset message.
    npx wrangler secret put GMAIL_MAIL_SECRET
    ```
 
-3. **Create a Firebase service account key**
+4. **Create a Firebase service account key**
 
    Firebase console → Project settings → **Service accounts** → *Generate new
    private key*. Download the JSON file.
@@ -62,7 +80,7 @@ open a session from it and falls back to the password/reset message.
    npx wrangler secret put FIREBASE_PRIVATE_KEY   # paste with \n escapes intact
    ```
 
-4. **Deploy**
+5. **Deploy**
 
    ```bash
    npx wrangler deploy

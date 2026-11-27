@@ -51,17 +51,15 @@ void main() {
     await tester.tap(find.text('Staff portal'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Work email address'), findsOneWidget);
-    expect(find.text('Phone'), findsOneWidget);
+    expect(find.text('Email or phone number'), findsOneWidget);
     expect(find.text('Access is issued by your municipality.'), findsOneWidget);
 
     languageController.value = AppLocale.ne;
     await tester.pumpAndSettle();
 
-    expect(find.text('कार्यालयको इमेल ठेगाना'), findsOneWidget);
-    expect(find.text('फोन'), findsOneWidget);
+    expect(find.text('इमेल वा फोन नम्बर'), findsOneWidget);
     expect(find.text('पहुँच तपाईंको नगरपालिकाले प्रदान गर्छ।'), findsOneWidget);
-    expect(find.text('Work email address'), findsNothing);
+    expect(find.text('Email or phone number'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -89,7 +87,7 @@ void main() {
       await tester.tap(staffPortal);
       await tester.pumpAndSettle();
       expect(find.byType(StaffLoginScreen), findsOneWidget);
-      expect(find.text('Email or phone'), findsOneWidget);
+      expect(find.text('Email or phone number'), findsOneWidget);
       expect(find.text('Sign up'), findsNothing);
 
       await tester.ensureVisible(find.byTooltip('Back'));
@@ -116,7 +114,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
-    expect(find.text('Enter your email address'), findsOneWidget);
+    expect(find.text('Enter your email or phone number'), findsOneWidget);
     expect(
       tester
           .state<FormFieldState<String>>(find.byType(TextFormField).at(1))
@@ -131,7 +129,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
-    expect(find.text('Enter a valid email address'), findsOneWidget);
+    expect(find.text('Enter a valid email or phone number'), findsOneWidget);
     expect(find.byType(StaffLoginScreen), findsOneWidget);
     expect(find.byType(StaffHomeScreen), findsNothing);
     expect(find.byType(HomeScreen), findsNothing);
@@ -202,6 +200,7 @@ void main() {
   testWidgets('staff phone OTP rejects numbers outside Nepal', (tester) async {
     await _openStaffPortal(tester);
     await tester.enterText(find.byType(TextFormField).first, '919841234567');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Send code'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Send code'));
@@ -217,6 +216,7 @@ void main() {
   ) async {
     await _openStaffPortal(tester);
     await tester.enterText(find.byType(TextFormField).first, '9841234567');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Send code'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Send code'));

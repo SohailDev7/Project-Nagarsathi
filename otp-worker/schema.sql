@@ -12,3 +12,21 @@ CREATE TABLE IF NOT EXISTS otp_challenges (
 
 CREATE INDEX IF NOT EXISTS idx_otp_expiry
 ON otp_challenges(expires_at);
+
+-- Durable citizen profile deletion jobs. A row is written when the citizen
+-- confirms deletion and is retried by the hourly cron until cleanup finishes.
+-- The email is dropped after the confirmation is sent, or after 30 days.
+CREATE TABLE IF NOT EXISTS citizen_deletions (
+  uid TEXT PRIMARY KEY,
+  email TEXT,
+  status TEXT NOT NULL,
+  email_status TEXT NOT NULL,
+  requested_at INTEGER NOT NULL,
+  purge_deadline INTEGER NOT NULL,
+  deleted_at INTEGER,
+  next_attempt_at INTEGER,
+  lease_until INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_citizen_deletions_due
+ON citizen_deletions(next_attempt_at);

@@ -1,3 +1,8 @@
+import {
+  createCitizenDeletionHandlers,
+  createD1Jobs,
+} from "./citizen_deletion.js";
+
 const OTP_TTL_MS = 5 * 60 * 1000;
 const RESEND_WINDOW_MS = 60 * 60 * 1000;
 const MAX_RESENDS = 6;
@@ -847,12 +852,63 @@ async function sendStaffInvite(request, env) {
   return json({ sent: true });
 }
 
+// ─── Citizen profile deletion ────────────────────────────────────────────
+//
+// Cloud Functions would be the natural home for this, but the project is on
+// the free Firebase plan and cannot deploy them. The same trusted cleanup runs
+// here with the worker's Firebase service account.
+
+async function sendCitizenDeletionConfirmation(env, email) {
+  if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET) {
+    throw new Error("mail-not-configured");
+  }
+
+  const text =
+    "Your NagarSathi profile, personal data and sign-in credentials have " +
+    "been permanently removed. Public reports and comments remain without " +
+    "your identity. All account sessions have been revoked.";
+  const html =
+    "<div style='font-family:sans-serif;padding:20px;max-width:480px;" +
+    "border:1px solid #e0e0e0;border-radius:12px;'>" +
+    "<h2 style='color:#163B2B;margin-top:0;'>Profile deleted</h2>" +
+    `<p style='font-size:14px;color:#333;'>${escapeHtml(text)}</p>` +
+    "</div>";
+
+  const response = await fetch(env.GMAIL_MAIL_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      apiKey: env.GMAIL_MAIL_SECRET,
+      to: email,
+      subject: "Your NagarSathi profile has been deleted",
+      text,
+      html,
+    }),
+  });
+  if (!response.ok) throw new Error("mail-failed");
+  const payload = await response.json().catch(() => null);
+  if (!payload || payload.sent !== true) throw new Error("mail-failed");
+}
+
+const citizenDeletion = createCitizenDeletionHandlers({
+  jobsFor: (env) => createD1Jobs(env.DB),
+  projectId: (env) => readServiceAccount(env)?.project_id || "",
+  accessToken: (env) => getGoogleAccessToken(env),
+  sendConfirmation: sendCitizenDeletionConfirmation,
+  deleteOtpChallenges: (env, email) =>
+    env.DB.prepare("DELETE FROM otp_challenges WHERE email = ?")
+      .bind(email).run(),
+  logger: console,
+});
+
 export default {
   async scheduled(_event, env) {
     // Expired challenges contain email addresses; do not retain them after
     // their short verification window, including for deleted accounts.
     await env.DB.prepare("DELETE FROM otp_challenges WHERE expires_at <= ?")
       .bind(Date.now()).run();
+    // Resume any citizen deletion a failed run left pending.
+    await citizenDeletion.retryCitizenDeletions(env);
   },
 
   async fetch(request, env) {
@@ -885,6 +941,9 @@ export default {
     }
     if (url.pathname === "/admin/send-staff-invite") {
       return sendStaffInvite(request, env);
+    }
+    if (url.pathname === "/delete-citizen-profile") {
+      return citizenDeletion.deleteCitizenProfile(request, env);
     }
     return json({ error: "Not found." }, 404);
   },
