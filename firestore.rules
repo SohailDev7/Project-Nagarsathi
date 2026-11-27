@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+<<<<<<< Updated upstream
     function isVerifiedSuperAdmin() {
       return request.auth != null
         && request.auth.token.email_verified == true
@@ -12,6 +13,12 @@ service cloud.firestore {
           'freefuzxcoj2@gmail.com',
           'sohail@nagarsathi.app'
         ];
+=======
+    function isCurrentCitizen(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/citizenDeletions/$(uid));
+>>>>>>> Stashed changes
     }
 
     function isActiveStaffManager() {
@@ -28,16 +35,20 @@ service cloud.firestore {
 
     // Each citizen may read and update only their own profile.
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null
-        && request.auth.uid == uid
+      allow read: if isCurrentCitizen(uid);
+      allow create: if isCurrentCitizen(uid)
         && request.resource.data.uid == uid
         && request.resource.data.role == 'citizen';
-      allow update: if request.auth != null
-        && request.auth.uid == uid
+      allow update: if isCurrentCitizen(uid)
         && request.resource.data.uid == uid
         && request.resource.data.role == 'citizen';
       allow delete: if false;
+    }
+
+    // A server-owned marker blocks stale ID tokens from recreating a profile.
+    // Email is removed after confirmation delivery, or after 30 days.
+    match /citizenDeletions/{uid} {
+      allow read, write: if false;
     }
 
     match /staff/{staffId} {

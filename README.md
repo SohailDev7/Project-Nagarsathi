@@ -121,12 +121,28 @@ The document ID must be the Firebase Auth UID for email/password staff. Phone
 OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
 country code. Staff documents are read-only from the app; create and update
 them only from a trusted admin environment.
+<<<<<<< Updated upstream
 
 The verified Firebase accounts `admin@nagarsathi.app` and
 `freefuzxcoj2@gmail.com` and `sohail@nagarsathi.app` are granted super-admin
 access to ward-officer management by both the staff sign-in flow and Firestore
 rules. Their Firebase Auth emails must be verified; the rules do not trust a
 client-side email check alone.
+=======
+### Citizen profile deletion
+
+The citizen's top-right avatar menu includes **Delete my profile**. Deletion
+requires explicit confirmation and fresh password or SMS verification. Citizens
+who signed in with Google or Facebook verify with that same linked account.
+The server removes the private profile and credentials, anonymizes public
+contributions, revokes sessions, and sends a final email when an email address
+is available. Interrupted cleanup and email delivery are retried hourly.
+
+The new Firebase functions, Firestore rules/indexes, and OTP worker retention
+schedule must be deployed before this workflow is available in a live build.
+See [deployment and data requirements](functions/README.md).
+
+>>>>>>> Stashed changes
 ### Google sign-in
 
 Across Authentication → Sign-in method, enable **Google**. It opens the built-in

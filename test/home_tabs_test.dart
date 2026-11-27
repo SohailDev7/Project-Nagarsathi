@@ -51,6 +51,7 @@ void main() {
     expect(find.text('Dark mode'), findsNothing);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
+    expect(find.text('Delete my profile'), findsOneWidget);
   });
 
   testWidgets('the Profile tab opens the account sheet with Settings', (

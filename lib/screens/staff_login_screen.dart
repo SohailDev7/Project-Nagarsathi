@@ -21,8 +21,6 @@ import '../widgets/ns_text_field.dart';
 import 'login_screen.dart';
 import 'staff_home_screen.dart';
 
-enum _StaffMethod { email, phone }
-
 enum _PhoneStep { phone, code }
 
 class StaffLoginScreen extends StatefulWidget {
@@ -34,13 +32,12 @@ class StaffLoginScreen extends StatefulWidget {
 
 class _StaffLoginScreenState extends State<StaffLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   final _staffAuth = const StaffAuthService();
 
-  _StaffMethod _method = _StaffMethod.email;
+  IdentifierKind _kind = IdentifierKind.empty;
   _PhoneStep _phoneStep = _PhoneStep.phone;
   StaffPhoneChallenge? _challenge;
 
@@ -51,7 +48,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     _phoneController.dispose();
     _otpController.dispose();
@@ -66,6 +63,21 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       _showError = false;
       _errorMessage = null;
     });
+  }
+
+  void _onIdentifierChanged(String value) {
+    final kind = Validators.identifierKind(value);
+    if (kind != _kind || _showError) {
+      setState(() {
+        _kind = kind;
+        _showError = false;
+        if (_kind != IdentifierKind.phone && _phoneStep == _PhoneStep.code) {
+          _phoneStep = _PhoneStep.phone;
+          _challenge = null;
+          _otpController.clear();
+        }
+      });
+    }
   }
 
   void _failValidation() {
@@ -108,7 +120,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
       return;
     }
 
-    final staffEmail = _emailController.text.trim();
+    final staffEmail = _identifierController.text.trim();
     TextInput.finishAutofillContext();
     setState(() {
       _isLoading = true;
@@ -151,7 +163,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
     try {
       final challenge = await _staffAuth.sendPhoneCode(
-        _phoneController.text,
+        _identifierController.text,
         previous: resending ? _challenge : null,
       );
       if (!mounted) return;
@@ -536,10 +548,56 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       autocorrect: false,
                       autofillHints: const [AutofillHints.username],
                       inputFormatters: [
+                  NsTextField(
+                    controller: _identifierController,
+                    label: 'Email or phone',
+                    hint: 'you@municipality.gov.np or 98XXXXXXXX',
+                    icon: _kind == IdentifierKind.phone
+                        ? Icons.phone_android_rounded
+                        : Icons.alternate_email_rounded,
+                    keyboardType: _kind == IdentifierKind.phone
+                        ? TextInputType.phone
+                        : TextInputType.emailAddress,
+                    textInputAction: _kind == IdentifierKind.phone
+                        ? (_phoneStep == _PhoneStep.phone
+                            ? TextInputAction.done
+                            : TextInputAction.next)
+                        : TextInputAction.next,
+                    autocorrect: false,
+                    enabled: _phoneStep == _PhoneStep.phone,
+                    helper: _kind == IdentifierKind.phone
+                        ? 'Nepali mobile numbers only (+977).'
+                        : null,
+                    autofillHints: const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                      AutofillHints.telephoneNumber,
+                    ],
+                    inputFormatters: [
+                      if (_kind == IdentifierKind.phone)
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9०-९+\s()\-]'),
+                        )
+                      else
                         FilteringTextInputFormatter.deny(RegExp(r'\s')),
-                      ],
-                      onChanged: (_) => _clearError(),
-                    ),
+                    ],
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter your email address';
+                      }
+                      if (_kind == IdentifierKind.phone) {
+                        return Validators.nepaliPhone(value);
+                      }
+                      return Validators.email(value);
+                    },
+                    onFieldSubmitted: (_) {
+                      if (_kind == IdentifierKind.phone) {
+                        _sendCode();
+                      }
+                    },
+                    onChanged: _onIdentifierChanged,
+                  ),
+                  if (_kind != IdentifierKind.phone) ...[
                     const SizedBox(height: 13),
                     NsTextField(
                       controller: _passwordController,

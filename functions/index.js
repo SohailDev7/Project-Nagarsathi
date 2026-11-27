@@ -1,5 +1,8 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const logger = require("firebase-functions/logger");
+const { createCitizenDeletionHandlers } = require("./citizen_deletion");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
@@ -126,4 +129,36 @@ exports.verifyEmailOtp = onCall(
     }
     return { verified: true, token };
   },
+);
+
+const citizenDeletion = createCitizenDeletionHandlers({
+  db,
+  auth: admin.auth(),
+  Timestamp: admin.firestore.Timestamp,
+  FieldValue: admin.firestore.FieldValue,
+  HttpsError,
+  logger,
+  sendConfirmation: (email) =>
+    mailer(gmailUser.value(), gmailAppPassword.value()).sendMail({
+      from: "NagarSathi <" + gmailUser.value() + ">",
+      to: email,
+      subject: "Your NagarSathi profile has been deleted",
+      text: "Your NagarSathi profile, personal data and sign-in credentials " +
+        "have been permanently removed. Public reports and comments remain " +
+        "without your identity. All account sessions have been revoked.",
+    }),
+});
+
+exports.deleteCitizenProfile = onCall(
+  { secrets: [gmailUser, gmailAppPassword], timeoutSeconds: 120 },
+  citizenDeletion.deleteCitizenProfile,
+);
+
+exports.retryCitizenDeletions = onSchedule(
+  {
+    schedule: "every 60 minutes",
+    secrets: [gmailUser, gmailAppPassword],
+    timeoutSeconds: 540,
+  },
+  citizenDeletion.retryCitizenDeletions,
 );

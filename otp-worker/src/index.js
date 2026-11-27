@@ -441,6 +441,13 @@ async function verifyOtp(request, env) {
 }
 
 export default {
+  async scheduled(_event, env) {
+    // Expired challenges contain email addresses; do not retain them after
+    // their short verification window, including for deleted accounts.
+    await env.DB.prepare("DELETE FROM otp_challenges WHERE expires_at <= ?")
+      .bind(Date.now()).run();
+  },
+
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return json({});

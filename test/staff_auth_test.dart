@@ -81,9 +81,7 @@ void main() {
       await tester.tap(staffPortal);
       await tester.pumpAndSettle();
       expect(find.byType(StaffLoginScreen), findsOneWidget);
-      expect(find.text('Staff sign in'), findsOneWidget);
-      expect(find.text('Work email address'), findsOneWidget);
-      expect(find.text('Phone'), findsOneWidget);
+      expect(find.text('Email or phone'), findsOneWidget);
       expect(find.text('Sign up'), findsNothing);
 
       await tester.ensureVisible(find.byTooltip('Back'));
@@ -195,8 +193,6 @@ void main() {
 
   testWidgets('staff phone OTP rejects numbers outside Nepal', (tester) async {
     await _openStaffPortal(tester);
-    await tester.tap(find.text('Phone'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, '919841234567');
     await tester.ensureVisible(find.text('Send code'));
     await tester.pumpAndSettle();
@@ -212,8 +208,6 @@ void main() {
     tester,
   ) async {
     await _openStaffPortal(tester);
-    await tester.tap(find.text('Phone'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, '9841234567');
     await tester.ensureVisible(find.text('Send code'));
     await tester.pumpAndSettle();

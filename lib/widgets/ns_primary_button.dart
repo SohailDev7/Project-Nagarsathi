@@ -15,6 +15,7 @@ class NsPrimaryButton extends StatelessWidget {
     this.color = AppColors.primary,
     this.shadowColor = AppColors.primaryDark,
     this.borderColor = AppColors.primaryDark,
+    this.foregroundColor,
   });
 
   final String label;
@@ -25,11 +26,13 @@ class NsPrimaryButton extends StatelessWidget {
   final Color color;
   final Color shadowColor;
   final Color borderColor;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
     final canTap = !isLoading && onPressed != null;
-    final onPrimary = Theme.of(context).colorScheme.onPrimary;
+    final onPrimary =
+        foregroundColor ?? Theme.of(context).colorScheme.onPrimary;
 
     return NsPressable(
       onTap: canTap ? onPressed : null,
@@ -41,6 +44,7 @@ class NsPrimaryButton extends StatelessWidget {
       semanticLabel: label,
       child: SizedBox(
         height: height,
+<<<<<<< Updated upstream
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Center(
@@ -54,6 +58,39 @@ class NsPrimaryButton extends StatelessWidget {
                       child: CircularProgressIndicator(
                         strokeWidth: 2.6,
                         valueColor: AlwaysStoppedAnimation<Color>(onPrimary),
+=======
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 160),
+            child: isLoading
+                ? SizedBox(
+                    key: const ValueKey('loader'),
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.forest,
+                      ),
+                    ),
+                  )
+                : Row(
+                    key: const ValueKey('label'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w900,
+                            color: onPrimary,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+>>>>>>> Stashed changes
                       ),
                     )
                   : FittedBox(

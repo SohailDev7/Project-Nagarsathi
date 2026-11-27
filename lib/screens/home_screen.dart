@@ -26,6 +26,7 @@ import '../widgets/ns_primary_button.dart';
 import '../widgets/ns_remember_me_notification.dart';
 import '../widgets/ns_rotating_line.dart';
 import '../widgets/update_dialog.dart';
+import 'delete_profile_screen.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 
@@ -35,6 +36,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.locationService = const LocationService(),
+    this.authService = const AuthService(),
     this.initialName,
     this.initialEmail,
     this.showRememberMePrompt = false,
@@ -43,6 +45,7 @@ class HomeScreen extends StatefulWidget {
   /// Overridable for tests so the confirmation flow can run without the
   /// location plugin.
   final LocationService locationService;
+  final AuthService authService;
   final String? initialName;
   final String? initialEmail;
   final bool showRememberMePrompt;
@@ -318,12 +321,18 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadProfile();
     if (!mounted) return;
 
+<<<<<<< Updated upstream
     User? user;
     try {
       user = FirebaseAuth.instance.currentUser;
     } catch (_) {
       // Firebase Auth is not available in local/widget tests.
     }
+=======
+    final user = AuthService.isConfigured
+        ? FirebaseAuth.instance.currentUser
+        : null;
+>>>>>>> Stashed changes
     final displayName = (_name != null && _name!.trim().isNotEmpty)
         ? _name!.trim()
         : (user?.displayName?.trim().isNotEmpty == true
@@ -334,6 +343,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: NsColors.of(context).surface,
       showDragHandle: true,
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -345,6 +358,15 @@ class _HomeScreenState extends State<HomeScreen> {
         onSignOut: () {
           Navigator.of(sheetContext).pop();
           _signOut();
+        },
+        onDeleteProfile: () {
+          Navigator.of(sheetContext).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  DeleteProfileScreen(authService: widget.authService),
+            ),
+          );
         },
         checkingForUpdate: _checkingForUpdate,
         onCheckForUpdates: () {
@@ -362,9 +384,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut() async {
+<<<<<<< Updated upstream
     await const AuthService().signOut();
     await const SessionService().saveRememberMe(false);
     await const SessionService().saveAppLock(false);
+=======
+    await widget.authService.signOut();
+>>>>>>> Stashed changes
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
@@ -1270,6 +1296,7 @@ class _AccountSheet extends StatelessWidget {
     required this.email,
     required this.initials,
     required this.onSignOut,
+    required this.onDeleteProfile,
     required this.onCheckForUpdates,
     required this.onOpenSettings,
     required this.checkingForUpdate,
@@ -1281,6 +1308,7 @@ class _AccountSheet extends StatelessWidget {
   final String initials;
   final String? version;
   final VoidCallback onSignOut;
+  final VoidCallback onDeleteProfile;
   final VoidCallback onCheckForUpdates;
   final VoidCallback onOpenSettings;
   final bool checkingForUpdate;
@@ -1293,7 +1321,7 @@ class _AccountSheet extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1379,6 +1407,14 @@ class _AccountSheet extends StatelessWidget {
               icon: Icons.logout_rounded,
               tone: NsOutlineTone.danger,
               onPressed: onSignOut,
+            ),
+            const SizedBox(height: 12),
+            NsOutlineButton(
+              key: const Key('delete-my-profile'),
+              label: 'Delete my profile',
+              icon: Icons.person_remove_outlined,
+              tone: NsOutlineTone.danger,
+              onPressed: onDeleteProfile,
             ),
             if (version != null) ...[
               const SizedBox(height: 12),

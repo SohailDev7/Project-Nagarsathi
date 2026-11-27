@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
@@ -12,6 +13,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/language_controller.dart';
 import '../models/citizen_location.dart';
 import 'firebase_bootstrap.dart';
+import 'session_service.dart';
+
+enum CitizenDeletionMethod { password, sms, google, facebook }
+
+enum DeletionEmailStatus { sent, pending, unavailable }
+
+class CitizenDeletionSmsChallenge {
+  const CitizenDeletionSmsChallenge({
+    this.verificationId,
+    this.autoCredential,
+    this.resendToken,
+  });
+
+  final String? verificationId;
+  final PhoneAuthCredential? autoCredential;
+  final int? resendToken;
+}
+
+class CitizenDeletionResult {
+  const CitizenDeletionResult({
+    required this.completed,
+    required this.emailStatus,
+  });
+
+  final bool completed;
+  final DeletionEmailStatus emailStatus;
+}
 
 /// Thrown when an auth request cannot be completed. The message is already
 /// citizen-friendly, so screens can show it directly.
@@ -29,7 +57,12 @@ class AuthFailure implements Exception {
 /// Authentication is available only when Firebase initialization succeeded.
 /// Demo sign-in is intentionally not implemented.
 class AuthService {
-  const AuthService();
+  const AuthService({this.firebaseAuth, this.firebaseFunctions});
+
+  final FirebaseAuth? firebaseAuth;
+  final FirebaseFunctions? firebaseFunctions;
+  FirebaseAuth get _auth => firebaseAuth ?? FirebaseAuth.instance;
+  bool get _isConnected => firebaseAuth != null || isConfigured;
 
   static bool get isConfigured => FirebaseBootstrap.isReady;
 
@@ -354,16 +387,248 @@ class AuthService {
       await prefs.remove('cached_email');
     } catch (_) {}
 
-    if (!isConfigured) return;
+    if (!_isConnected) return;
     try {
       await GoogleSignIn.instance.signOut();
     } catch (_) {
       // Google was not initialised in this session.
     }
     try {
-      await FirebaseAuth.instance.signOut();
+      await FacebookAuth.instance.logOut();
+    } catch (_) {
+      // Facebook may not have been used on this device.
+    }
+    try {
+      await _auth.signOut();
     } catch (_) {
       // The local session is already gone.
+    }
+  }
+
+  User get _deletionUser {
+    if (!_isConnected) {
+      throw const AuthFailure(
+        'Firebase is not connected. Profile deletion is unavailable.',
+      );
+    }
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure('Please sign in again to delete your profile.');
+    }
+    return user;
+  }
+
+  CitizenDeletionMethod get deletionMethod {
+    final user = _deletionUser;
+    final providers = user.providerData.map((provider) => provider.providerId);
+    if (providers.contains('password')) return CitizenDeletionMethod.password;
+    if (providers.contains('phone') && user.phoneNumber != null) {
+      return CitizenDeletionMethod.sms;
+    }
+    if (providers.contains('google.com')) return CitizenDeletionMethod.google;
+    if (providers.contains('facebook.com')) {
+      return CitizenDeletionMethod.facebook;
+    }
+    throw const AuthFailure(
+      'Sign in with your password or a linked account to delete your profile.',
+    );
+  }
+
+  String? get deletionPhoneNumber => _deletionUser.phoneNumber;
+
+  Future<CitizenDeletionSmsChallenge> requestDeletionSmsCode({
+    CitizenDeletionSmsChallenge? previous,
+  }) async {
+    final phone = _deletionUser.phoneNumber;
+    if (deletionMethod != CitizenDeletionMethod.sms || phone == null) {
+      throw const AuthFailure('This account does not have a verified phone.');
+    }
+    final completer = Completer<CitizenDeletionSmsChallenge>();
+    void complete(CitizenDeletionSmsChallenge challenge) {
+      if (!completer.isCompleted) completer.complete(challenge);
+    }
+
+    void fail(Object error) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          error is FirebaseAuthException
+              ? AuthFailure(friendlyMessage(error))
+              : const AuthFailure(
+                  'We could not send the code. Please try again.',
+                ),
+        );
+      }
+    }
+
+    try {
+      unawaited(
+        _auth
+            .verifyPhoneNumber(
+              phoneNumber: phone,
+              forceResendingToken: previous?.resendToken,
+              timeout: const Duration(seconds: 60),
+              verificationCompleted: (credential) => complete(
+                CitizenDeletionSmsChallenge(autoCredential: credential),
+              ),
+              verificationFailed: fail,
+              codeSent: (verificationId, resendToken) => complete(
+                CitizenDeletionSmsChallenge(
+                  verificationId: verificationId,
+                  resendToken: resendToken,
+                ),
+              ),
+              codeAutoRetrievalTimeout: (verificationId) => complete(
+                CitizenDeletionSmsChallenge(verificationId: verificationId),
+              ),
+            )
+            .catchError(fail),
+      );
+      return await completer.future.timeout(const Duration(seconds: 90));
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    } on TimeoutException {
+      throw const AuthFailure('Sending the code timed out. Please try again.');
+    } on AuthFailure {
+      rethrow;
+    } catch (_) {
+      throw const AuthFailure('We could not send the code. Please try again.');
+    }
+  }
+
+  /// Reauthenticates the current citizen before asking the trusted backend to
+  /// remove their data. Passwords and SMS codes are sent only to Firebase Auth.
+  Future<CitizenDeletionResult> deleteCitizenProfile({
+    String? password,
+    CitizenDeletionSmsChallenge? smsChallenge,
+    String? smsCode,
+  }) async {
+    final user = _deletionUser;
+    try {
+      final AuthCredential credential;
+      switch (deletionMethod) {
+        case CitizenDeletionMethod.password:
+          if (password == null || password.isEmpty || user.email == null) {
+            throw const AuthFailure('Enter your password to confirm deletion.');
+          }
+          credential = EmailAuthProvider.credential(
+            email: user.email!,
+            password: password,
+          );
+        case CitizenDeletionMethod.sms:
+          final automatic = smsChallenge?.autoCredential;
+          if (automatic != null) {
+            credential = automatic;
+          } else {
+            if (smsChallenge?.verificationId == null ||
+                !RegExp(r'^\d{6}$').hasMatch(smsCode?.trim() ?? '')) {
+              throw const AuthFailure(
+                'Enter the 6-digit SMS verification code.',
+              );
+            }
+            credential = PhoneAuthProvider.credential(
+              verificationId: smsChallenge!.verificationId!,
+              smsCode: smsCode!.trim(),
+            );
+          }
+        case CitizenDeletionMethod.google:
+          await _ensureGoogleInitialized();
+          if (!GoogleSignIn.instance.supportsAuthenticate()) {
+            throw const AuthFailure(
+              'Google verification needs the Android app.',
+            );
+          }
+          final account = await GoogleSignIn.instance.authenticate();
+          final token = account.authentication.idToken;
+          if (token == null) {
+            throw const AuthFailure('Google could not verify your account.');
+          }
+          credential = GoogleAuthProvider.credential(idToken: token);
+        case CitizenDeletionMethod.facebook:
+          final result = await FacebookAuth.instance.login(
+            permissions: ['public_profile', 'email'],
+          );
+          if (result.status == LoginStatus.cancelled) {
+            throw const AuthFailure(
+              'Verification was cancelled. Your profile has not been deleted.',
+            );
+          }
+          if (result.status != LoginStatus.success ||
+              result.accessToken == null) {
+            throw const AuthFailure('Facebook could not verify your account.');
+          }
+          credential = FacebookAuthProvider.credential(
+            result.accessToken!.tokenString,
+          );
+      }
+
+      await user.reauthenticateWithCredential(credential);
+      await user.getIdToken(true);
+      final response = await (firebaseFunctions ?? FirebaseFunctions.instance)
+          .httpsCallable(
+            'deleteCitizenProfile',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
+          )
+          .call<Object?>({'confirm': true});
+      final payload = response.data;
+      if (payload is! Map) {
+        throw const AuthFailure(
+          'We could not confirm deletion. Please sign in again to check.',
+        );
+      }
+      final data = Map<String, dynamic>.from(payload);
+      if (data['status'] != 'deleted' && data['status'] != 'pending') {
+        throw const AuthFailure(
+          'We could not confirm deletion. Please sign in again to check.',
+        );
+      }
+      final result = CitizenDeletionResult(
+        completed: data['status'] == 'deleted',
+        emailStatus: switch (data['emailStatus']) {
+          'sent' => DeletionEmailStatus.sent,
+          'pending' => DeletionEmailStatus.pending,
+          _ => DeletionEmailStatus.unavailable,
+        },
+      );
+      await signOut();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(SessionService.rememberKey);
+      } catch (_) {}
+      return result;
+    } on AuthFailure {
+      rethrow;
+    } on FirebaseAuthException catch (error) {
+      throw AuthFailure(friendlyMessage(error));
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        throw const AuthFailure(
+          'Verification was cancelled. Your profile has not been deleted.',
+        );
+      }
+      throw AuthFailure(_googleSignInMessage(error));
+    } on FirebaseFunctionsException catch (error) {
+      switch (error.code) {
+        case 'not-found':
+        case 'unimplemented':
+          throw const AuthFailure(
+            'Profile deletion is not available yet. Please try again later.',
+          );
+        case 'unauthenticated':
+        case 'failed-precondition':
+          throw const AuthFailure(
+            'Please verify your account again to continue.',
+          );
+        case 'permission-denied':
+          throw const AuthFailure('Only citizen accounts can use this option.');
+        default:
+          throw const AuthFailure(
+            'We could not confirm deletion. Please sign in again to check.',
+          );
+      }
+    } catch (_) {
+      throw const AuthFailure(
+        'We could not confirm deletion. Please sign in again to check.',
+      );
     }
   }
 
@@ -797,6 +1062,12 @@ class AuthService {
         return 'Email sign-in is not enabled in Firebase yet.';
       case 'requires-recent-login':
         return 'Please sign in again to finish that change.';
+      case 'user-mismatch':
+        return 'Verify with the same account you used to sign in.';
+      case 'invalid-verification-code':
+        return 'That SMS code is incorrect. Please try again.';
+      case 'session-expired':
+        return 'That SMS code has expired. Request a new one.';
       default:
         return 'Something went wrong. Please try again.';
     }

@@ -62,13 +62,17 @@ class NsOutlineButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w900,
-                  color: enabled ? foreground : tokens.muted,
-                  letterSpacing: 0.1,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w900,
+                    color: enabled ? foreground : tokens.muted,
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ),
               if (icon != null) ...[
