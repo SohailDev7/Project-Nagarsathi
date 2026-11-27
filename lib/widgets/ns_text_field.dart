@@ -102,21 +102,13 @@ class _NsTextFieldState extends State<NsTextField> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tokens = NsColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final fillColor = _focused
-        ? (isDark ? const Color(0xFF1F332A) : const Color(0xFFB5DCAA))
-        : (isDark ? const Color(0xFF1B2B24) : const Color(0xFFA3D194));
+    final fillColor = _focused ? tokens.mint : tokens.surface;
 
     const radius = BorderRadius.all(Radius.circular(14));
     final idleBorder = OutlineInputBorder(
       borderRadius: radius,
-      borderSide: BorderSide(
-        color: isDark
-            ? tokens.border.withValues(alpha: 0.75)
-            : const Color(0xFF6B9F60),
-        width: 1.2,
-      ),
+      borderSide: BorderSide(color: tokens.inputBorder, width: 1.2),
     );
     final focusedBorder = OutlineInputBorder(
       borderRadius: radius,

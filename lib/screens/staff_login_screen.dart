@@ -20,6 +20,7 @@ import '../widgets/ns_shake.dart';
 import '../widgets/ns_text_field.dart';
 import 'login_screen.dart';
 import 'staff_home_screen.dart';
+import 'superadmin_home_screen.dart';
 
 enum _StaffMethod { email, phone }
 
@@ -166,6 +167,35 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     }
   }
 
+  /// Emails a reset link to the address typed above, so ward staff and super
+  /// admins can recover a lost password without a super admin resetting it.
+  Future<void> _forgotPassword() async {
+    if (_isLoading) return;
+    FocusScope.of(context).unfocus();
+    final strings = context.l10n;
+    final email = _emailController.text.trim();
+    if (Validators.email(email, strings: strings) != null) {
+      _fail(strings.staffPasswordResetNeedsEmail);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _showError = false;
+    });
+
+    try {
+      await _staffAuth.sendPasswordReset(email);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.staffPasswordResetSent(email))),
+      );
+    } on AuthFailure catch (error) {
+      _fail(error.message);
+    }
+  }
+
   Future<void> _sendCode({bool resending = false}) async {
     if (_isLoading) return;
     FocusScope.of(context).unfocus();
@@ -213,10 +243,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     FocusScope.of(context).unfocus();
 
     if (!autoVerified) {
-      final otpErr = Validators.otp(
-        _otpController.text,
-        strings: context.l10n,
-      );
+      final otpErr = Validators.otp(_otpController.text, strings: context.l10n);
       if (otpErr != null) {
         _fail(otpErr);
         return;
@@ -285,11 +312,16 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         style: NsTransitionStyle.fade,
         builder: (_) => AppLockGate(
           isStaff: true,
-          child: StaffHomeScreen(
-            staffIdentifier: session.identifier,
-            isPhone: session.isPhone,
-            showRememberMePrompt: true,
-          ),
+          child: session.isSuperAdmin
+              ? SuperAdminHomeScreen(
+                  staffIdentifier: session.identifier,
+                  showRememberMePrompt: true,
+                )
+              : StaffHomeScreen(
+                  staffIdentifier: session.identifier,
+                  isPhone: session.isPhone,
+                  showRememberMePrompt: true,
+                ),
         ),
       ),
       (route) => false,
@@ -319,7 +351,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             return Container(
               padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + viewInsets.bottom),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF12201B) : Colors.white,
+                color: isDark ? tokens.surface : Colors.white,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -413,8 +445,9 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       gradientColors: isDark
                           ? const [Color(0xFF36D395), Color(0xFF22B57A)]
                           : const [Color(0xFF0E6B47), Color(0xFF095035)],
-                      foregroundColor:
-                          isDark ? const Color(0xFF072419) : Colors.white,
+                      foregroundColor: isDark
+                          ? tokens.background
+                          : Colors.white,
                       onPressed: isSubmitting
                           ? null
                           : () async {
@@ -438,8 +471,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                               } catch (_) {
                                 setModalState(() {
                                   isSubmitting = false;
-                                  localError =
-                                      'Failed to update password. Please try again.';
+                                  localError = 'Failed to update password. Please try again.';
                                 });
                               }
                             },
@@ -528,10 +560,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      palette.ambientAccent,
-                      Colors.transparent,
-                    ],
+                    colors: [palette.ambientAccent, Colors.transparent],
                   ),
                 ),
               ),
@@ -542,7 +571,9 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               builder: (context, constraints) {
                 final horizontal = constraints.maxWidth < 380 ? 16.0 : 22.0;
                 final maxW = constraints.maxWidth - horizontal * 2;
-                final contentWidth = maxW > 440 ? 440.0 : (maxW < 0 ? 0.0 : maxW);
+                final contentWidth = maxW > 440
+                    ? 440.0
+                    : (maxW < 0 ? 0.0 : maxW);
 
                 return Column(
                   children: [
@@ -831,7 +862,30 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       onFieldSubmitted: (_) => _signIn(),
                       onChanged: (_) => _clearError(),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _forgotPassword,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 6,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          strings.staffForgotPassword,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: palette.ctaColors.first,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     NsPrimaryButton(
                       label: strings.signIn,
                       isLoading: _isLoading,

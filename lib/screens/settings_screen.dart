@@ -3,10 +3,14 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_locale.dart';
 import '../l10n/app_strings.dart';
 import '../l10n/language_controller.dart';
+import '../services/auth_service.dart';
 import '../services/biometric_service.dart';
 import '../services/session_service.dart';
+import '../services/staff_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
+import '../widgets/ns_outline_button.dart';
+import '../widgets/ns_primary_button.dart';
 
 /// Preferences for language, appearance, and App Lock.
 ///
@@ -50,6 +54,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _securityBusy = false;
   String? _securityError;
 
+  /// Set when a staff member or super admin is signed in on this device; only
+  /// they have a password that can be changed from here.
+  StaffSession? _staffSession;
+
   @override
   void initState() {
     super.initState();
@@ -75,18 +83,38 @@ class _SettingsScreenState extends State<SettingsScreen>
     final availabilityFuture = _biometrics.availability();
     final appLockFuture = widget.sessionService.loadAppLock();
     final rememberFuture = widget.sessionService.loadRememberMe();
+    final staffSessionFuture = widget.sessionService.loadStaffSession();
 
     final availability = await availabilityFuture;
     final appLock = await appLockFuture;
     final rememberMe = await rememberFuture;
+    final staffSession = await staffSessionFuture;
     if (!mounted) return;
 
     setState(() {
       _availability = availability;
       _appLockEnabled = appLock;
       _rememberMe = rememberMe;
+      _staffSession = staffSession;
       _securityLoading = false;
     });
+  }
+
+  Future<void> _openChangePassword() async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NsColors.of(context).surface,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => const _ChangePasswordSheet(),
+    );
+    if (changed != true || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.l10n.staffPasswordChanged)));
   }
 
   Future<void> _setAppLock(bool next) async {
@@ -309,6 +337,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                         color: tokens.muted,
                       ),
                     ),
+                    if (_staffSession != null) ...[
+                      const SizedBox(height: 18),
+                      NsOutlineButton(
+                        key: const Key('settings-change-password'),
+                        label: strings.staffChangePassword,
+                        icon: Icons.lock_reset_rounded,
+                        onPressed: _openChangePassword,
+                      ),
+                    ],
                   ],
                 );
               },
@@ -863,6 +900,131 @@ class _ThemePreview extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lets a signed-in staff member or super admin replace their password without
+/// signing out. Both fields stay obscured; the same length rule as the forced
+/// first-login change applies.
+class _ChangePasswordSheet extends StatefulWidget {
+  const _ChangePasswordSheet();
+
+  @override
+  State<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
+  final _newController = TextEditingController();
+  final _confirmController = TextEditingController();
+  final _staffAuth = const StaffAuthService();
+
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _newController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    final strings = context.l10n;
+    final next = _newController.text;
+
+    if (next.trim().length < 6) {
+      setState(() => _error = strings.staffPasswordLengthError);
+      return;
+    }
+    if (next != _confirmController.text) {
+      setState(() => _error = strings.staffPasswordMismatch);
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      await _staffAuth.updateStaffPassword(next);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Could not change the password. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NsColors.of(context);
+    final strings = context.l10n;
+    final viewInsets = MediaQuery.of(context).viewInsets;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            strings.staffChangePassword,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: tokens.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            strings.staffPasswordLengthHint,
+            style: TextStyle(fontSize: 13, color: tokens.muted),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            key: const Key('change-password-new'),
+            controller: _newController,
+            obscureText: true,
+            enabled: !_busy,
+            decoration: InputDecoration(labelText: strings.staffNewPassword),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('change-password-confirm'),
+            controller: _confirmController,
+            obscureText: true,
+            enabled: !_busy,
+            decoration: InputDecoration(labelText: strings.confirmPassword),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(fontSize: 12, color: AppColors.error),
+            ),
+          ],
+          const SizedBox(height: 20),
+          NsPrimaryButton(
+            label: strings.staffChangePassword,
+            isLoading: _busy,
+            onPressed: _submit,
+            icon: Icons.lock_reset_rounded,
           ),
         ],
       ),

@@ -34,9 +34,9 @@ class NsSplitHeroScaffold extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF0A1D16),
-              Color(0xFF133326),
-              Color(0xFF1B4534),
+              Color(0xFF061F15),
+              Color(0xFF0D3322),
+              Color(0xFF164C34),
             ],
           )
         : (isDark
@@ -44,9 +44,9 @@ class NsSplitHeroScaffold extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF0C1E15),
-                    Color(0xFF132E20),
-                    Color(0xFF193C2A),
+                    Color(0xFF051F15),
+                    Color(0xFF0B3020),
+                    Color(0xFF11462D),
                   ],
                 )
               : const LinearGradient(
@@ -60,7 +60,7 @@ class NsSplitHeroScaffold extends StatelessWidget {
                 ));
 
     final sheetColor = staff
-        ? (isDark ? const Color(0xFF131F1A) : const Color(0xFFB4D9CB))
+        ? (isDark ? tokens.surface : const Color(0xFFB4D9CB))
         : tokens.surface;
 
     final dotColor = staff
@@ -157,7 +157,7 @@ class NsSplitHeroScaffold extends StatelessWidget {
                                     top: BorderSide(
                                       color: staff
                                           ? (isDark
-                                                ? const Color(0xFF284236)
+                                                ? const Color(0xFF245238)
                                                 : const Color(0xFFE4ECE7))
                                           : tokens.border.withValues(
                                               alpha: 0.7,

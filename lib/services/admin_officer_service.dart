@@ -6,9 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/municipality.dart';
 import '../models/ward_officer.dart';
 import '../utils/password_utils.dart';
 import 'firebase_bootstrap.dart';
+import 'staff_auth_service.dart';
 
 /// Thrown when an officer operation cannot be completed.
 class AdminOfficerException implements Exception {
@@ -193,6 +195,7 @@ class AdminOfficerService {
     required String email,
     required String phoneNumber,
     required int assignedWard,
+    Municipality municipality = Municipality.kmc,
     String reason = '',
   }) {
     return _guard('Could not create the officer.', () async {
@@ -206,11 +209,25 @@ class AdminOfficerService {
       if (!_emailPattern.hasMatch(emailValue)) {
         throw const AdminOfficerException('Enter a valid email address.');
       }
+      // An allowlisted admin address always opens the super admin console, so
+      // it can never behave as a ward officer account.
+      await StaffAuthService.loadSuperAdminEmails();
+      if (StaffAuthService.isSuperAdminEmail(emailValue)) {
+        throw const AdminOfficerException(
+          "That email belongs to a super admin account. "
+          "Use the officer's own email address.",
+        );
+      }
       final phoneDigits = phone.replaceAll(RegExp(r'[^\d]'), '');
       if (phoneDigits.length < 7 || phoneDigits.length > 15) {
         throw const AdminOfficerException('Enter a valid phone number.');
       }
       _validateWard(assignedWard);
+      if (!municipality.hasWard(assignedWard)) {
+        throw AdminOfficerException(
+          '${municipality.code} has wards 1 to ${municipality.wardCount}.',
+        );
+      }
 
       // Case-insensitive uniqueness via the derived emailLower field.
       final duplicate = await _officers
@@ -257,6 +274,7 @@ class AdminOfficerService {
         email: emailValue,
         phoneNumber: phone,
         assignedWard: assignedWard,
+        municipality: municipality,
         status: OfficerStatus.active,
         createdAt: now,
         mustChangePassword: true,
@@ -266,10 +284,7 @@ class AdminOfficerService {
       var notificationStatus = OfficerNotificationStatus.failed;
       if (FirebaseBootstrap.isReady) {
         try {
-          await _sendStaffInvite(
-            officer: officer,
-            tempPassword: tempPassword,
-          );
+          await _sendStaffInvite(officer: officer, tempPassword: tempPassword);
           notificationStatus = OfficerNotificationStatus.sent;
         } catch (_) {
           notificationStatus = OfficerNotificationStatus.failed;
@@ -401,13 +416,8 @@ class AdminOfficerService {
       // Remove the Firebase Auth account too. Without this the email stays
       // reserved and the same address cannot be used for a new officer.
       try {
-        final authUid = existing.id.startsWith('officer_')
-            ? null
-            : existing.id;
-        await _deleteStaffAuthAccount(
-          uid: authUid,
-          email: existing.email,
-        );
+        final authUid = existing.id.startsWith('officer_') ? null : existing.id;
+        await _deleteStaffAuthAccount(uid: authUid, email: existing.email);
       } catch (_) {
         // Best-effort: creating an officer with the same email retries this
         // cleanup before reporting a duplicate.
@@ -632,6 +642,7 @@ class AdminOfficerService {
       'active': officer.isActive,
       'mustChangePassword': officer.mustChangePassword,
       'assignedWard': officer.assignedWard,
+      'municipality': officer.municipality.code,
       'updatedAt': Timestamp.fromDate(now),
     }, SetOptions(merge: true));
     await batch.commit();

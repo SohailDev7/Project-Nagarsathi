@@ -256,10 +256,13 @@ async function mintFirebaseToken(env, email) {
   }
 }
 
-async function requestOtp(request, env) {
+async function requestOtp(request, env, options = {}) {
   if (!env.GMAIL_MAIL_ENDPOINT || !env.GMAIL_MAIL_SECRET || !env.OTP_PEPPER) {
     return json({ error: "OTP email service is not configured." }, 500);
   }
+
+  const digits = options.digits === 4 ? 4 : 6;
+  const isAdmin = options.purpose === "admin";
 
   const body = await parseJson(request);
   const email = String(body?.email || "").trim().toLowerCase();
@@ -290,7 +293,11 @@ async function requestOtp(request, env) {
     );
   }
 
-  const otp = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
+  const otp = String(
+    digits === 4
+      ? (crypto.getRandomValues(new Uint32Array(1))[0] % 9000) + 1000
+      : (crypto.getRandomValues(new Uint32Array(1))[0] % 900000) + 100000,
+  );
   const otpHash = await sha256(`${env.OTP_PEPPER}:${email}:${otp}`);
 
   await env.DB
@@ -322,15 +329,27 @@ async function requestOtp(request, env) {
     .run();
 
   const isNepali = String(body?.locale || "").toLowerCase() === "ne";
-  const emailSubject = isNepali
-    ? "तपाईंको नगरसाथी प्रमाणीकरण कोड"
-    : "Your NagarSathi verification code";
-  const emailText = isNepali
-    ? `तपाईंको नगरसाथी प्रमाणीकरण कोड ${otp} हो। यो ५ मिनेटमा निष्क्रिय हुनेछ।`
-    : `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`;
-  const emailHtml = isNepali
-    ? `<p>तपाईंको नगरसाथी प्रमाणीकरण कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
-    : `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`;
+  const emailSubject = isAdmin
+    ? isNepali
+      ? "तपाईंको नगरसाथी एडमिन साइन-इन कोड"
+      : "Your NagarSathi admin sign-in code"
+    : isNepali
+      ? "तपाईंको नगरसाथी प्रमाणीकरण कोड"
+      : "Your NagarSathi verification code";
+  const emailText = isAdmin
+    ? isNepali
+      ? `तपाईंको नगरसाथी एडमिन साइन-इन कोड ${otp} हो। यो ५ मिनेटमा निष्क्रिय हुनेछ।`
+      : `Your NagarSathi admin sign-in code is ${otp}. It expires in 5 minutes.`
+    : isNepali
+      ? `तपाईंको नगरसाथी प्रमाणीकरण कोड ${otp} हो। यो ५ मिनेटमा निष्क्रिय हुनेछ।`
+      : `Your NagarSathi verification code is ${otp}. It expires in 5 minutes.`;
+  const emailHtml = isAdmin
+    ? isNepali
+      ? `<p>तपाईंको नगरसाथी एडमिन साइन-इन कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
+      : `<p>Your NagarSathi admin sign-in code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`
+    : isNepali
+      ? `<p>तपाईंको नगरसाथी प्रमाणीकरण कोड:</p><h2>${otp}</h2><p>यो कोड ५ मिनेटमा निष्क्रिय हुनेछ।</p>`
+      : `<p>Your NagarSathi verification code is:</p><h2>${otp}</h2><p>This code expires in 5 minutes.</p>`;
 
   const mailResponse = await fetch(env.GMAIL_MAIL_ENDPOINT, {
     method: "POST",
@@ -367,17 +386,21 @@ async function requestOtp(request, env) {
   });
 }
 
-async function verifyOtp(request, env) {
+async function verifyOtp(request, env, options = {}) {
   if (!env.OTP_PEPPER) {
     return json({ error: "OTP service is not configured." }, 500);
   }
 
+  const digits = options.digits === 4 ? 4 : 6;
   const body = await parseJson(request);
   const email = String(body?.email || "").trim().toLowerCase();
   const otp = String(body?.otp || "").trim();
 
-  if (!isValidEmail(email) || !/^\d{6}$/.test(otp)) {
-    return json({ error: "Enter a valid email and 6-digit code." }, 400);
+  if (!isValidEmail(email) || !new RegExp(`^\\d{${digits}}$`).test(otp)) {
+    return json(
+      { error: `Enter a valid email and ${digits}-digit code.` },
+      400,
+    );
   }
 
   const now = Date.now();
@@ -413,7 +436,9 @@ async function verifyOtp(request, env) {
 
   await env.DB
     .prepare(
-      "UPDATE otp_challenges SET verified = 1, updated_at = ? WHERE email_hash = ?",
+      options.singleUse
+        ? "UPDATE otp_challenges SET verified = 1, expires_at = 0, updated_at = ? WHERE email_hash = ?"
+        : "UPDATE otp_challenges SET verified = 1, updated_at = ? WHERE email_hash = ?",
     )
     .bind(now, emailHash)
     .run();
@@ -430,7 +455,11 @@ async function verifyOtp(request, env) {
 
   // Best effort: when no service account is configured the code still verifies,
   // the app just cannot open a session from it. Accounts are never created here.
-  const minted = await mintFirebaseToken(env, email);
+  // Admin codes are checked by an already signed-in session, so skip minting.
+  const minted =
+    options.mintToken === false
+      ? { token: null, reason: "skipped" }
+      : await mintFirebaseToken(env, email);
 
   return json({
     verified: true,
@@ -450,8 +479,7 @@ async function verifyOtp(request, env) {
 
 const SUPER_ADMIN_EMAILS = new Set([
   "admin@nagarsathi.app",
-  "freefuzxcoj2@gmail.com",
-  "sohail@nagarsathi.app",
+  "sohailk2064@outlook.com",
 ]);
 
 function readBearerToken(request) {
@@ -565,9 +593,27 @@ async function verifyStaffManager(request, env, accessToken) {
     };
   }
 
-  // Super-admins must have a verified email, matching the Firestore rules.
-  // Active staff managers are checked through their staff document.
-  let allowed = SUPER_ADMIN_EMAILS.has(email) && user.emailVerified === true;
+  // Super-admin addresses live in `config/admins` (field `emails`) so the list
+  // can change without redeploying this worker; the built-in pair is the
+  // fallback while that document is missing or unreadable. Sign-in itself is
+  // email + password, matching the Firestore rules. Active staff managers are
+  // also checked through their staff document.
+  let adminEmails = SUPER_ADMIN_EMAILS;
+  try {
+    const configDoc = await firestoreGetDocument(
+      env,
+      accessToken,
+      "config/admins",
+    );
+    const configured = (configDoc?.fields?.emails?.arrayValue?.values || [])
+      .map((entry) => String(entry.stringValue || "").trim().toLowerCase())
+      .filter(Boolean);
+    if (configured.length) adminEmails = new Set(configured);
+  } catch (_) {
+    // Keep the built-in list.
+  }
+
+  let allowed = adminEmails.has(email);
   if (!allowed && uid) {
     const staffDoc = await firestoreGetDocument(
       env,
@@ -816,6 +862,16 @@ export default {
     }
     if (url.pathname === "/verify-email-otp") {
       return verifyOtp(request, env);
+    }
+    if (url.pathname === "/request-admin-otp") {
+      return requestOtp(request, env, { digits: 4, purpose: "admin" });
+    }
+    if (url.pathname === "/verify-admin-otp") {
+      return verifyOtp(request, env, {
+        digits: 4,
+        mintToken: false,
+        singleUse: true,
+      });
     }
     if (url.pathname === "/admin/delete-staff-account") {
       return deleteStaffAccount(request, env);

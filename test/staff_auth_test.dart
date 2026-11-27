@@ -21,12 +21,20 @@ Future<void> _openStaffPortal(WidgetTester tester) async {
 
 void main() {
   test('super-admin allowlist accepts only normalized configured emails', () {
+    expect(StaffAuthService.isSuperAdminEmail('admin@nagarsathi.app'), isTrue);
     expect(
-      StaffAuthService.isSuperAdminEmail(' FREEFUZXCOJ2@gmail.com '),
+      StaffAuthService.isSuperAdminEmail(' SohailK2064@Outlook.com '),
       isTrue,
     );
-    expect(StaffAuthService.isSuperAdminEmail('admin@nagarsathi.app'), isTrue);
-    expect(StaffAuthService.isSuperAdminEmail('sohail@nagarsathi.app'), isTrue);
+    expect(
+      StaffAuthService.isSuperAdminEmail('sohail@nagarsathi.app'),
+      isFalse,
+    );
+    // This address was turned into a ward officer, so it must not be an admin.
+    expect(
+      StaffAuthService.isSuperAdminEmail(' FreeFuzxcoj2@gmail.com '),
+      isFalse,
+    );
     expect(StaffAuthService.isSuperAdminEmail('someone@example.com'), isFalse);
     expect(StaffAuthService.isSuperAdminEmail(null), isFalse);
   });

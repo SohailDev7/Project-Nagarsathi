@@ -62,9 +62,9 @@ class NsAuthHeading extends StatelessWidget {
           );
 
     final tone = switch (mood) {
-      NsMascotMood.sad => NsSpeechTone.error,
-      NsMascotMood.celebrate => NsSpeechTone.success,
-      NsMascotMood.curious => NsSpeechTone.info,
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
       _ => NsSpeechTone.neutral,
     };
 

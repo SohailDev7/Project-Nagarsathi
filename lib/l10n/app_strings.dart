@@ -162,6 +162,27 @@ abstract class AppStrings {
   String get navNotifications;
   String get navProfile;
   String get navMap;
+  String get navProgress;
+
+  // ── Staff dashboard & super admin ─────────────────────────────────────────
+  String get staffWardReports;
+  String get staffProgress;
+  String get staffWardLabel;
+  List<String> get staffTips;
+  String get staffWardSnapshot;
+  String get staffWardClear;
+  String get staffAssignedWard;
+  String get staffUpdateQueue;
+  String get staffProfileTitle;
+  String get staffAccessLevel;
+  String get superAdminBadge;
+  String get superAdminConsole;
+  String get superAdminSubtitle;
+  String get createWardOfficer;
+  String get openAuditTrail;
+  String get officersLabel;
+  String get auditEventsLabel;
+  String get quickActions;
   String get somethingBrokenNearby;
   String get communityReporting;
   String get reportHeroPrompt;
@@ -263,6 +284,9 @@ abstract class AppStrings {
   String get staffSignInTitle;
   String get staffBadgeShort;
   String get staffEnterPassword;
+  String get staffForgotPassword;
+  String get staffPasswordResetNeedsEmail;
+  String staffPasswordResetSent(String email);
   String get staffSendCode;
   String get staffWorkEmail;
   String get staffWorkEmailHint;
@@ -272,6 +296,9 @@ abstract class AppStrings {
   String get staffSetPermanentPassword;
   String get staffTemporaryPasswordInstructions;
   String get staffNewPassword;
+  String get staffChangePassword;
+  String get staffPasswordChanged;
+  String get staffPasswordMismatch;
   String get staffPasswordLengthHint;
   String get staffPasswordLengthError;
   String get staffConfirmNewPassword;
@@ -285,6 +312,9 @@ abstract class AppStrings {
   String get officersTab;
   String get auditTrailTab;
   String get searchOfficersHint;
+  String get auditSearchHint;
+  String get exportCsv;
+  String get exportFailed;
   String get allWards;
   String get allStatuses;
   String get totalLabel;
@@ -313,6 +343,7 @@ abstract class AppStrings {
   String get phoneNumberLabel;
   String get phoneExample;
   String get assignedWardLabel;
+  String get municipalityLabel;
   String get createOfficerLabel;
   String get officerEmailExists;
   String get reassignWardTitle;
@@ -705,6 +736,49 @@ class EnglishStrings extends AppStrings {
   @override
   String get navProfile => 'Profile';
   @override
+  String get navProgress => 'Progress';
+  @override
+  String get staffWardReports => 'Ward reports';
+  @override
+  String get staffProgress => 'Progress';
+  @override
+  String get staffWardLabel => 'Ward 4 · Lakeside';
+  @override
+  List<String> get staffTips => const [
+    'Your ward queue, one tap away.',
+    'Resolve what your neighbours reported.',
+    'Keep ward progress moving today.',
+  ];
+  @override
+  String get staffWardSnapshot => 'Ward snapshot';
+  @override
+  String get staffWardClear => 'Nothing waiting — your ward is clear.';
+  @override
+  String get staffAssignedWard => 'Assigned ward';
+  @override
+  String get staffUpdateQueue => 'Review ward queue';
+  @override
+  String get staffProfileTitle => 'Staff profile';
+  @override
+  String get staffAccessLevel => 'Access level';
+  @override
+  String get superAdminBadge => 'SUPER ADMIN';
+  @override
+  String get superAdminConsole => 'Super admin console';
+  @override
+  String get superAdminSubtitle =>
+      'Create ward officers and keep an eye on the audit trail.';
+  @override
+  String get createWardOfficer => 'Create ward officer';
+  @override
+  String get openAuditTrail => 'Open audit trail';
+  @override
+  String get officersLabel => 'Officers';
+  @override
+  String get auditEventsLabel => 'Audit events';
+  @override
+  String get quickActions => 'Quick actions';
+  @override
   String get navMap => 'Map';
   @override
   String get somethingBrokenNearby => 'Something broken nearby?';
@@ -912,6 +986,14 @@ class EnglishStrings extends AppStrings {
   @override
   String get staffEnterPassword => 'Enter your password';
   @override
+  String get staffForgotPassword => 'Forgot password?';
+  @override
+  String get staffPasswordResetNeedsEmail =>
+      'Enter your work email first, then tap Forgot password.';
+  @override
+  String staffPasswordResetSent(String email) =>
+      'If $email has an account, a reset link is on its way. Check that inbox.';
+  @override
   String get staffSendCode => 'Send code';
   @override
   String get staffWorkEmail => 'Work email address';
@@ -931,6 +1013,12 @@ class EnglishStrings extends AppStrings {
       'permanent password to continue.';
   @override
   String get staffNewPassword => 'New password';
+  @override
+  String get staffChangePassword => 'Change password';
+  @override
+  String get staffPasswordChanged => 'Your password has been updated.';
+  @override
+  String get staffPasswordMismatch => 'Both passwords must match.';
   @override
   String get staffPasswordLengthHint => 'At least 6 characters';
   @override
@@ -955,6 +1043,12 @@ class EnglishStrings extends AppStrings {
   String get auditTrailTab => 'Audit trail';
   @override
   String get searchOfficersHint => 'Search name, email, phone or ward';
+  @override
+  String get auditSearchHint => 'Search officer, action or reason';
+  @override
+  String get exportCsv => 'Export CSV';
+  @override
+  String get exportFailed => 'Could not export the report.';
   @override
   String get allWards => 'All wards';
   @override
@@ -1022,6 +1116,8 @@ class EnglishStrings extends AppStrings {
   String get phoneExample => '+977 98XXXXXXXX';
   @override
   String get assignedWardLabel => 'Assigned ward';
+  @override
+  String get municipalityLabel => 'Municipality';
   @override
   String get createOfficerLabel => 'Create officer';
   @override
@@ -1457,6 +1553,49 @@ class NepaliStrings extends AppStrings {
   @override
   String get navProfile => 'प्रोफाइल';
   @override
+  String get navProgress => 'प्रगति';
+  @override
+  String get staffWardReports => 'वडा रिपोर्ट';
+  @override
+  String get staffProgress => 'प्रगति';
+  @override
+  String get staffWardLabel => 'वडा ४ · लेकसाइड';
+  @override
+  List<String> get staffTips => const [
+    'तपाईंको वडा कार्यसूची एक ट्यापमै।',
+    'छिमेकीले रिपोर्ट गरेका समस्या समाधान गर्नुहोस्।',
+    'आजै वडाको प्रगति अघि बढाउनुहोस्।',
+  ];
+  @override
+  String get staffWardSnapshot => 'वडा सारांश';
+  @override
+  String get staffWardClear => 'केही बाँकी छैन — तपाईंको वडा सफा छ।';
+  @override
+  String get staffAssignedWard => 'तोकिएको वडा';
+  @override
+  String get staffUpdateQueue => 'वडा कार्यसूची हेर्नुहोस्';
+  @override
+  String get staffProfileTitle => 'कर्मचारी प्रोफाइल';
+  @override
+  String get staffAccessLevel => 'पहुँच स्तर';
+  @override
+  String get superAdminBadge => 'सुपर एडमिन';
+  @override
+  String get superAdminConsole => 'सुपर एडमिन कन्सोल';
+  @override
+  String get superAdminSubtitle =>
+      'वडा अधिकृत बनाउनुहोस् र अडिट रेकर्डमा नजर राख्नुहोस्।';
+  @override
+  String get createWardOfficer => 'वडा अधिकृत बनाउनुहोस्';
+  @override
+  String get openAuditTrail => 'अडिट रेकर्ड खोल्नुहोस्';
+  @override
+  String get officersLabel => 'अधिकृतहरू';
+  @override
+  String get auditEventsLabel => 'अडिट घटना';
+  @override
+  String get quickActions => 'छिटो कार्यहरू';
+  @override
   String get navMap => 'नक्सा';
   @override
   String get somethingBrokenNearby => 'वरिपरि केही बिग्रिएको छ?';
@@ -1665,6 +1804,14 @@ class NepaliStrings extends AppStrings {
   @override
   String get staffEnterPassword => 'पासवर्ड राख्नुहोस्';
   @override
+  String get staffForgotPassword => 'पासवर्ड बिर्सनुभयो?';
+  @override
+  String get staffPasswordResetNeedsEmail =>
+      'पहिले आफ्नो कार्य इमेल राख्नुहोस्, त्यसपछि पासवर्ड बिर्सनुभयो? थिच्नुहोस्।';
+  @override
+  String staffPasswordResetSent(String email) =>
+      '$email मा खाता भए रिसेट लिंक पठाइँदै छ। इनबक्स हेर्नुहोस्।';
+  @override
   String get staffSendCode => 'कोड पठाउनुहोस्';
   @override
   String get staffWorkEmail => 'कार्यालयको इमेल ठेगाना';
@@ -1684,6 +1831,12 @@ class NepaliStrings extends AppStrings {
       'स्थायी पासवर्ड राख्नुहोस्।';
   @override
   String get staffNewPassword => 'नयाँ पासवर्ड';
+  @override
+  String get staffChangePassword => 'पासवर्ड परिवर्तन गर्नुहोस्';
+  @override
+  String get staffPasswordChanged => 'तपाईंको पासवर्ड अद्यावधिक भयो।';
+  @override
+  String get staffPasswordMismatch => 'दुवै पासवर्ड मिल्नुपर्छ।';
   @override
   String get staffPasswordLengthHint => 'कम्तीमा ६ अक्षर';
   @override
@@ -1707,6 +1860,12 @@ class NepaliStrings extends AppStrings {
   String get auditTrailTab => 'अडिट रेकर्ड';
   @override
   String get searchOfficersHint => 'नाम, इमेल, फोन वा वडा खोज्नुहोस्';
+  @override
+  String get auditSearchHint => 'अधिकारी, कार्य वा कारण खोज्नुहोस्';
+  @override
+  String get exportCsv => 'CSV निर्यात गर्नुहोस्';
+  @override
+  String get exportFailed => 'प्रतिवेदन निर्यात गर्न सकिएन।';
   @override
   String get allWards => 'सबै वडा';
   @override
@@ -1774,6 +1933,8 @@ class NepaliStrings extends AppStrings {
   String get phoneExample => '+977 98XXXXXXXX';
   @override
   String get assignedWardLabel => 'तोकिएको वडा';
+  @override
+  String get municipalityLabel => 'नगरपालिका';
   @override
   String get createOfficerLabel => 'अधिकृत बनाउनुहोस्';
   @override

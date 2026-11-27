@@ -218,7 +218,7 @@ class NsSocialAuthRow extends StatelessWidget {
           child: _SoftSocialPill(
             key: const Key('social-google-pill'),
             semanticLabel: context.l10n.continueWithGoogle,
-            fillColor: isDark ? const Color(0xFF1B2B24) : tokens.surfaceSoft,
+            fillColor: isDark ? tokens.surface : tokens.surfaceSoft,
             borderColor: tokens.border,
             isLoading: googleLoading,
             loaderColor: tokens.accentText,

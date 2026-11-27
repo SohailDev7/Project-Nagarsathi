@@ -122,11 +122,12 @@ OTP lookup uses the normalized `phone` field, which must include Nepal's `+977`
 country code. Staff documents are read-only from the app; create and update
 them only from a trusted admin environment.
 
-The verified Firebase accounts `admin@nagarsathi.app` and
-`freefuzxcoj2@gmail.com` and `sohail@nagarsathi.app` are granted super-admin
-access to ward-officer management by both the staff sign-in flow and Firestore
-rules. Their Firebase Auth emails must be verified; the rules do not trust a
-client-side email check alone.
+The email accounts `admin@nagarsathi.app` and `sohailk2064@outlook.com` are
+granted super-admin access to ward-officer management by the staff sign-in
+flow, the OTP worker and the Firestore rules. Sign-in is email and password
+only - no emailed code and no verification link. An address on this allowlist
+always opens the console, so it cannot also be used to create a ward officer
+account.
 ### Google sign-in
 
 Across Authentication → Sign-in method, enable **Google**. It opens the built-in

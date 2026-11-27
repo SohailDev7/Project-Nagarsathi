@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'municipality.dart';
+
 /// Employment status of a ward officer account.
 enum OfficerStatus {
   active('active'),
@@ -31,6 +33,7 @@ class WardOfficer {
     required this.assignedWard,
     required this.status,
     required this.createdAt,
+    this.municipality = Municipality.kmc,
     this.mustChangePassword = false,
     this.tempPassword,
   });
@@ -46,8 +49,11 @@ class WardOfficer {
   final String email;
   final String phoneNumber;
 
-  /// Ward assigned to the officer, between [minWard] and [maxWard].
+  /// Ward assigned to the officer, within [municipality]'s ward range.
   final int assignedWard;
+
+  /// KMC or LMC — the two municipalities this app serves.
+  final Municipality municipality;
 
   final OfficerStatus status;
   final DateTime createdAt;
@@ -60,7 +66,7 @@ class WardOfficer {
 
   bool get isActive => status == OfficerStatus.active;
 
-  String get wardLabel => 'Ward $assignedWard';
+  String get wardLabel => municipality.wardLabel(assignedWard);
 
   static bool isValidWard(int ward) => ward >= minWard && ward <= maxWard;
 
@@ -70,6 +76,7 @@ class WardOfficer {
     String? email,
     String? phoneNumber,
     int? assignedWard,
+    Municipality? municipality,
     OfficerStatus? status,
     DateTime? createdAt,
     bool? mustChangePassword,
@@ -81,6 +88,7 @@ class WardOfficer {
       email: email ?? this.email,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       assignedWard: assignedWard ?? this.assignedWard,
+      municipality: municipality ?? this.municipality,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
@@ -95,6 +103,7 @@ class WardOfficer {
       'email': email,
       'phoneNumber': phoneNumber,
       'assignedWard': assignedWard,
+      'municipality': municipality.code,
       'status': status.value,
       'createdAt': createdAt.toIso8601String(),
       'mustChangePassword': mustChangePassword,
@@ -109,6 +118,9 @@ class WardOfficer {
       email: json['email'] as String? ?? '',
       phoneNumber: json['phoneNumber'] as String? ?? '',
       assignedWard: (json['assignedWard'] as num?)?.toInt() ?? minWard,
+      municipality: Municipality.fromValue(
+        json['municipality'] ?? json['municipalityName'],
+      ),
       status: OfficerStatus.fromValue(json['status']),
       createdAt: _parseDate(json['createdAt']),
       mustChangePassword: json['mustChangePassword'] as bool? ?? false,
@@ -129,6 +141,8 @@ class WardOfficer {
       'emailLower': email.trim().toLowerCase(),
       'phoneNumber': phoneNumber,
       'assignedWard': assignedWard,
+      'municipality': municipality.code,
+      'municipalityName': municipality.name,
       'status': status.value,
       'createdAt': Timestamp.fromDate(createdAt),
       'mustChangePassword': mustChangePassword,
@@ -150,6 +164,7 @@ enum OfficerAuditAction {
   create('CREATE'),
   suspend('SUSPEND'),
   reactivate('REACTIVATE'),
+
   /// Kept for backward-compatibility: existing Firestore audit documents
   /// that pre-date the removal of the Reassign feature still deserialise
   /// correctly via [fromValue].

@@ -1,0 +1,36 @@
+name: Notify Users on GitHub Release
+
+on:
+  release:
+    types: [published, edited]
+
+jobs:
+  notify-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Firebase Release Webhook
+        env:
+          RELEASE_WEBHOOK_URL: ${{ secrets.FIREBASE_RELEASE_WEBHOOK_URL }}
+          RELEASE_WEBHOOK_SECRET: ${{ secrets.GITHUB_RELEASE_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$RELEASE_WEBHOOK_URL" ]; then
+            echo "FIREBASE_RELEASE_WEBHOOK_URL secret is not configured; relying on scheduled poller."
+            exit 0
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {"repository":"${{ github.repository }}","tag_name":"${{ github.event.release.tag_name }}","action":"${{ github.event.action }}"}
+          EOF
+          )
+
+          if [ -n "$RELEASE_WEBHOOK_SECRET" ]; then
+            SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$RELEASE_WEBHOOK_SECRET" -hex | sed 's/^.* /sha256=/')
+            curl -fsS -X POST "$RELEASE_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Hub-Signature-256: $SIG" \
+              -d "$PAYLOAD"
+          else
+            curl -fsS -X POST "$RELEASE_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD"
+          fi

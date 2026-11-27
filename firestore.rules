@@ -2,16 +2,32 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Super-admin addresses live in `config/admins` (field `emails`), so the
+    // list can change without a rules deploy. The built-in pair below applies
+    // while that document is missing, which is also what lets the first admin
+    // sign in and seed it.
+    function adminEmailList() {
+      return exists(/databases/$(database)/documents/config/admins)
+        ? get(/databases/$(database)/documents/config/admins).data.emails
+        : [
+            'admin@nagarsathi.app',
+            'sohailk2064@outlook.com'
+          ];
+    }
+
     function isVerifiedSuperAdmin() {
       return request.auth != null
-        && request.auth.token.email_verified == true
         && 'email' in request.auth.token
         && request.auth.token.email is string
-        && request.auth.token.email.lower() in [
-          'admin@nagarsathi.app',
-          'freefuzxcoj2@gmail.com',
-          'sohail@nagarsathi.app'
-        ];
+        && request.auth.token.email.lower() in adminEmailList();
+    }
+
+    match /config/admins {
+      // Only a listed admin may read or extend the list; deleting it would
+      // fall back to the built-in pair, so that is refused.
+      allow get, list: if isVerifiedSuperAdmin();
+      allow create, update: if isVerifiedSuperAdmin();
+      allow delete: if false;
     }
 
     function isActiveStaffManager() {
@@ -52,11 +68,40 @@ service cloud.firestore {
         && resource.data.phone == request.auth.token.phone_number
         && resource.data.role == 'staff'
         && resource.data.active == true;
-      allow write: if false;
+      // The console keeps this mirror in step with ward_officers: creating an
+      // officer, suspending/reactivating one, and deleting the account are all
+      // committed together with the officer document.
+      allow create, update: if isActiveStaffManager()
+        && request.resource.data.role == 'staff'
+        && request.resource.data.uid == staffId;
+      // An officer clears their own temporary-password flag once they set a
+      // permanent one. Nothing else on the document may change this way.
+      allow update: if request.auth != null
+        && request.auth.uid == staffId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'mustChangePassword'
+        ]);
+      allow delete: if isActiveStaffManager();
     }
 
     match /ward_officers/{officerId} {
-      allow read, write: if isActiveStaffManager();
+      // The officer roster is admin-only, except that a signed-in staff member
+      // may read the record that belongs to their own email. Sign-in uses this
+      // when the `staff/{uid}` mirror is missing.
+      function isOwnOfficerRecord() {
+        return request.auth != null
+          && 'email' in request.auth.token
+          && request.auth.token.email is string
+          && resource.data.emailLower == request.auth.token.email.lower();
+      }
+      allow get, list: if isActiveStaffManager() || isOwnOfficerRecord();
+      allow create, delete: if isActiveStaffManager();
+      allow update: if isActiveStaffManager()
+        || (isOwnOfficerRecord()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'mustChangePassword',
+            'tempPassword'
+          ]));
     }
 
     match /officer_audit_logs/{logId} {

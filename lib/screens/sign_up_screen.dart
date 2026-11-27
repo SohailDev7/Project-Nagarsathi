@@ -99,6 +99,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   NsMascotMood get _mood {
     if (_celebrating) return NsMascotMood.celebrate;
     if (_showError) return NsMascotMood.sad;
+    if (_fieldFocused && _step == 1) {
+      // Eyes shut while the new password is typed.
+      return NsMascotMood.sleepy;
+    }
     if (_fieldFocused) return NsMascotMood.curious;
     return NsMascotMood.happy;
   }
@@ -367,9 +371,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final strings = context.l10n;
     final msg = _stepMessage(strings);
     final tone = switch (_mood) {
-      NsMascotMood.sad => NsSpeechTone.error,
-      NsMascotMood.celebrate => NsSpeechTone.success,
-      NsMascotMood.curious => NsSpeechTone.info,
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
       _ => NsSpeechTone.neutral,
     };
 

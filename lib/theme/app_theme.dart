@@ -4,8 +4,10 @@ import '../widgets/ns_route.dart';
 
 /// NagarSathi's playful civic palette.
 ///
-/// Vivid lime is the action colour, forest is the ink, and cream keeps the
-/// screen warm instead of clinical white.
+/// Vivid lime is the action colour, forest is the ink, and a warm cream paper
+/// backdrop keeps the screen bright without going clinical white. Sky, sun,
+/// and coral add the secondary hues so the light theme reads as colourful
+/// rather than green-on-green.
 ///
 /// These are the frozen light-mode tokens kept for existing screens. New
 /// code should read [NsColors] from the active theme instead.
@@ -18,23 +20,23 @@ abstract final class AppColors {
   static const forest = Color(0xFF163B2B);
   static const forestSoft = Color(0xFF24523C);
 
-  static const background = Color(0xFFA7D49A);
-  static const surface = Color(0xFFBEE2B2);
-  static const surfaceSoft = Color(0xFFA3D096);
+  static const background = Color(0xFFF8F0DE);
+  static const surface = Color(0xFFFFFDF8);
+  static const surfaceSoft = Color(0xFFF3EBD7);
 
-  static const border = Color(0xFF72A767);
-  static const borderStrong = Color(0xFF5F9455);
-  static const ink = Color(0xFF0A2416);
-  static const muted = Color(0xFF1F422D);
+  static const border = Color(0xFFCFD9B8);
+  static const borderStrong = Color(0xFFBFCCA6);
+  static const ink = Color(0xFF16281C);
+  static const muted = Color(0xFF57685A);
 
   static const error = Color(0xFFE04B43);
-  static const errorDark = Color(0xFFB2352F);
+  static const errorDark = Color(0xFF8C1D18);
 
   static const sun = Color(0xFFFFC800);
   static const sky = Color(0xFF1CB0F6);
-  static const mint = Color(0xFFE8F8D8);
-  static const blush = Color(0xFFFFB199);
-  static const shadow = Color(0xFFE7EBD9);
+  static const mint = Color(0xFFE9F7D2);
+  static const blush = Color(0xFFFF8F70);
+  static const shadow = Color(0xFFE6DCC2);
 }
 
 /// Chunky radii and hard bottom shadows used across the app.
@@ -117,43 +119,45 @@ class NsColors extends ThemeExtension<NsColors> {
   final Color mint;
 
   static const light = NsColors(
-    background: Color(0xFFA7D49A),
-    staffBackground: Color(0xFF9AC9BA),
-    surface: Color(0xFFBEE2B2),
-    surfaceSoft: Color(0xFFA3D096),
-    border: Color(0xFF72A767),
-    hairline: Color(0xFF8AB980),
-    inputBorder: Color(0xFF3E6B3C),
-    controlBorder: Color(0xFF6A9F60),
-    ink: Color(0xFF0A2416),
-    heading: Color(0xFF061B10),
-    muted: Color(0xFF1F422D),
-    shadow: Color(0xFF7CAD70),
-    accentText: Color(0xFF124A03),
+    background: Color(0xFFF8F0DE),
+    staffBackground: Color(0xFFEEF6E2),
+    surface: Color(0xFFFFFDF8),
+    surfaceSoft: Color(0xFFF3EBD7),
+    border: Color(0xFFCFD9B8),
+    hairline: Color(0xFFE5DDC7),
+    inputBorder: Color(0xFF9FB383),
+    controlBorder: Color(0xFFBFCCA6),
+    ink: Color(0xFF16281C),
+    heading: Color(0xFF0A1F12),
+    muted: Color(0xFF57685A),
+    shadow: Color(0xFFE6DCC2),
+    accentText: Color(0xFF2F7A12),
     accentBright: Color(0xFF89E219),
     primaryStrong: Color(0xFF2D7A00),
-    errorBorder: Color(0xFFB7241D),
-    mint: Color(0xFF97D87B),
+    errorBorder: Color(0xFFC0392B),
+    mint: Color(0xFFE9F7D2),
   );
 
   static const dark = NsColors(
-    background: Color(0xFF0F1A14),
-    staffBackground: Color(0xFF0C1712),
-    surface: Color(0xFF172620),
-    surfaceSoft: Color(0xFF1E3128),
-    border: Color(0xFF2C4237),
-    hairline: Color(0xFF2C4237),
-    inputBorder: Color(0xFF5F7A6B),
-    controlBorder: Color(0xFF5F7A6B),
-    ink: Color(0xFFEAF3EC),
-    heading: Color(0xFFEAF3EC),
-    muted: Color(0xFFA3B5A9),
-    shadow: Color(0xFF000000),
-    accentText: Color(0xFF89E219),
-    accentBright: Color(0xFF89E219),
-    primaryStrong: Color(0xFF3F9E00),
+    // Emerald night: a saturated pine backdrop, clearly green rather than
+    // near-black, with progressively lighter card layers so surfaces separate.
+    background: Color(0xFF072A1C),
+    staffBackground: Color(0xFF041F14),
+    surface: Color(0xFF0E3B27),
+    surfaceSoft: Color(0xFF164C33),
+    border: Color(0xFF2F7351),
+    hairline: Color(0xFF215B3C),
+    inputBorder: Color(0xFF7DBB9C),
+    controlBorder: Color(0xFF7DBB9C),
+    ink: Color(0xFFEAFBF0),
+    heading: Color(0xFFF6FFF9),
+    muted: Color(0xFFA6CDB7),
+    shadow: Color(0xFF02140C),
+    accentText: Color(0xFFB0FF5E),
+    accentBright: Color(0xFFC0FF72),
+    primaryStrong: Color(0xFF57C900),
     errorBorder: Color(0xFFFFB4AB),
-    mint: Color(0xFF1F3A2A),
+    mint: Color(0xFF11462C),
   );
 
   /// The tokens for the nearest enclosing theme, falling back to light.
@@ -235,30 +239,41 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final tokens = isDark ? NsColors.dark : NsColors.light;
 
-  final heading = isDark ? const Color(0xFFEAF3EC) : AppColors.forest;
-  final errorBorder = isDark ? const Color(0xFFFFB4AB) : AppColors.error;
-  final errorText = isDark ? const Color(0xFFFFB4AB) : AppColors.errorDark;
+  final heading = tokens.heading;
+  final errorBorder = isDark ? tokens.errorBorder : AppColors.error;
+  final errorText = isDark ? tokens.errorBorder : AppColors.errorDark;
 
   final scheme = isDark
       ? ColorScheme.dark(
           primary: AppColors.primary,
           onPrimary: AppColors.forest,
           primaryContainer: tokens.mint,
-          onPrimaryContainer: const Color(0xFFEAF3EC),
+          onPrimaryContainer: tokens.accentBright,
           secondary: AppColors.sun,
           onSecondary: AppColors.forest,
+          secondaryContainer: const Color(0xFF453809),
+          onSecondaryContainer: const Color(0xFFFFD24A),
+          tertiary: AppColors.sky,
+          onTertiary: const Color(0xFF04202B),
+          tertiaryContainer: const Color(0xFF0E3D53),
+          onTertiaryContainer: const Color(0xFF9FE1FF),
           surface: tokens.surface,
           onSurface: tokens.ink,
+          surfaceContainerLowest: tokens.background,
+          surfaceContainerLow: tokens.surface,
+          surfaceContainer: tokens.surface,
+          surfaceContainerHigh: tokens.surfaceSoft,
+          surfaceContainerHighest: tokens.surfaceSoft,
           onSurfaceVariant: tokens.muted,
           outline: tokens.border,
           outlineVariant: tokens.inputBorder,
-          error: const Color(0xFFFFB4AB),
+          error: tokens.errorBorder,
           onError: const Color(0xFF690005),
           shadow: tokens.shadow,
           scrim: const Color(0xFF000000),
-          inverseSurface: const Color(0xFFEAF3EC),
-          onInverseSurface: const Color(0xFF0F1A14),
-          inversePrimary: AppColors.primaryDeep,
+          inverseSurface: tokens.ink,
+          onInverseSurface: tokens.background,
+          inversePrimary: tokens.accentBright,
         )
       : ColorScheme.light(
           primary: AppColors.primary,
@@ -379,7 +394,9 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: tokens.accentText,
-      selectionColor: AppColors.primary.withValues(alpha: 0.22),
+      selectionColor: tokens.accentBright.withValues(
+        alpha: isDark ? 0.30 : 0.24,
+      ),
       selectionHandleColor: tokens.accentText,
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -451,10 +468,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: isDark ? const Color(0xFFEAF3EC) : AppColors.forest,
+      backgroundColor: isDark ? tokens.ink : AppColors.forest,
       contentTextStyle: TextStyle(
         fontFamily: 'Nunito',
-        color: isDark ? const Color(0xFF0F1A14) : Colors.white,
+        color: isDark ? tokens.background : Colors.white,
         fontSize: 14,
         fontWeight: FontWeight.w700,
       ),

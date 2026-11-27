@@ -110,11 +110,21 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   NsMascotMood get _mood {
     if (_celebrating) return NsMascotMood.celebrate;
-    if (_showError) return NsMascotMood.sad;
-    if (_identifierFocused || _passwordFocused) {
-      return NsMascotMood.curious;
+    if (_showError) {
+      return _isWrongCredentials ? NsMascotMood.angry : NsMascotMood.sad;
     }
+    if (_passwordFocused) {
+      // Eyes shut while the password is typed, so it never peeks.
+      return NsMascotMood.sleepy;
+    }
+    if (_identifierFocused) return NsMascotMood.curious;
     return NsMascotMood.happy;
+  }
+
+  bool get _isWrongCredentials {
+    if (!_showError || _errorMessage == null) return false;
+    final message = _errorMessage!.toLowerCase();
+    return message.contains('incorrect') || message.contains('wrong password');
   }
 
   Offset get _look {
@@ -625,7 +635,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     HapticFeedback.selectionClick();
     final strings = context.l10n;
     final tokens = NsColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final identifier = _identifierController.text.trim();
 
     showModalBottomSheet<void>(
@@ -681,7 +690,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   title: strings.usePassword,
                   subtitle: strings.passwordMethodSubtitle,
                   selected: !_isEmailLinkMode,
-                  isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     setState(() {
@@ -697,7 +705,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   title: strings.emailSignInLink,
                   subtitle: strings.emailSignInLinkSubtitle,
                   selected: _isEmailLinkMode,
-                  isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     setState(() {
@@ -716,7 +723,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   title: strings.continueWithGoogle,
                   subtitle: strings.googleSignInSubtitle,
                   selected: false,
-                  isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _signInWithGoogle();
@@ -728,7 +734,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   title: strings.continueWithFacebook,
                   subtitle: strings.facebookSignInSubtitle,
                   selected: false,
-                  isDark: isDark,
                   onTap: () {
                     Navigator.of(bottomSheetContext).pop();
                     _signInWithFacebook();
@@ -816,9 +821,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final strings = context.l10n;
     final msg = _message(strings);
     final tone = switch (_mood) {
-      NsMascotMood.sad => NsSpeechTone.error,
-      NsMascotMood.celebrate => NsSpeechTone.success,
-      NsMascotMood.curious => NsSpeechTone.info,
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
       _ => NsSpeechTone.neutral,
     };
 
@@ -1340,7 +1345,6 @@ class _OptionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.selected,
-    required this.isDark,
     required this.onTap,
   });
 
@@ -1348,7 +1352,6 @@ class _OptionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool selected;
-  final bool isDark;
   final VoidCallback onTap;
 
   @override
@@ -1360,9 +1363,7 @@ class _OptionTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: selected
-              ? (isDark ? const Color(0xFF243B30) : tokens.mint)
-              : tokens.surfaceSoft,
+          color: selected ? tokens.mint : tokens.surfaceSoft,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? AppColors.primary : tokens.border,

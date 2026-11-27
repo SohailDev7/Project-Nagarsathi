@@ -9,6 +9,7 @@ import 'screens/app_lock_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/staff_home_screen.dart';
+import 'screens/superadmin_home_screen.dart';
 import 'screens/admin/ward_officer_management_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_bootstrap.dart';
@@ -60,6 +61,51 @@ Future<void> main() async {
     ]);
     staffSession = results[0] as StaffSession?;
     appLockEnabled = (results[1] as bool?) ?? false;
+
+    // The remembered session can belong to a different account than the one
+    // currently signed in — a super admin signs out and a ward officer signs in
+    // without "Remember device" — and its stored role is then stale. Always
+    // rebuild the role from the live Firebase account plus its Firestore record
+    // so a leftover flag cannot open the wrong console.
+    if (staffSession != null) {
+      String? liveEmail;
+      String? livePhone;
+      try {
+        final liveUser = FirebaseAuth.instance.currentUser;
+        liveEmail = liveUser?.email?.trim().toLowerCase();
+        livePhone = liveUser?.phoneNumber?.trim();
+      } catch (_) {
+        // Auth plugin unavailable; keep the remembered identifier.
+      }
+      final hasLiveEmail = liveEmail != null && liveEmail.isNotEmpty;
+      final hasLivePhone = livePhone != null && livePhone.isNotEmpty;
+      final identifier = hasLiveEmail
+          ? liveEmail
+          : (hasLivePhone && staffSession.isPhone)
+          ? livePhone
+          : staffSession.identifier;
+      final isPhone = !hasLiveEmail && staffSession.isPhone;
+      await StaffAuthService.loadSuperAdminEmails();
+      final isSuperAdmin =
+          StaffAuthService.isSuperAdminEmail(liveEmail) ||
+          StaffAuthService.isSuperAdminEmail(identifier) ||
+          await const StaffAuthService().hasSuperAdminRecord();
+      if (identifier != staffSession.identifier ||
+          isPhone != staffSession.isPhone ||
+          isSuperAdmin != staffSession.isSuperAdmin) {
+        staffSession = StaffSession(
+          identifier: identifier,
+          isPhone: isPhone,
+          mustChangePassword: staffSession.mustChangePassword,
+          isSuperAdmin: isSuperAdmin,
+        );
+        await const SessionService().saveStaffSession(
+          identifier: identifier,
+          isPhone: isPhone,
+          isSuperAdmin: isSuperAdmin,
+        );
+      }
+    }
   }
 
   runApp(
@@ -101,6 +147,12 @@ class NagarSathiApp extends StatefulWidget {
 
 class _NagarSathiAppState extends State<NagarSathiApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
+
+  /// Built once: the start screen depends only on the arguments this widget was
+  /// created with. Recomputing it on every theme or language rebuild made the
+  /// Navigator swap its route child mid-transition, which reparents GlobalKeys
+  /// ("Duplicate GlobalKey detected in widget tree").
+  late final Widget _home = _buildHome();
 
   ThemeController get _themeController =>
       widget.themeController ?? ThemeController.instance;
@@ -146,7 +198,7 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
                         child: child ?? const SizedBox.shrink(),
                       ),
                     ),
-                home: _buildHome(),
+                home: _home,
               ),
             );
           },
@@ -159,12 +211,14 @@ class _NagarSathiAppState extends State<NagarSathiApp> {
     final staffSession = widget.initialStaffSession;
     final hasRememberedSession = staffSession != null || widget.startSignedIn;
 
-    final Widget signedInHome = staffSession != null
-        ? StaffHomeScreen(
+    final Widget signedInHome = staffSession == null
+        ? const HomeScreen()
+        : staffSession.isSuperAdmin
+        ? SuperAdminHomeScreen(staffIdentifier: staffSession.identifier)
+        : StaffHomeScreen(
             staffIdentifier: staffSession.identifier,
             isPhone: staffSession.isPhone,
-          )
-        : const HomeScreen();
+          );
 
     if (!hasRememberedSession) {
       return LoginScreen(

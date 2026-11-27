@@ -173,9 +173,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildHero() {
     final tone = switch (_mood) {
-      NsMascotMood.sad => NsSpeechTone.error,
-      NsMascotMood.celebrate => NsSpeechTone.success,
-      NsMascotMood.curious => NsSpeechTone.info,
+      NsMascotMood.sad || NsMascotMood.angry => NsSpeechTone.error,
+      NsMascotMood.celebrate || NsMascotMood.excited => NsSpeechTone.success,
+      NsMascotMood.curious || NsMascotMood.sleepy => NsSpeechTone.info,
       _ => NsSpeechTone.neutral,
     };
 

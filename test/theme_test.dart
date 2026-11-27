@@ -14,10 +14,10 @@ void main() {
   });
 
   group('ThemeController', () {
-    test('defaults to light when nothing is stored', () async {
+    test('defaults to following the system when nothing is stored', () async {
       final controller = ThemeController();
       await controller.load();
-      expect(controller.value, ThemeMode.light);
+      expect(controller.value, ThemeMode.system);
     });
 
     test('persists a selection and restores it', () async {
@@ -43,14 +43,14 @@ void main() {
       expect(controller.value, ThemeMode.dark);
     });
 
-    test('falls back to light for unknown stored values', () async {
+    test('falls back to the system mode for unknown stored values', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         ThemeController.storageKey: 'purple',
       });
 
       final controller = ThemeController(ThemeMode.dark);
       await controller.load();
-      expect(controller.value, ThemeMode.light);
+      expect(controller.value, ThemeMode.system);
     });
   });
 
@@ -66,9 +66,7 @@ void main() {
       addTearDown(tester.view.reset);
     }
 
-    testWidgets('system dark brightness uses the dark palette', (
-      tester,
-    ) async {
+    testWidgets('system dark brightness uses the dark palette', (tester) async {
       usePhoneSurface(tester);
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
       addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
@@ -83,8 +81,8 @@ void main() {
       final theme = Theme.of(context);
 
       expect(theme.brightness, Brightness.dark);
-      expect(NsColors.of(context).background, const Color(0xFF0F1A14));
-      expect(NsColors.of(context).surface, const Color(0xFF172620));
+      expect(NsColors.of(context).background, const Color(0xFF072A1C));
+      expect(NsColors.of(context).surface, const Color(0xFF0E3B27));
       expect(theme.colorScheme.onPrimary, const Color(0xFF163B2B));
     });
 

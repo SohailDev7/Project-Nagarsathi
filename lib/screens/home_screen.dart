@@ -529,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.dark
-                ? const Color(0xFF1D3429)
+                ? tokens.mint
                 : const Color(0xFF1E7B4B),
             shape: BoxShape.circle,
             border: Border.all(
@@ -541,7 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: const NsMascot(
             size: 52,
-            mood: NsMascotMood.happy,
+            mood: NsMascotMood.excited,
             look: Offset(0, 0.4),
           ),
         ),
@@ -706,7 +706,7 @@ class _ReportHero extends StatelessWidget {
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFBEE2B2),
+                    color: AppColors.mint,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Row(
@@ -912,14 +912,13 @@ class _CategoryTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 13),
           decoration: BoxDecoration(
-            color: isDark
-                ? tokens.surface
-                : Color.alphaBlend(tint.withValues(alpha: 0.28), tokens.surface),
+            color: Color.alphaBlend(
+              tint.withValues(alpha: isDark ? 0.12 : 0.28),
+              tokens.surface,
+            ),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: isDark
-                  ? tokens.border.withValues(alpha: 0.85)
-                  : tint.withValues(alpha: 0.6),
+              color: tint.withValues(alpha: isDark ? 0.42 : 0.6),
               width: 1.2,
             ),
             boxShadow: [
@@ -937,7 +936,7 @@ class _CategoryTile extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: tint.withValues(alpha: isDark ? 0.22 : 0.24),
+                  color: tint.withValues(alpha: isDark ? 0.30 : 0.24),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
